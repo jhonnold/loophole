@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Loophole night theme</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;family=Zen+Maru+Gothic:wght@500;700;900&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#ECE4D3;text-decoration:none}a:hover{color:#8FB1F0}
+</style>
+</helmet>
+<div style="width: 390px; height: 664px; box-sizing: border-box; overflow: hidden; overscroll-behavior: none; background: #111827; color: #ECE4D3; font-family: 'Zen Kaku Gothic New', system-ui, sans-serif; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
+  <header style="height: 52px; flex: 0 0 auto; display: flex; align-items: center; gap: 8px">
+    <a href="Home.dc.html" aria-label="Back to today" style="width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex: 0 0 auto">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </a>
+    <div style="flex: 1 1 auto; display: flex; flex-direction: column; line-height: 1.2">
+      <span style="font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 20px">Medium · 10×10</span>
+      <span style="font-size: 13px; color: #A7AFBF; font-weight: 500">Daily · 25 Oct · 今日の問題</span>
+    </div>
+    <div style="display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 5px 0 14px; box-sizing: border-box; border-radius: 999px; background: #1A2438; border: 2px solid #ECE4D3; flex: 0 0 auto">
+      <span style="font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums">11:02</span>
+      <button type="button" aria-label="Pause" style="width: 32px; height: 32px; border-radius: 50%; border: 0; background: #ECE4D3; color: #111827; display: flex; align-items: center; justify-content: center; padding: 0">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M4 2v10M10 2v10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div style="height: 22px; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; font-size: 14px; color: #A7AFBF">
+    <span><b style="color: #ECE4D3">{{b.analysis.satisfied}}</b> of {{b.analysis.clueCount}} clues satisfied</span>
+    <span>Pinch or use +/− to zoom</span>
+  </div>
+
+  <div style="position: relative; flex: 1 1 auto; min-height: 0; box-sizing: border-box; background: #1A2438; border: 2px solid #ECE4D3; overflow: hidden; touch-action: none">
+    <div style="position: absolute; left: -138px; top: -30px; width: 492px; height: 492px">
+      <sc-for list="{{b.lines}}" as="l"><div style="{{l.style}}"></div></sc-for>
+      <sc-for list="{{b.xs}}" as="x"><div style="{{x.style}}">×</div></sc-for>
+      <sc-for list="{{b.dots}}" as="d"><div style="{{d.style}}"></div></sc-for>
+      <sc-for list="{{b.clues}}" as="q"><div style="{{q.style}}">{{q.txt}}</div></sc-for>
+      <sc-for list="{{b.rings}}" as="rg"><div style="{{rg.style}}"></div></sc-for>
+    </div>
+
+    <div aria-label="Overview: the dashed box shows the part of the board on screen" role="img" style="position: absolute; left: 8px; top: 8px; width: 88px; height: 88px; background: rgba(17,24,39,0.92); border: 1.5px solid #2C3850; border-radius: 4px">
+      <sc-for list="{{mini.lines}}" as="l"><div style="{{l.style}}"></div></sc-for>
+      <div style="position: absolute; left: 25px; top: 6px; width: 61px; height: 62px; box-sizing: border-box; border: 1.5px dashed #8FB1F0; border-radius: 2px"></div>
+    </div>
+
+    <div style="position: absolute; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 6px; padding: 4px; background: rgba(17,24,39,0.92); border: 1.5px solid #2C3850; border-radius: 999px">
+      <button type="button" aria-label="Zoom out" style="width: 44px; height: 44px; border-radius: 50%; border: 0; background: transparent; color: #ECE4D3; display: flex; align-items: center; justify-content: center; padding: 0">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>
+      </button>
+      <span style="font-size: 13px; font-weight: 700; color: #A7AFBF; min-width: 40px; text-align: center">140%</span>
+      <button type="button" aria-label="Zoom in" style="width: 44px; height: 44px; border-radius: 50%; border: 0; background: transparent; color: #ECE4D3; display: flex; align-items: center; justify-content: center; padding: 0">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div style="flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px">
+    <div role="status" style="display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; border-radius: 10px; background: #1A2438; border: 2px solid #F2785E">
+      <div style="display: flex; align-items: flex-start; gap: 10px">
+        <span style="flex: 0 0 auto; width: 18px; height: 18px; box-sizing: border-box; border: 2px solid #F2785E; border-radius: 50%; margin-top: 2px"></span>
+        <span style="font-size: 14px; line-height: 1.4"><b style="color: #F2785E">Three lines meet at a dot.</b> A loop passes through a dot at most once.</span>
+      </div>
+      <div style="display: flex; align-items: flex-start; gap: 10px">
+        <span style="flex: 0 0 auto; width: 18px; height: 18px; box-sizing: border-box; border: 2px solid #F2785E; border-radius: 50%; margin-top: 2px"></span>
+        <span style="font-size: 14px; line-height: 1.4"><b style="color: #F2785E">Too many lines.</b> The circled 2 has three.</span>
+      </div>
+    </div>
+
+    <nav aria-label="Puzzle tools" style="height: 68px; box-sizing: border-box; background: #1A2438; border: 2px solid #ECE4D3; border-radius: 12px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 4px">
+      <button type="button" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 0; background: transparent; font-family: inherit; font-size: 13px; font-weight: 700; color: #ECE4D3">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>Undo
+      </button>
+      <button type="button" disabled style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 0; background: transparent; font-family: inherit; font-size: 13px; font-weight: 700; color: #5E6880">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg>Redo
+      </button>
+      <button type="button" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 0; background: transparent; font-family: inherit; font-size: 13px; font-weight: 700; color: #8FB1F0">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"/></svg>Hint
+      </button>
+      <button type="button" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 0; background: transparent; font-family: inherit; font-size: 13px; font-weight: 700; color: #ECE4D3">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Clear
+      </button>
+    </nav>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":664}}'>
+function lpParse(W, H, clues) {
+  return { W: W, H: H, clue: clues.split('').map(function (ch) { return ch === '.' ? null : +ch; }) };
+}
+function lpCellEdges(p, r, c) {
+  var W = p.W;
+  return [['h', r * W + c], ['h', (r + 1) * W + c], ['v', r * (W + 1) + c], ['v', r * (W + 1) + c + 1]];
+}
+function lpDotEdges(p, r, c) {
+  var W = p.W, H = p.H, out = [];
+  if (c > 0) out.push(['h', r * W + c - 1]);
+  if (c < W) out.push(['h', r * W + c]);
+  if (r > 0) out.push(['v', (r - 1) * (W + 1) + c]);
+  if (r < H) out.push(['v', r * (W + 1) + c]);
+  return out;
+}
+function lpEdgeDots(p, t, i) {
+  var W = p.W;
+  if (t === 'h') { var r = Math.floor(i / W), c = i % W; return [[r, c], [r, c + 1]]; }
+  var rv = Math.floor(i / (W + 1)), cv = i % (W + 1); return [[rv, cv], [rv + 1, cv]];
+}
+function lpTally(p, s, edges) {
+  var n = { line: 0, x: 0, open: [] };
+  edges.forEach(function (e) { var val = s[e[0]][e[1]]; if (val === 1) n.line++; else if (val === 2) n.x++; else n.open.push(e); });
+  return n;
+}
+function lpAnalyze(p, s) {
+  var W = p.W, H = p.H, r, c;
+  var errCells = {}, errDots = {}, satisfied = 0, clueCount = 0;
+  for (r = 0; r < H; r++) for (c = 0; c < W; c++) {
+    var k = p.clue[r * W + c];
+    if (k === null) continue;
+    clueCount++;
+    var n = lpTally(p, s, lpCellEdges(p, r, c));
+    if (n.line > k || n.x > 4 - k) errCells[r * W + c] = 1;
+    if (n.line === k) satisfied++;
+  }
+  for (r = 0; r <= H; r++) for (c = 0; c <= W; c++) {
+    if (lpTally(p, s, lpDotEdges(p, r, c)).line >= 3) errDots[r * (W + 1) + c] = 1;
+  }
+  return { errCells: errCells, errDots: errDots, satisfied: satisfied, clueCount: clueCount };
+}
+function lpLayout(p, s, o) {
+  var W = p.W, H = p.H, S = o.S, M = o.M, t = o.t, r, c;
+  var a = lpAnalyze(p, s);
+  var out = { dots: [], clues: [], lines: [], xs: [], rings: [], analysis: a };
+  var px = function (n) { return Math.round(n * 10) / 10 + 'px'; };
+  if (!o.linesOnly) {
+    for (r = 0; r < H; r++) for (c = 0; c < W; c++) {
+      var i = r * W + c, k = p.clue[i];
+      var x = M + c * S, y = M + r * S;
+      if (k === null) continue;
+      var err = !!a.errCells[i];
+      out.clues.push({ txt: String(k), style: 'position:absolute;left:' + px(x) + ';top:' + px(y) + ';width:' + px(S) + ';height:' + px(S) + ';display:flex;align-items:center;justify-content:center;font-size:' + px(S * 0.56) + ';font-weight:500;line-height:1;color:' + (err ? o.c.err : o.c.ink) });
+      if (err) out.rings.push({ style: 'position:absolute;left:' + px(x + S * 0.16) + ';top:' + px(y + S * 0.16) + ';width:' + px(S * 0.68) + ';height:' + px(S * 0.68) + ';box-sizing:border-box;border:2px solid ' + o.c.err + ';border-radius:50%' });
+    }
+    var dotSize = Math.max(4, Math.round(S * 0.11));
+    for (r = 0; r <= H; r++) for (c = 0; c <= W; c++) {
+      var di = r * (W + 1) + c, dx = M + c * S, dy = M + r * S;
+      if (a.errDots[di]) out.rings.push({ style: 'position:absolute;left:' + px(dx - S * 0.26) + ';top:' + px(dy - S * 0.26) + ';width:' + px(S * 0.52) + ';height:' + px(S * 0.52) + ';box-sizing:border-box;border:2px solid ' + o.c.err + ';border-radius:50%' });
+      out.dots.push({ style: 'position:absolute;left:' + px(dx - dotSize / 2) + ';top:' + px(dy - dotSize / 2) + ';width:' + px(dotSize) + ';height:' + px(dotSize) + ';border-radius:50%;background:' + o.c.dot });
+    }
+  }
+  ['h', 'v'].forEach(function (tt) {
+    s[tt].forEach(function (val, i) {
+      if (!val) return;
+      var d = lpEdgeDots(p, tt, i), x0 = M + d[0][1] * S, y0 = M + d[0][0] * S;
+      var mx = tt === 'h' ? x0 + S / 2 : x0, my = tt === 'h' ? y0 : y0 + S / 2;
+      if (val === 1) {
+        var base = tt === 'h'
+          ? 'left:' + px(x0 - t / 2) + ';top:' + px(y0 - t / 2) + ';width:' + px(S + t) + ';height:' + px(t)
+          : 'left:' + px(x0 - t / 2) + ';top:' + px(y0 - t / 2) + ';width:' + px(t) + ';height:' + px(S + t);
+        out.lines.push({ style: 'position:absolute;' + base + ';border-radius:' + px(t / 2) + ';background:' + o.c.line });
+      } else if (!o.linesOnly) {
+        out.xs.push({ style: 'position:absolute;left:' + px(mx - S * 0.2) + ';top:' + px(my - S * 0.2) + ';width:' + px(S * 0.4) + ';height:' + px(S * 0.4) + ';display:flex;align-items:center;justify-content:center;font-size:' + px(S * 0.36) + ';line-height:1;color:' + o.c.x });
+      }
+    });
+  });
+  return out;
+}
+
+var NIGHT = { ink: '#ECE4D3', dot: '#ECE4D3', line: '#ECE4D3', x: '#6F7A8F', err: '#F2785E' };
+
+class Component extends DCLogic {
+  renderVals() {
+    var p = lpParse(10, 10, '.0.0..0.1.....1..2..3.0.21.1.1..0.3....22......3..2.1...01.121.32.....2...013.1...20....3..2....0...');
+    var s = {
+      h: '02222222220212212211002122112200222222220022122111002222211200000020000000200000000220000000020020000000002000'.split('').map(Number),
+      v: '02222222222001121121210022112222100221122221002222212220000002210000000000000000022000000002200000000000022000'.split('').map(Number)
+    };
+    var b = lpLayout(p, s, { S: 46, M: 16, t: 5, c: NIGHT });
+    var mini = lpLayout(p, s, { S: 8, M: 4, t: 1.6, c: NIGHT, linesOnly: true });
+    return { b: b, mini: mini };
+  }
+}
+</script>
+</body>
+</html>

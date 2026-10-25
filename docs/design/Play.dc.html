@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Loophole play</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;family=Zen+Maru+Gothic:wght@500;700;900&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#1E1C19;text-decoration:none}a:hover{color:#2E4C8A}
+</style>
+</helmet>
+<div style="width: 390px; height: 664px; box-sizing: border-box; position: relative; overflow: hidden; overscroll-behavior: none; background: #F4EFE3; color: #1E1C19; font-family: 'Zen Kaku Gothic New', system-ui, sans-serif">
+  <div style="padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
+
+    <header style="height: 52px; display: flex; align-items: center; gap: 8px">
+      <a href="Home.dc.html" aria-label="Back to today" style="width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex: 0 0 auto">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      </a>
+      <div style="flex: 1 1 auto; display: flex; flex-direction: column; line-height: 1.2">
+        <span style="font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 20px">Small · 7×7</span>
+        <span style="font-size: 13px; color: #5B554B; font-weight: 500">Daily · 25 Oct · 今日の問題</span>
+      </div>
+      <div style="display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 5px 0 14px; box-sizing: border-box; border-radius: 999px; background: #FFFDF8; border: 2px solid #1E1C19; flex: 0 0 auto">
+        <span style="font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums">{{clock}}</span>
+        <button type="button" aria-label="{{pauseLabel}}" onClick="{{togglePause}}" style="width: 32px; height: 32px; border-radius: 50%; border: 0; background: #1E1C19; color: #FFFDF8; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer">
+          <sc-if value="{{paused}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M4 2.5v9l7.5-4.5z" fill="currentColor"/></svg></sc-if>
+          <sc-if value="{{running}}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M4 2v10M10 2v10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></sc-if>
+        </button>
+      </div>
+    </header>
+
+    <div style="height: 24px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; color: #5B554B">
+      <span><b style="color: #1E1C19">{{satisfied}}</b> of {{clueCount}} clues satisfied</span>
+      <sc-if value="{{assisted}}" hint-placeholder-val="{{ false }}">
+        <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 6px; background: rgba(46,76,138,0.12); color: #2E4C8A; font-weight: 700; font-size: 13px">Hint used · unranked</span>
+      </sc-if>
+    </div>
+
+    <div style="position: relative; background: #FFFDF8; border: 2px solid #1E1C19; box-shadow: 4px 4px 0 #1E1C19; width: 354px; height: 354px">
+      <div style="position: relative; width: 354px; height: 354px; touch-action: none">
+        <sc-for list="{{b.washes}}" as="w"><div style="{{w.style}}"></div></sc-for>
+        <sc-for list="{{b.lines}}" as="l"><div style="{{l.style}}"></div></sc-for>
+        <sc-for list="{{b.ghosts}}" as="g"><div style="{{g.style}}">{{g.txt}}</div></sc-for>
+        <sc-for list="{{b.xs}}" as="x"><div style="{{x.style}}">×</div></sc-for>
+        <sc-for list="{{b.dots}}" as="d"><div style="{{d.style}}"></div></sc-for>
+        <sc-for list="{{b.clues}}" as="q"><div style="{{q.style}}">{{q.txt}}</div></sc-for>
+        <sc-for list="{{b.rings}}" as="rg"><div style="{{rg.style}}"></div></sc-for>
+        <sc-for list="{{b.hits}}" as="hb"><button type="button" aria-label="{{hb.label}}" style="{{hb.style}}" onClick="{{hb.tap}}"></button></sc-for>
+      </div>
+      <sc-if value="{{paused}}" hint-placeholder-val="{{ false }}">
+        <div style="position: absolute; inset: 0; background: #FFFDF8; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px">
+          <span style="font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 34px">一時停止</span>
+          <span style="font-size: 15px; color: #5B554B">Paused — the board is hidden while the clock is stopped.</span>
+          <button type="button" onClick="{{togglePause}}" style="height: 48px; padding: 0 26px; border-radius: 999px; border: 0; background: #1E1C19; color: #FFFDF8; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer">Resume</button>
+        </div>
+      </sc-if>
+      <sc-if value="{{solved}}" hint-placeholder-val="{{ false }}">
+        <div style="position: absolute; right: -6px; top: -14px; width: 92px; height: 92px; box-sizing: border-box; border: 4px solid #C23B22; border-radius: 14px; background: rgba(255,253,248,0.85); color: #C23B22; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: rotate(-8deg); font-family: 'Zen Maru Gothic', sans-serif; line-height: 1">
+          <span style="font-size: 44px; font-weight: 900">完</span><span style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; margin-top: 2px">SOLVED</span>
+        </div>
+      </sc-if>
+    </div>
+
+    <div style="height: 176px; display: flex; flex-direction: column; gap: 8px">
+      <sc-if value="{{showSolved}}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #FFFDF8; border: 2px solid #1E1C19; border-radius: 6px; padding: 14px">
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 22px">Solved in {{clock}}</span>
+            <span style="font-size: 14px; color: #5B554B">{{solvedNote}}</span>
+          </div>
+          <a href="Solved.dc.html" style="flex: 0 0 auto; height: 44px; padding: 0 18px; border-radius: 999px; background: #1E1C19; color: #FFFDF8; display: flex; align-items: center; font-weight: 700; font-size: 15px">Ranks</a>
+        </div>
+      </sc-if>
+      <sc-if value="{{showError}}" hint-placeholder-val="{{ false }}">
+        <div role="status" style="display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 6px; background: #FFFDF8; border: 2px solid #C23B22">
+          <span style="flex: 0 0 auto; width: 20px; height: 20px; box-sizing: border-box; border: 2px solid #C23B22; border-radius: 50%; margin-top: 1px"></span>
+          <span style="font-size: 15px; line-height: 1.45"><b style="color: #C23B22">{{errorTitle}}</b> {{errorText}}</span>
+        </div>
+      </sc-if>
+      <sc-if value="{{showHint}}" hint-placeholder-val="{{ false }}">
+        <div style="flex: 1 1 auto; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 10px; background: #FFFDF8; border: 2px solid #2E4C8A">
+          <div style="display: flex; align-items: center; gap: 8px; color: #2E4C8A; font-size: 14px; font-weight: 700">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"/></svg>
+            ヒント · {{hintRule}}
+          </div>
+          <span style="font-size: 14px; line-height: 1.45">{{hintText}}</span>
+          <div style="display: flex; gap: 8px; margin-top: auto">
+            <sc-if value="{{hintCanApply}}" hint-placeholder-val="{{ true }}">
+              <button type="button" onClick="{{applyHint}}" style="height: 44px; padding: 0 18px; border-radius: 999px; border: 0; background: #2E4C8A; color: #FFFDF8; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer">Apply move</button>
+            </sc-if>
+            <button type="button" onClick="{{dismissHint}}" style="height: 44px; padding: 0 18px; border-radius: 999px; border: 2px solid #DDD3C0; background: transparent; color: #1E1C19; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer">Got it</button>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{showIdle}}" hint-placeholder-val="{{ true }}">
+        <p style="margin: 0; font-size: 15px; line-height: 1.5; color: #5B554B">Tap an edge between two dots: <b style="color: #1E1C19">line</b>, then <b style="color: #1E1C19">×</b>, then empty. Only definite rule breaks are flagged.</p>
+      </sc-if>
+      <sc-if value="{{showTools}}" hint-placeholder-val="{{ true }}">
+      <nav aria-label="Puzzle tools" style="margin-top: auto; height: 68px; box-sizing: border-box; background: #FFFDF8; border: 2px solid #1E1C19; border-radius: 12px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 4px">
+    <button type="button" onClick="{{undo}}" disabled="{{noUndo}}" style="{{undoStyle}}">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>Undo
+    </button>
+    <button type="button" onClick="{{redo}}" disabled="{{noRedo}}" style="{{redoStyle}}">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg>Redo
+    </button>
+    <button type="button" onClick="{{askHint}}" disabled="{{noHint}}" style="{{hintStyle}}">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"/></svg>Hint
+    </button>
+    <button type="button" onClick="{{clear}}" disabled="{{noClear}}" style="{{clearStyle}}">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Clear
+    </button>
+      </nav>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":664}}'>
+function lpParse(W, H, clues) {
+  return { W: W, H: H, clue: clues.split('').map(function (ch) { return ch === '.' ? null : +ch; }) };
+}
+function lpCellEdges(p, r, c) {
+  var W = p.W;
+  return [['h', r * W + c], ['h', (r + 1) * W + c], ['v', r * (W + 1) + c], ['v', r * (W + 1) + c + 1]];
+}
+function lpDotEdges(p, r, c) {
+  var W = p.W, H = p.H, out = [];
+  if (c > 0) out.push(['h', r * W + c - 1]);
+  if (c < W) out.push(['h', r * W + c]);
+  if (r > 0) out.push(['v', (r - 1) * (W + 1) + c]);
+  if (r < H) out.push(['v', r * (W + 1) + c]);
+  return out;
+}
+function lpEdgeDots(p, t, i) {
+  var W = p.W;
+  if (t === 'h') { var r = Math.floor(i / W), c = i % W; return [[r, c], [r, c + 1]]; }
+  var rv = Math.floor(i / (W + 1)), cv = i % (W + 1); return [[rv, cv], [rv + 1, cv]];
+}
+function lpTally(p, s, edges) {
+  var n = { line: 0, x: 0, open: [] };
+  edges.forEach(function (e) { var val = s[e[0]][e[1]]; if (val === 1) n.line++; else if (val === 2) n.x++; else n.open.push(e); });
+  return n;
+}
+function lpAnalyze(p, s) {
+  var W = p.W, H = p.H, r, c;
+  var errCells = {}, overCells = {}, errDots = {}, errEdges = {}, satisfied = 0, clueCount = 0;
+  for (r = 0; r < H; r++) for (c = 0; c < W; c++) {
+    var k = p.clue[r * W + c];
+    if (k === null) continue;
+    clueCount++;
+    var n = lpTally(p, s, lpCellEdges(p, r, c));
+    if (n.line > k) overCells[r * W + c] = 1;
+    if (n.line > k || n.x > 4 - k) errCells[r * W + c] = 1;
+    if (n.line === k) satisfied++;
+  }
+  for (r = 0; r <= H; r++) for (c = 0; c <= W; c++) {
+    if (lpTally(p, s, lpDotEdges(p, r, c)).line >= 3) errDots[r * (W + 1) + c] = 1;
+  }
+  var parent = {};
+  var find = function (a) { while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; } return a; };
+  var deg = {}, lines = [];
+  ['h', 'v'].forEach(function (t) {
+    s[t].forEach(function (val, i) {
+      if (val !== 1) return;
+      var d = lpEdgeDots(p, t, i), a = d[0].join(','), b = d[1].join(',');
+      [a, b].forEach(function (x) { if (!(x in parent)) parent[x] = x; deg[x] = (deg[x] || 0) + 1; });
+      parent[find(a)] = find(b);
+      lines.push([t, i, a]);
+    });
+  });
+  var comps = {};
+  Object.keys(parent).forEach(function (x) { var root = find(x); comps[root] = comps[root] || { closed: true }; if (deg[x] !== 2) comps[root].closed = false; });
+  var roots = Object.keys(comps);
+  var solved = roots.length === 1 && comps[roots[0]].closed && satisfied === clueCount &&
+    Object.keys(errCells).length === 0 && Object.keys(errDots).length === 0;
+  if (!solved) lines.forEach(function (l) { if (comps[find(l[2])].closed) errEdges[l[0] + l[1]] = 1; });
+  return { errCells: errCells, overCells: overCells, errDots: errDots, errEdges: errEdges, solved: solved, satisfied: satisfied, clueCount: clueCount, closedLoop: Object.keys(errEdges).length > 0 };
+}
+function lpRoots(p, s) {
+  var parent = {};
+  var find = function (a) { while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; } return a; };
+  ['h', 'v'].forEach(function (t) {
+    s[t].forEach(function (val, i) {
+      if (val !== 1) return;
+      var d = lpEdgeDots(p, t, i), a = d[0].join(','), b = d[1].join(',');
+      if (!(a in parent)) parent[a] = a;
+      if (!(b in parent)) parent[b] = b;
+      parent[find(a)] = find(b);
+    });
+  });
+  return function (x) { return x in parent ? find(x) : null; };
+}
+function lpSimpleHint(p, s) {
+  var W = p.W, H = p.H, r, c, k, n;
+  var setAll = function (edges, val) { return edges.map(function (e) { return [e[0], e[1], val]; }); };
+  var cornerOf = function (r, c) { return (r === 0 || r === H - 1) && (c === 0 || c === W - 1); };
+  for (r = 0; r < H; r++) for (c = 0; c < W; c++) {
+    if (p.clue[r * W + c] !== 0) continue;
+    n = lpTally(p, s, lpCellEdges(p, r, c));
+    if (n.open.length) return { rule: 'Zero', cells: [r * W + c], edges: setAll(n.open, 2), text: 'A 0 has no lines around it, so every side of this cell gets a cross.' };
+  }
+  for (r = 0; r < H; r++) for (c = 0; c < W; c++) {
+    if (p.clue[r * W + c] !== 3 || !cornerOf(r, c)) continue;
+    var outer = lpCellEdges(p, r, c).filter(function (e) {
+      var d = lpEdgeDots(p, e[0], e[1]);
+      return d.some(function (x) { return (x[0] === 0 || x[0] === H) && (x[1] === 0 || x[1] === W); });
+    }).filter(function (e) { return s[e[0]][e[1]] === 0; });
+    if (outer.length) return { rule: '3 in a corner', cells: [r * W + c], edges: setAll(outer, 1), text: 'The corner dot can only be reached by these two sides. A 3 skips just one side, so both corner sides are lines.' };
+  }
+  for (r = 0; r < H; r++) for (c = 0; c < W; c++) {
+    if (p.clue[r * W + c] !== 3) continue;
+    if (c + 1 < W && p.clue[r * W + c + 1] === 3) {
+      var ev = [['v', r * (W + 1) + c], ['v', r * (W + 1) + c + 1], ['v', r * (W + 1) + c + 2]].filter(function (e) { return s.v[e[1]] === 0; });
+      if (ev.length) return { rule: 'Adjacent 3s', cells: [r * W + c, r * W + c + 1], edges: setAll(ev, 1), text: 'Two 3s side by side always take the wall between them and both outer walls parallel to it.' };
+    }
+    if (r + 1 < H && p.clue[(r + 1) * W + c] === 3) {
+      var eh = [['h', r * W + c], ['h', (r + 1) * W + c], ['h', (r + 2) * W + c]].filter(function (e) { return s.h[e[1]] === 0; });
+      if (eh.length) return { rule: 'Adjacent 3s', cells: [r * W + c, (r + 1) * W + c], edges: setAll(eh, 1), text: 'Two stacked 3s always take the wall between them and both outer walls parallel to it.' };
+    }
+  }
+  for (r = 0; r < H; r++) for (c = 0; c < W; c++) {
+    k = p.clue[r * W + c];
+    if (k === null) continue;
+    n = lpTally(p, s, lpCellEdges(p, r, c));
+    if (!n.open.length) continue;
+    if (n.line === k) return { rule: 'Clue satisfied', cells: [r * W + c], edges: setAll(n.open, 2), text: k === 1 ? 'This 1 already has its line, so its other sides are crossed.' : 'This ' + k + ' already has ' + k + ' lines, so its open sides are crossed.' };
+    if (n.line + n.open.length === k) return { rule: 'Clue saturated', cells: [r * W + c], edges: setAll(n.open, 1), text: k === 1 ? 'Three sides of this 1 are crossed, so the last open side must be its line.' : 'This ' + k + ' has only ' + k + ' sides that are not crossed, so all of them are lines.' };
+  }
+  for (r = 0; r <= H; r++) for (c = 0; c <= W; c++) {
+    n = lpTally(p, s, lpDotEdges(p, r, c));
+    if (!n.open.length) continue;
+    if (n.line === 2) return { rule: 'Dot already used', dots: [r * (W + 1) + c], edges: setAll(n.open, 2), text: 'Two lines already meet at this dot. A loop never branches, so the other ways out are crossed.' };
+    if (n.line === 1 && n.open.length === 1) return { rule: 'Keep going', dots: [r * (W + 1) + c], edges: setAll(n.open, 1), text: 'A line arrives at this dot and has only one way to continue.' };
+    if (n.line === 0 && n.open.length === 1) return { rule: 'Dead end', dots: [r * (W + 1) + c], edges: setAll(n.open, 2), text: 'Only one way in or out of this dot is left, so a line here would dead-end.' };
+  }
+  var root = lpRoots(p, s), kinds = ['h', 'v'];
+  for (var q = 0; q < 2; q++) for (var i = 0; i < s[kinds[q]].length; i++) {
+    var t = kinds[q];
+    if (s[t][i] !== 0) continue;
+    var d = lpEdgeDots(p, t, i), ra = root(d[0].join(',')), rb = root(d[1].join(','));
+    if (ra === null || ra !== rb) continue;
+    var trial = { h: s.h.slice(), v: s.v.slice() };
+    trial[t][i] = 1;
+    if (!lpAnalyze(p, trial).solved) return { rule: 'No early loop', dots: [d[0][0] * (W + 1) + d[0][1], d[1][0] * (W + 1) + d[1][1]], edges: [[t, i, 2]], text: 'These dots are the two ends of one line. Joining them would close a loop that does not solve the puzzle, so this side is crossed.' };
+  }
+  return null;
+}
+function lpBroken(p, s) {
+  var a = lpAnalyze(p, s), W = p.W, H = p.H;
+  if (Object.keys(a.errCells).length || Object.keys(a.errDots).length || a.closedLoop) return true;
+  for (var r = 0; r <= H; r++) for (var c = 0; c <= W; c++) {
+    var n = lpTally(p, s, lpDotEdges(p, r, c));
+    if (n.line === 1 && !n.open.length) return true;
+  }
+  return false;
+}
+function lpHint(p, s) {
+  var simple = lpSimpleHint(p, s);
+  if (simple) return simple;
+  var kinds = ['h', 'v'];
+  for (var q = 0; q < 2; q++) for (var i = 0; i < s[kinds[q]].length; i++) {
+    var t = kinds[q];
+    if (s[t][i] !== 0) continue;
+    for (var val = 1; val <= 2; val++) {
+      var trial = { h: s.h.slice(), v: s.v.slice() };
+      trial[t][i] = val;
+      for (var n = 0; n < 60 && !lpBroken(p, trial); n++) {
+        var h = lpSimpleHint(p, trial);
+        if (!h) break;
+        h.edges.forEach(function (e) { trial[e[0]][e[1]] = e[2]; });
+      }
+      if (lpBroken(p, trial)) {
+        var d = lpEdgeDots(p, t, i);
+        return { rule: 'Look ahead', dots: [d[0][0] * (p.W + 1) + d[0][1], d[1][0] * (p.W + 1) + d[1][1]], edges: [[t, i, 3 - val]],
+          text: val === 1 ? 'Suppose this side were a line: following the forced moves from there breaks a rule, so it must be crossed.' : 'Suppose this side were crossed: following the forced moves from there breaks a rule, so it must be a line.' };
+      }
+    }
+  }
+  return null;
+}
+function lpLayout(p, s, o) {
+  var W = p.W, H = p.H, S = o.S, M = o.M, t = o.t, r, c;
+  var a = o.analysis;
+  var hint = o.hint || null;
+  var hintCells = {}, hintDots = {};
+  if (hint) { (hint.cells || []).forEach(function (i) { hintCells[i] = 1; }); (hint.dots || []).forEach(function (i) { hintDots[i] = 1; }); }
+  var out = { dots: [], clues: [], lines: [], xs: [], washes: [], ghosts: [], hits: [], rings: [] };
+  var px = function (n) { return Math.round(n * 10) / 10 + 'px'; };
+  for (r = 0; r < H; r++) for (c = 0; c < W; c++) {
+    var i = r * W + c, k = p.clue[i];
+    var x = M + c * S, y = M + r * S;
+    var inside = o.inside && +o.inside[r][c];
+    if (hintCells[i]) out.washes.push({ style: 'position:absolute;left:' + px(x + 2) + ';top:' + px(y + 2) + ';width:' + px(S - 4) + ';height:' + px(S - 4) + ';background:' + o.c.hintWash + ';border-radius:3px' });
+    else if (inside && a.solved) out.washes.push({ style: 'position:absolute;left:' + px(x) + ';top:' + px(y) + ';width:' + px(S) + ';height:' + px(S) + ';background:' + o.c.solvedWash });
+    if (k === null) continue;
+    var err = !!a.errCells[i];
+    out.clues.push({ txt: String(k), style: 'position:absolute;left:' + px(x) + ';top:' + px(y) + ';width:' + px(S) + ';height:' + px(S) + ';display:flex;align-items:center;justify-content:center;font-size:' + px(S * 0.56) + ';font-weight:500;line-height:1;pointer-events:none;color:' + (err ? o.c.err : o.c.ink) });
+    if (err) out.rings.push({ style: 'position:absolute;left:' + px(x + S * 0.16) + ';top:' + px(y + S * 0.16) + ';width:' + px(S * 0.68) + ';height:' + px(S * 0.68) + ';box-sizing:border-box;border:2px solid ' + o.c.err + ';border-radius:50%;pointer-events:none' });
+  }
+  var dotSize = Math.max(4, Math.round(S * 0.11));
+  for (r = 0; r <= H; r++) for (c = 0; c <= W; c++) {
+    var di = r * (W + 1) + c, dx = M + c * S, dy = M + r * S;
+    if (a.errDots[di]) out.rings.push({ style: 'position:absolute;left:' + px(dx - S * 0.26) + ';top:' + px(dy - S * 0.26) + ';width:' + px(S * 0.52) + ';height:' + px(S * 0.52) + ';box-sizing:border-box;border:2px solid ' + o.c.err + ';border-radius:50%;pointer-events:none' });
+    if (hintDots[di]) out.washes.push({ style: 'position:absolute;left:' + px(dx - S * 0.3) + ';top:' + px(dy - S * 0.3) + ';width:' + px(S * 0.6) + ';height:' + px(S * 0.6) + ';background:' + o.c.hintWash + ';border-radius:50%' });
+    out.dots.push({ style: 'position:absolute;left:' + px(dx - dotSize / 2) + ';top:' + px(dy - dotSize / 2) + ';width:' + px(dotSize) + ';height:' + px(dotSize) + ';border-radius:50%;background:' + o.c.dot });
+  }
+  var ghostOf = {};
+  if (hint) hint.edges.forEach(function (e) { ghostOf[e[0] + e[1]] = e[2]; });
+  ['h', 'v'].forEach(function (tt) {
+    var n = tt === 'h' ? (H + 1) * W : H * (W + 1);
+    for (var i = 0; i < n; i++) {
+      var d = lpEdgeDots(p, tt, i), x0 = M + d[0][1] * S, y0 = M + d[0][0] * S;
+      var mx = tt === 'h' ? x0 + S / 2 : x0, my = tt === 'h' ? y0 : y0 + S / 2;
+      var val = s[tt][i], key = tt + i;
+      var lineStyle = function (color, dash) {
+        var base = tt === 'h'
+          ? 'left:' + px(x0 - t / 2) + ';top:' + px(y0 - t / 2) + ';width:' + px(S + t) + ';height:' + px(t)
+          : 'left:' + px(x0 - t / 2) + ';top:' + px(y0 - t / 2) + ';width:' + px(t) + ';height:' + px(S + t);
+        return 'position:absolute;' + base + ';border-radius:' + px(t / 2) + ';' + (dash
+          ? 'background:repeating-linear-gradient(' + (tt === 'h' ? '90deg' : '180deg') + ',' + color + ' 0 6px,transparent 6px 11px)'
+          : 'background:' + color);
+      };
+      var xStyle = function (color) { return 'position:absolute;left:' + px(mx - S * 0.2) + ';top:' + px(my - S * 0.2) + ';width:' + px(S * 0.4) + ';height:' + px(S * 0.4) + ';display:flex;align-items:center;justify-content:center;font-size:' + px(S * 0.36) + ';line-height:1;color:' + color; };
+      if (val === 1) out.lines.push({ style: lineStyle(a.errEdges[key] ? o.c.err : o.c.line, a.errEdges[key]) });
+      else if (val === 2) out.xs.push({ style: xStyle(o.c.x) });
+      if (key in ghostOf && val === 0) {
+        if (ghostOf[key] === 1) out.ghosts.push({ style: lineStyle(o.c.hint, true), txt: '' });
+        else out.ghosts.push({ style: xStyle(o.c.hint) + ';font-weight:700', txt: '×' });
+      }
+      if (o.onTap) {
+        var hs = S / Math.SQRT2;
+        out.hits.push({
+          label: (tt === 'h' ? 'Horizontal' : 'Vertical') + ' edge at row ' + (d[0][0] + 1) + ', column ' + (d[0][1] + 1) + ': ' + ['empty', 'line', 'cross'][val],
+          tap: o.onTap(tt, i),
+          style: 'position:absolute;left:' + px(mx - hs / 2) + ';top:' + px(my - hs / 2) + ';width:' + px(hs) + ';height:' + px(hs) + ';transform:rotate(45deg);padding:0;margin:0;border:0;background:transparent;cursor:pointer;-webkit-tap-highlight-color:transparent'
+        });
+      }
+    }
+  });
+  return out;
+}
+
+var PUZZLE = lpParse(7, 7, '.11..0..23.2......2.21.0....1....01.1..3..0..1..1');
+var START = {
+  h: '22212221122020121200022220000020020000002020000002200000',
+  v: '22211222121100000022000000220000000002202000000022000000'
+};
+var PAPER = { ink: '#1E1C19', dot: '#1E1C19', line: '#1E1C19', x: '#8C8476', err: '#C23B22', hint: '#2E4C8A', hintWash: 'rgba(46,76,138,0.14)', solvedWash: '#F8E1E6' };
+var INSIDE = ['0001000', '1101001', '0111101', '0111111', '0111111', '0001011', '0000000'];
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      h: START.h.split('').map(Number), v: START.v.split('').map(Number),
+      past: [], future: [], hint: null, assisted: false, paused: false, seconds: 252
+    };
+  }
+  componentDidMount() {
+    var self = this;
+    this.timer = setInterval(function () {
+      var st = self.state;
+      if (st.paused || lpAnalyze(PUZZLE, st).solved) return;
+      self.setState({ seconds: st.seconds + 1 });
+    }, 1000);
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+  commit(next) {
+    var st = this.state;
+    this.setState({ h: next.h, v: next.v, past: st.past.concat([{ h: st.h, v: st.v }]).slice(-200), future: [], hint: null });
+  }
+  renderVals() {
+    var self = this, st = this.state;
+    var s = { h: st.h, v: st.v };
+    var a = lpAnalyze(PUZZLE, s);
+    var b = lpLayout(PUZZLE, s, {
+      S: 46, M: 16, t: 5, c: PAPER, analysis: a, inside: INSIDE, hint: st.hint,
+      onTap: function (t, i) {
+        return function () {
+          if (self.state.paused || lpAnalyze(PUZZLE, self.state).solved) return;
+          var next = { h: self.state.h.slice(), v: self.state.v.slice() };
+          next[t][i] = (next[t][i] + 1) % 3;
+          self.commit(next);
+        };
+      }
+    });
+    var errorTitle = '', errorText = '';
+    if (Object.keys(a.errDots).length) { errorTitle = 'Three lines meet at a dot.'; errorText = 'A loop passes through a dot at most once.'; }
+    else if (Object.keys(a.overCells).length) { errorTitle = 'Too many lines.'; errorText = 'A circled clue has more lines around it than its number.'; }
+    else if (Object.keys(a.errCells).length) { errorTitle = 'Too many crosses.'; errorText = 'A circled clue can no longer get enough lines.'; }
+    else if (a.closedLoop) { errorTitle = 'Closed too early.'; errorText = 'That loop is closed, but the puzzle is not solved yet.'; }
+    var mm = Math.floor(st.seconds / 60), ss = st.seconds % 60;
+    var tool = function (enabled) {
+      return 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:0;background:transparent;font-family:inherit;font-size:13px;font-weight:700;min-height:56px;cursor:' + (enabled ? 'pointer' : 'default') + ';color:' + (enabled ? '#1E1C19' : '#A69E90');
+    };
+    var anyMarks = st.h.some(function (x) { return x; }) || st.v.some(function (x) { return x; });
+    var hintAvail = !a.solved && !st.paused;
+    return {
+      b: b,
+      clock: (mm < 10 ? '0' : '') + mm + ':' + (ss < 10 ? '0' : '') + ss,
+      paused: st.paused, running: !st.paused,
+      pauseLabel: st.paused ? 'Resume' : 'Pause',
+      satisfied: a.satisfied, clueCount: a.clueCount,
+      assisted: st.assisted, solved: a.solved,
+      showSolved: a.solved,
+      solvedNote: st.assisted ? 'Hint used, so this one is unranked.' : 'Ranked in the 49-cell bucket.',
+      showError: !a.solved && !!errorTitle && !st.hint, errorTitle: errorTitle, errorText: errorText,
+      showHint: !!st.hint && !a.solved,
+      hintRule: st.hint ? st.hint.rule : '', hintText: st.hint ? st.hint.text : '',
+      hintCanApply: !!(st.hint && st.hint.edges.length),
+      showIdle: !a.solved && !errorTitle && !st.hint,
+      showTools: !a.solved && !st.hint,
+      togglePause: function () { self.setState({ paused: !self.state.paused }); },
+      askHint: function () {
+        if (!hintAvail) return;
+        var h = lpHint(PUZZLE, { h: self.state.h, v: self.state.v });
+        self.setState({ hint: h || { rule: 'Stuck', text: 'No single-step rule fires here. Check for a mistake: hints only follow from what is on the board.', edges: [] } });
+      },
+      applyHint: function () {
+        var h = self.state.hint;
+        if (!h) return;
+        var next = { h: self.state.h.slice(), v: self.state.v.slice() };
+        h.edges.forEach(function (e) { next[e[0]][e[1]] = e[2]; });
+        self.commit(next);
+        self.setState({ assisted: true });
+      },
+      dismissHint: function () { self.setState({ hint: null, assisted: true }); },
+      undo: function () {
+        var st2 = self.state;
+        if (!st2.past.length) return;
+        var prev = st2.past[st2.past.length - 1];
+        self.setState({ h: prev.h, v: prev.v, past: st2.past.slice(0, -1), future: [{ h: st2.h, v: st2.v }].concat(st2.future), hint: null });
+      },
+      redo: function () {
+        var st2 = self.state;
+        if (!st2.future.length) return;
+        var nx = st2.future[0];
+        self.setState({ h: nx.h, v: nx.v, future: st2.future.slice(1), past: st2.past.concat([{ h: st2.h, v: st2.v }]), hint: null });
+      },
+      clear: function () {
+        if (!anyMarks) return;
+        self.commit({ h: self.state.h.map(function () { return 0; }), v: self.state.v.map(function () { return 0; }) });
+      },
+      noUndo: !st.past.length, noRedo: !st.future.length, noHint: !hintAvail, noClear: !anyMarks || a.solved,
+      undoStyle: tool(st.past.length > 0), redoStyle: tool(st.future.length > 0),
+      hintStyle: tool(hintAvail).replace('color:#1E1C19', 'color:#2E4C8A'), clearStyle: tool(anyMarks && !a.solved)
+    };
+  }
+}
+</script>
+</body>
+</html>

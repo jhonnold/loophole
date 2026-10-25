@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Loophole solved</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;family=Zen+Maru+Gothic:wght@500;700;900&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#1E1C19;text-decoration:none}a:hover{color:#2E4C8A}
+</style>
+</helmet>
+<div style="width: 390px; height: 900px; box-sizing: border-box; position: relative; overflow: hidden; background: #F4EFE3; color: #1E1C19; font-family: 'Zen Kaku Gothic New', system-ui, sans-serif; padding: 12px 16px 20px; display: flex; flex-direction: column; gap: 14px">
+  <header style="height: 52px; display: flex; align-items: center; gap: 8px; flex: 0 0 auto">
+    <a href="Home.dc.html" aria-label="Back to today" style="width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex: 0 0 auto">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </a>
+    <div style="flex: 1 1 auto; display: flex; flex-direction: column; line-height: 1.2">
+      <span style="font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 20px">Small · 7×7</span>
+      <span style="font-size: 13px; color: #5B554B; font-weight: 500">Daily · 25 Oct · 今日の問題</span>
+    </div>
+    <button type="button" aria-label="Share result" style="width: 44px; height: 44px; border-radius: 50%; border: 2px solid #1E1C19; background: #FFFDF8; color: #1E1C19; display: flex; align-items: center; justify-content: center; padding: 0">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>
+    </button>
+  </header>
+
+  <div style="display: flex; gap: 14px; align-items: flex-start; flex: 0 0 auto">
+    <div style="position: relative; flex: 0 0 auto; background: #FFFDF8; border: 2px solid #1E1C19; box-shadow: 4px 4px 0 #1E1C19; width: 212px; height: 212px">
+      <div style="position: relative; width: 212px; height: 212px">
+        <sc-for list="{{b.washes}}" as="w"><div style="{{w.style}}"></div></sc-for>
+        <sc-for list="{{b.lines}}" as="l"><div style="{{l.style}}"></div></sc-for>
+        <sc-for list="{{b.dots}}" as="d"><div style="{{d.style}}"></div></sc-for>
+        <sc-for list="{{b.clues}}" as="q"><div style="{{q.style}}">{{q.txt}}</div></sc-for>
+      </div>
+    </div>
+    <div style="flex: 1 1 auto; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding-top: 4px">
+      <div style="width: 96px; height: 96px; box-sizing: border-box; border: 4px solid #C23B22; border-radius: 16px; color: #C23B22; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: rotate(-8deg); font-family: 'Zen Maru Gothic', sans-serif; line-height: 1; margin-left: 8px">
+        <span style="font-size: 46px; font-weight: 900">完</span><span style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; margin-top: 3px">SOLVED</span>
+      </div>
+      <span style="font-size: 13px; line-height: 1.45; color: #5B554B">Your last stroke stays in shu so you can see where the loop closed.</span>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; flex: 0 0 auto">
+    <div style="background: #FFFDF8; border: 2px solid #1E1C19; border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px">
+      <span style="font-size: 12px; font-weight: 700; color: #5B554B">Time</span>
+      <span style="font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 26px; font-variant-numeric: tabular-nums">03:18</span>
+    </div>
+    <div style="background: #FFFDF8; border: 2px solid #1E1C19; border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px">
+      <span style="font-size: 12px; font-weight: 700; color: #5B554B">Rank today</span>
+      <span style="font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 26px">#214</span>
+    </div>
+    <div style="background: #FFFDF8; border: 2px solid #1E1C19; border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px">
+      <span style="font-size: 12px; font-weight: 700; color: #5B554B">Your best</span>
+      <span style="font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 26px; font-variant-numeric: tabular-nums">02:51</span>
+    </div>
+  </div>
+
+  <section aria-labelledby="lb-h" style="background: #FFFDF8; border: 2px solid #1E1C19; border-radius: 6px; display: flex; flex-direction: column; flex: 0 0 auto">
+    <div style="padding: 12px 14px 8px; display: flex; align-items: baseline; justify-content: space-between; border-bottom: 2px solid #DDD3C0">
+      <h2 id="lb-h" style="margin: 0; font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 19px">番付 Leaderboard</h2>
+      <span style="font-size: 13px; color: #5B554B">49 cells · today</span>
+    </div>
+    <ol style="list-style: none; margin: 0; padding: 4px 0; display: flex; flex-direction: column">
+      <sc-for list="{{rows}}" as="row" hint-placeholder-count="6">
+        <li style="{{row.style}}">
+          <span style="width: 44px; font-weight: 700; font-variant-numeric: tabular-nums; color: #5B554B">{{row.rank}}</span>
+          <span style="flex: 1 1 auto; font-weight: 700">{{row.name}}</span>
+          <span style="font-variant-numeric: tabular-nums; font-weight: 700">{{row.time}}</span>
+        </li>
+      </sc-for>
+    </ol>
+    <p style="margin: 0; padding: 10px 14px; font-size: 12px; line-height: 1.45; color: #5B554B; border-top: 2px solid #DDD3C0">Ranked by time within puzzles of the same area. Solves that used a hint are not listed.</p>
+  </section>
+
+  <a href="Desktop.dc.html" style="flex: 0 0 auto; height: 52px; border-radius: 999px; background: #1E1C19; color: #FFFDF8; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; font-weight: 700">Next: Medium 10×10
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+  </a>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":900}}'>
+function lpParse(W, H, clues) {
+  return { W: W, H: H, clue: clues.split('').map(function (ch) { return ch === '.' ? null : +ch; }) };
+}
+function lpEdgeDots(p, t, i) {
+  var W = p.W;
+  if (t === 'h') { var r = Math.floor(i / W), c = i % W; return [[r, c], [r, c + 1]]; }
+  var rv = Math.floor(i / (W + 1)), cv = i % (W + 1); return [[rv, cv], [rv + 1, cv]];
+}
+function lpLayout(p, s, o) {
+  var W = p.W, H = p.H, S = o.S, M = o.M, t = o.t, r, c;
+  var out = { dots: [], clues: [], lines: [], washes: [] };
+  var px = function (n) { return Math.round(n * 10) / 10 + 'px'; };
+  for (r = 0; r < H; r++) for (c = 0; c < W; c++) {
+    var i = r * W + c, k = p.clue[i];
+    var x = M + c * S, y = M + r * S;
+    if (+o.inside[r][c]) out.washes.push({ style: 'position:absolute;left:' + px(x) + ';top:' + px(y) + ';width:' + px(S) + ';height:' + px(S) + ';background:' + o.c.solvedWash });
+    if (k === null) continue;
+    out.clues.push({ txt: String(k), style: 'position:absolute;left:' + px(x) + ';top:' + px(y) + ';width:' + px(S) + ';height:' + px(S) + ';display:flex;align-items:center;justify-content:center;font-size:' + px(S * 0.56) + ';font-weight:500;line-height:1;color:' + o.c.ink });
+  }
+  var dotSize = Math.max(4, Math.round(S * 0.11));
+  for (r = 0; r <= H; r++) for (c = 0; c <= W; c++) {
+    var dx = M + c * S, dy = M + r * S;
+    out.dots.push({ style: 'position:absolute;left:' + px(dx - dotSize / 2) + ';top:' + px(dy - dotSize / 2) + ';width:' + px(dotSize) + ';height:' + px(dotSize) + ';border-radius:50%;background:' + o.c.dot });
+  }
+  ['h', 'v'].forEach(function (tt) {
+    s[tt].forEach(function (val, i) {
+      if (val !== 1) return;
+      var d = lpEdgeDots(p, tt, i), x0 = M + d[0][1] * S, y0 = M + d[0][0] * S;
+      var base = tt === 'h'
+        ? 'left:' + px(x0 - t / 2) + ';top:' + px(y0 - t / 2) + ';width:' + px(S + t) + ';height:' + px(t)
+        : 'left:' + px(x0 - t / 2) + ';top:' + px(y0 - t / 2) + ';width:' + px(t) + ';height:' + px(S + t);
+      out.lines.push({ style: 'position:absolute;' + base + ';border-radius:' + px(t / 2) + ';background:' + (o.accentEdge === tt + i ? o.c.accent : o.c.line) });
+    });
+  });
+  return out;
+}
+
+class Component extends DCLogic {
+  renderVals() {
+    var p = lpParse(7, 7, '.11..0..23.2......2.21.0....1....01.1..3..0..1..1');
+    var s = {
+      h: '00010001100001101010000000100000000011010000010110000000'.split('').map(Number),
+      v: '00011000101110110100011101000001010000010001110100000000'.split('').map(Number)
+    };
+    var b = lpLayout(p, s, {
+      S: 26, M: 15, t: 3.5, accentEdge: 'v22',
+      inside: ['0001000', '1101001', '0111101', '0111111', '0111111', '0001011', '0000000'],
+      c: { ink: '#1E1C19', dot: '#1E1C19', line: '#1E1C19', accent: '#C23B22', solvedWash: '#F6D3DA' }
+    });
+    var base = 'display:flex;align-items:center;gap:8px;min-height:40px;padding:0 14px;font-size:15px;';
+    var rows = [
+      ['1', 'kuroneko', '01:12'], ['2', 'tsuru', '01:19'], ['3', 'inkwell', '01:26'],
+      ['…', '', ''], ['213', 'dotmatrix', '03:17'], ['214', 'You', '03:18'], ['215', 'loop_de_loop', '03:21']
+    ].map(function (x) {
+      var me = x[1] === 'You';
+      return { rank: x[0], name: x[1], time: x[2], style: base + (me ? 'margin:2px 6px;padding:0 8px;border:2px solid #2E4C8A;border-radius:6px;background:rgba(46,76,138,0.08)' : '') };
+    });
+    return { b: b, rows: rows };
+  }
+}
+</script>
+</body>
+</html>

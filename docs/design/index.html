@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loophole design kit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;family=Zen+Maru+Gothic:wght@700;900&amp;display=swap">
+<style>
+  :root { --paper: #F4EFE3; --sheet: #FFFDF8; --ink: #1E1C19; --ink-2: #5B554B; --shu: #C23B22; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: 'Zen Kaku Gothic New', system-ui, sans-serif; }
+  header, section { max-width: 1480px; margin: 0 auto; padding: 32px 16px 0; }
+  h1 { margin: 0; font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: clamp(36px, 6vw, 64px); }
+  h2 { margin: 0 0 16px; font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 28px; }
+  p { margin: 8px 0 0; color: var(--ink-2); max-width: 70ch; line-height: 1.6; }
+  a { color: var(--ink); }
+  .row { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; }
+  figure { margin: 0; display: flex; flex-direction: column; gap: 8px; max-width: 100%; }
+  figcaption { font-size: 14px; color: var(--ink-2); }
+  figcaption a { font-weight: 700; }
+  .frame { border: 2px solid var(--ink); background: var(--sheet); overflow: hidden; max-width: 100%; }
+  .frame iframe { border: 0; display: block; transform-origin: 0 0; }
+  footer { max-width: 1480px; margin: 0 auto; padding: 48px 16px 64px; color: var(--ink-2); font-size: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Loophole design kit</h1>
+  <p>Paper-and-ink screens for the Slitherlink web app. Each frame is a live artboard; open one on its own to use it at full size. The phone play screen is playable. See <a href="README.md">README.md</a> for tokens and rules.</p>
+</header>
+
+<section>
+  <h2>Style sheet</h2>
+  <div class="row">
+    <figure>
+      <div class="frame" style="width: 768px; height: 1008px"><iframe src="Main.dc.html" title="Style sheet" width="1280" height="1680" style="transform: scale(0.6)"></iframe></div>
+      <figcaption><a href="Main.dc.html">Main.dc.html</a> · colours, type, board anatomy, pieces</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section>
+  <h2>Phone</h2>
+  <div class="row">
+    <figure>
+      <div class="frame" style="width: 394px; height: 848px"><iframe src="Home.dc.html" title="Home" width="390" height="844"></iframe></div>
+      <figcaption><a href="Home.dc.html">Home</a> · scrolling page, 390 wide</figcaption>
+    </figure>
+    <figure>
+      <div class="frame" style="width: 394px; height: 668px"><iframe src="Play.dc.html" title="Play" width="390" height="664"></iframe></div>
+      <figcaption><a href="Play.dc.html">Play</a> · 390×664 visible · playable</figcaption>
+    </figure>
+    <figure>
+      <div class="frame" style="width: 394px; height: 668px"><iframe src="Hint.dc.html" title="Hint card" width="390" height="664"></iframe></div>
+      <figcaption><a href="Hint.dc.html">Hint card</a></figcaption>
+    </figure>
+    <figure>
+      <div class="frame" style="width: 394px; height: 904px"><iframe src="Solved.dc.html" title="Solved" width="390" height="900"></iframe></div>
+      <figcaption><a href="Solved.dc.html">Solved + leaderboard</a></figcaption>
+    </figure>
+    <figure>
+      <div class="frame" style="width: 394px; height: 668px"><iframe src="Night.dc.html" title="Night theme" width="390" height="664"></iframe></div>
+      <figcaption><a href="Night.dc.html">Night</a> · zoomed 10×10 with errors</figcaption>
+    </figure>
+    <figure>
+      <div class="frame" style="width: 364px; height: 564px"><iframe src="Small.dc.html" title="Small phone" width="360" height="560"></iframe></div>
+      <figcaption><a href="Small.dc.html">Small phone</a> · 360×560 visible, 44px cells</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section>
+  <h2>Desktop</h2>
+  <div class="row">
+    <figure>
+      <div class="frame" style="width: 720px; height: 450px"><iframe src="Desktop.dc.html" title="Desktop play" width="1440" height="900" style="transform: scale(0.5)"></iframe></div>
+      <figcaption><a href="Desktop.dc.html">Desktop play</a> · keyboard cursor</figcaption>
+    </figure>
+    <figure>
+      <div class="frame" style="width: 720px; height: 450px"><iframe src="Editor.dc.html" title="Puzzle editor" width="1440" height="900" style="transform: scale(0.5)"></iframe></div>
+      <figcaption><a href="Editor.dc.html">Puzzle editor</a> · live verifier</figcaption>
+    </figure>
+  </div>
+</section>
+
+<footer>The artboards load fonts from Google Fonts. If your browser blocks iframes over <code>file://</code>, serve this folder: <code>python3 -m http.server -d docs/design</code>.</footer>
+</body>
+</html>
