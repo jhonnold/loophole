@@ -483,10 +483,6 @@
     left: 0;
   }
 
-  .zoom .spacer {
-    display: none;
-  }
-
   /* On phones, room for a one-message error card, so a zoomable board keeps its height when the
      first rule error appears or clears. */
   @media (max-width: 899px) {
@@ -546,6 +542,10 @@
   .spacer {
     flex: 1 1 0;
     min-height: 0;
+  }
+
+  .zoom .spacer {
+    display: none;
   }
 
   .card {
