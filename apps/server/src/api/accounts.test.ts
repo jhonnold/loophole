@@ -358,6 +358,19 @@ describe("rate limits", () => {
     expect(limited.headers.get("Retry-After")).toBe("900");
   });
 
+  test("without a trusted proxy X-Forwarded-For is ignored, so the socket address is counted", async () => {
+    const { send } = setup({ trustProxy: false });
+    const forgot = (forwarded: string) =>
+      send(
+        "POST",
+        "/api/auth/forgot-password",
+        { email: "a@example.com" },
+        { headers: { "X-Forwarded-For": forwarded } },
+      );
+    for (let i = 0; i < 10; i++) expect((await forgot(`10.0.0.${i}`)).status).toBe(204);
+    await expectProblem(await forgot("10.0.1.1"), 429);
+  });
+
   test("behind a trusted proxy the last X-Forwarded-For entry is the address", async () => {
     const { send } = setup({ trustProxy: true });
     const forgot = (forwarded: string) =>
