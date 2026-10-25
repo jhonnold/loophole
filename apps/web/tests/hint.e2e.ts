@@ -253,4 +253,22 @@ test.describe("desktop", () => {
       )
       .toBe(false);
   });
+
+  test("a hint that ends while its card has focus gives focus back to the board", async ({
+    page,
+  }) => {
+    await openWith(page, empty);
+    const wrong = solution.indexOf(EdgeState.Cross);
+    const p = await edgePoint(page, grid, wrong);
+    await page.mouse.click(p.x, p.y);
+    await expect(lines(page)).toHaveCount(1);
+    await board(page).focus();
+    await page.keyboard.press("h");
+    await expect(page.getByRole("heading", { name: "This line doesn't fit" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Erase it" })).toBeFocused();
+    // Undoing the wrong line makes the hint's move, so the card goes and the board takes focus.
+    await page.keyboard.press("z");
+    await expect(page.getByRole("button", { name: "Erase it" })).toHaveCount(0);
+    await expect(board(page)).toBeFocused();
+  });
 });

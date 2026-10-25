@@ -197,6 +197,7 @@
   // A hint ends once its move is made, or one of its edges is marked differently.
   $effect(() => {
     if (hint !== null && (solved || !hintCurrent(hint, board.edges))) {
+      if (hintOpen) focusBoard();
       hint = null;
       hintOpen = false;
     }
