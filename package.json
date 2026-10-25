@@ -12,7 +12,9 @@
     "format": "biome check --write .",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun test",
-    "check": "bun run lint && bun run typecheck && bun run test"
+    "check": "bun run lint && bun run typecheck && bun run test",
+    "dev:web": "bun run --cwd apps/web dev",
+    "test:e2e": "bun run --cwd apps/web test:e2e"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.3",
