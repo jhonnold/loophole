@@ -56,7 +56,7 @@
     <p role="status">Checking your link…</p>
   {:else if status === "ready"}
     <p>Press the button to confirm that this email address is yours.</p>
-    <button type="button" onclick={confirm}>Confirm my email</button>
+    <button class="primary" type="button" onclick={confirm}>Confirm my email</button>
   {:else if status === "confirming"}
     <p role="status">Confirming…</p>
   {:else if status === "done"}
