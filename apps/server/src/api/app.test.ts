@@ -9,6 +9,7 @@ import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
 import { SqlitePuzzleRepository } from "../adapters/db/puzzle-repository.ts";
 import { JobManager } from "../managers/job-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
+import { accountDeps } from "../test-support/accounts.ts";
 import { FakeClock, sequentialIds } from "../test-support/fakes.ts";
 import { createApp } from "./app.ts";
 import type { Problem } from "./problem.ts";
@@ -31,7 +32,7 @@ function setup(options: { webDir?: string; maxQueued?: number } = {}) {
     newId: sequentialIds("j"),
     maxQueued: options.maxQueued ?? 10,
   });
-  const app = createApp({ puzzles, jobs, webDir: options.webDir });
+  const app = createApp({ puzzles, jobs, ...accountDeps(db, clock), webDir: options.webDir });
   const puzzleIds = sequentialIds("p");
   const savePuzzle = () =>
     puzzles.saveGenerated(puzzleIds(), {

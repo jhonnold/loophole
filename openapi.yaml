@@ -3,8 +3,14 @@ openapi: 3.1.0
 info:
   title: Loophole API
   version: 0.1.0
-  description: Puzzles and background jobs. Errors are RFC 9457 problem details.
+  description: Puzzles, background jobs and accounts. Errors are RFC 9457 problem
+    details. State-changing requests from other sites are refused (403).
 components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: __Host-loophole_session
   schemas:
     Health:
       type: object
@@ -222,6 +228,133 @@ components:
         - width
         - height
       additionalProperties: false
+    AuthConfig:
+      type: object
+      properties:
+        turnstileSiteKey:
+          type: string
+          description: Site key for the sign-up CAPTCHA.
+      required:
+        - turnstileSiteKey
+    Session:
+      type: object
+      properties:
+        user:
+          anyOf:
+            - $ref: "#/components/schemas/User"
+            - type: "null"
+      required:
+        - user
+      description: "`user` is null when no one is logged in."
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        emailVerified:
+          type: boolean
+        isAdmin:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - email
+        - emailVerified
+        - isAdmin
+        - createdAt
+      description: The logged-in player. Only the email is personal data.
+    SignUpRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          maxLength: 254
+          format: email
+          example: player@example.com
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: 8 to 128 characters.
+        captchaToken:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          description: The token from the Turnstile widget.
+      required:
+        - email
+        - password
+        - captchaToken
+      additionalProperties: false
+    LogInRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          maxLength: 254
+          format: email
+          example: player@example.com
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+        - email
+        - password
+      additionalProperties: false
+    VerifyEmailRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: The token from the link in the email (after `#token=`).
+      required:
+        - token
+      additionalProperties: false
+    EmailRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          maxLength: 254
+          format: email
+          example: player@example.com
+      required:
+        - email
+      additionalProperties: false
+    ResetPasswordRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: The token from the link in the email (after `#token=`).
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: 8 to 128 characters.
+      required:
+        - token
+        - password
+      additionalProperties: false
+    DeleteAccountRequest:
+      type: object
+      properties:
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+        - password
+      additionalProperties: false
   parameters: {}
 paths:
   /api/health:
@@ -315,6 +448,12 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+        "403":
+          description: Sent from another site (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         "413":
           description: Request body larger than 64 KiB.
           content:
@@ -360,6 +499,274 @@ paths:
                 $ref: "#/components/schemas/Problem"
         "404":
           description: No job with this id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/auth/config:
+    get:
+      summary: Settings the sign-up form needs
+      responses:
+        "200":
+          description: Settings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthConfig"
+  /api/session:
+    get:
+      summary: Who is logged in
+      responses:
+        "200":
+          description: The logged-in user, or null.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+  /api/auth/signup:
+    post:
+      summary: Create an account
+      description: Mails a verification link. The answer is the same whether or not
+        the email already has an account; such an account gets a note instead.
+        Does not log in.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignUpRequest"
+      responses:
+        "204":
+          description: Accepted; check your email.
+        "400":
+          description: Invalid body, or the CAPTCHA check failed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Sent from another site (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many attempts; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/auth/login:
+    post:
+      summary: Log in
+      description: Sets a new session cookie and ends the session of the cookie sent,
+        if any.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LogInRequest"
+      responses:
+        "200":
+          description: Logged in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Invalid request body.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Wrong email or password.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Sent from another site (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many attempts; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/auth/logout:
+    post:
+      summary: Log out
+      responses:
+        "204":
+          description: Logged out (also when no one was).
+        "403":
+          description: Sent from another site (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/auth/verify-email:
+    post:
+      summary: Confirm an email address with the mailed token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyEmailRequest"
+      responses:
+        "204":
+          description: Verified.
+        "400":
+          description: Invalid body, or the link is invalid, used or expired.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Sent from another site (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many attempts; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/auth/resend-verification:
+    post:
+      summary: Mail a new verification link
+      description: Same answer whether or not the email has an unverified account.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailRequest"
+      responses:
+        "204":
+          description: Accepted.
+        "400":
+          description: Invalid request body.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Sent from another site (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many attempts; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/auth/forgot-password:
+    post:
+      summary: Mail a password reset link
+      description: Same answer whether or not the email has an account.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailRequest"
+      responses:
+        "204":
+          description: Accepted.
+        "400":
+          description: Invalid request body.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Sent from another site (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many attempts; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/auth/reset-password:
+    post:
+      summary: Set a new password with the mailed token
+      description: Logs the account out everywhere. Does not log in.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordRequest"
+      responses:
+        "204":
+          description: Password changed.
+        "400":
+          description: Invalid body, or the link is invalid, used or expired.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Sent from another site (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many attempts; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/account:
+    delete:
+      summary: Delete the logged-in account and all its data
+      security:
+        - session: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteAccountRequest"
+      responses:
+        "204":
+          description: Deleted and logged out.
+        "400":
+          description: Invalid request body.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Not logged in, or wrong password.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Sent from another site (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many attempts; `Retry-After` says when to try again.
           content:
             application/problem+json:
               schema:

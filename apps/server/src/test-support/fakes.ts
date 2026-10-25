@@ -1,12 +1,26 @@
-import type { Job, PuzzleRecord, Task, TaskOutcome } from "../domain.ts";
 import type {
+  AccountTokenPurpose,
+  AccountTokenRecord,
+  Job,
+  PuzzleRecord,
+  SessionRecord,
+  Task,
+  TaskOutcome,
+  UserRecord,
+} from "../domain.ts";
+import type {
+  AccountTokenRepository,
+  CaptchaVerifier,
   Clock,
   JobEnd,
   JobQueue,
   NewJob,
+  PasswordHasher,
   PuzzleRepository,
+  SessionRepository,
   TaskRunner,
   TaskRunOptions,
+  UserRepository,
 } from "../ports.ts";
 
 /** A clock that only moves when told to. */
@@ -154,5 +168,111 @@ export class FakeTaskRunner implements TaskRunner {
   run(task: Task, options: TaskRunOptions): Promise<TaskOutcome> {
     this.calls.push({ task, options });
     return this.behave(task, options);
+  }
+}
+
+/** "Hashes" by prefixing, so tests stay fast and can read what was stored. */
+export const fakePasswordHasher: PasswordHasher = {
+  hash: async (password) => `hashed:${password}`,
+  verify: async (password, hash) => hash === `hashed:${password}`,
+};
+
+/** Accepts every token while `ok` is true. Records the calls. */
+export class FakeCaptcha implements CaptchaVerifier {
+  readonly calls: { token: string; remoteIp: string | null }[] = [];
+
+  constructor(public ok = true) {}
+
+  async verify(token: string, remoteIp: string | null): Promise<boolean> {
+    this.calls.push({ token, remoteIp });
+    return this.ok;
+  }
+}
+
+export class FakeUserRepository implements UserRepository {
+  readonly users = new Map<string, UserRecord>();
+
+  insert(user: UserRecord): boolean {
+    if (this.getByEmail(user.email) !== null) return false;
+    this.users.set(user.id, user);
+    return true;
+  }
+
+  get(id: string): UserRecord | null {
+    return this.users.get(id) ?? null;
+  }
+
+  getByEmail(email: string): UserRecord | null {
+    return [...this.users.values()].find((u) => u.email === email) ?? null;
+  }
+
+  setPasswordHash(id: string, passwordHash: string): void {
+    this.#update(id, { passwordHash });
+  }
+
+  markEmailVerified(id: string, at: number): void {
+    if (this.users.get(id)?.emailVerifiedAt === null) this.#update(id, { emailVerifiedAt: at });
+  }
+
+  setAdmin(email: string, isAdmin: boolean): boolean {
+    const user = this.getByEmail(email);
+    if (user === null) return false;
+    this.#update(user.id, { isAdmin });
+    return true;
+  }
+
+  delete(id: string): void {
+    this.users.delete(id);
+  }
+
+  #update(id: string, changes: Partial<UserRecord>): void {
+    const user = this.users.get(id);
+    if (user !== undefined) this.users.set(id, { ...user, ...changes });
+  }
+}
+
+export class FakeSessionRepository implements SessionRepository {
+  readonly sessions = new Map<string, SessionRecord>();
+
+  insert(session: SessionRecord): void {
+    this.sessions.set(session.tokenHash, session);
+  }
+
+  get(tokenHash: string): SessionRecord | null {
+    return this.sessions.get(tokenHash) ?? null;
+  }
+
+  delete(tokenHash: string): void {
+    this.sessions.delete(tokenHash);
+  }
+
+  deleteForUser(userId: string): void {
+    for (const s of this.sessions.values()) if (s.userId === userId) this.delete(s.tokenHash);
+  }
+
+  deleteExpired(now: number): void {
+    for (const s of this.sessions.values()) if (s.expiresAt <= now) this.delete(s.tokenHash);
+  }
+}
+
+export class FakeAccountTokenRepository implements AccountTokenRepository {
+  readonly tokens = new Map<string, AccountTokenRecord>();
+
+  replace(token: AccountTokenRecord): void {
+    for (const t of this.tokens.values()) {
+      if (t.userId === token.userId && t.purpose === token.purpose) this.tokens.delete(t.tokenHash);
+    }
+    this.tokens.set(token.tokenHash, token);
+  }
+
+  take(tokenHash: string, purpose: AccountTokenPurpose): AccountTokenRecord | null {
+    const token = this.tokens.get(tokenHash);
+    if (token === undefined || token.purpose !== purpose) return null;
+    this.tokens.delete(tokenHash);
+    return token;
+  }
+
+  deleteExpired(now: number): void {
+    for (const t of this.tokens.values()) if (t.expiresAt <= now) this.tokens.delete(t.tokenHash);
   }
 }

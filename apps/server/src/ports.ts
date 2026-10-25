@@ -1,4 +1,15 @@
-import type { Job, JobInput, JobResult, PuzzleRecord, Task, TaskOutcome } from "./domain.ts";
+import type {
+  AccountTokenPurpose,
+  AccountTokenRecord,
+  Job,
+  JobInput,
+  JobResult,
+  PuzzleRecord,
+  SessionRecord,
+  Task,
+  TaskOutcome,
+  UserRecord,
+} from "./domain.ts";
 
 /**
  * The interfaces managers depend on. Adapters implement them; the composition roots
@@ -68,4 +79,76 @@ export interface TaskRunOptions {
 /** Runs CPU-heavy tasks (generation, verification) off the caller's thread. */
 export interface TaskRunner {
   run(task: Task, options: TaskRunOptions): Promise<TaskOutcome>;
+}
+
+export interface UserRepository {
+  /** Stores a new user. Returns false, storing nothing, when the email is already taken. */
+  insert(user: UserRecord): boolean;
+  get(id: string): UserRecord | null;
+  /** `email` must already be normalized (trimmed, lower-cased). */
+  getByEmail(email: string): UserRecord | null;
+  setPasswordHash(id: string, passwordHash: string): void;
+  /** Marks the email verified at `at`, unless it already is. */
+  markEmailVerified(id: string, at: number): void;
+  /** Returns false when no user has this email. */
+  setAdmin(email: string, isAdmin: boolean): boolean;
+  /** Deletes the user and, through ON DELETE CASCADE, every row that belongs to them. */
+  delete(id: string): void;
+}
+
+export interface SessionRepository {
+  insert(session: SessionRecord): void;
+  get(tokenHash: string): SessionRecord | null;
+  delete(tokenHash: string): void;
+  deleteForUser(userId: string): void;
+  /** Removes sessions that expired at or before `now`. */
+  deleteExpired(now: number): void;
+}
+
+export interface AccountTokenRepository {
+  /** Stores `token` and drops the user's other tokens for the same purpose. */
+  replace(token: AccountTokenRecord): void;
+  /** Removes and returns the token with this hash and purpose, expired or not; null if none. */
+  take(tokenHash: string, purpose: AccountTokenPurpose): AccountTokenRecord | null;
+  /** Removes tokens that expired at or before `now`. */
+  deleteExpired(now: number): void;
+}
+
+/** Password hashing (argon2id in production). */
+export interface PasswordHasher {
+  hash(password: string): Promise<string>;
+  verify(password: string, hash: string): Promise<boolean>;
+}
+
+/** Server-side check of a CAPTCHA token from the sign-up form (Cloudflare Turnstile). */
+export interface CaptchaVerifier {
+  /** False when the token is invalid, expired, already used, or the check could not be made. */
+  verify(token: string, remoteIp: string | null): Promise<boolean>;
+}
+
+export interface MailMessage {
+  readonly to: string;
+  readonly subject: string;
+  /** Plain text body. */
+  readonly text: string;
+}
+
+export interface Mailer {
+  send(message: MailMessage): Promise<void>;
+}
+
+/** At most `limit` hits per `windowMs`. */
+export interface RateRule {
+  readonly limit: number;
+  readonly windowMs: number;
+}
+
+export type RateDecision =
+  | { readonly allowed: true }
+  | { readonly allowed: false; readonly retryAfterMs: number };
+
+/** Counts attempts per key, for the limits on the auth endpoints (NFR-4). */
+export interface RateLimiter {
+  /** Counts one hit under `key` and says whether it is within `rule`. */
+  hit(key: string, rule: RateRule): RateDecision;
 }

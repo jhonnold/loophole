@@ -47,11 +47,15 @@ Server tests follow its layers:
 - Routes are tested through Hono's `app.request` over real managers and in-memory adapters, with no server listening.
 - The thread task runner is tested with real Bun worker threads, including a 100×100 generation stopped at its time limit.
 - The S3 blob store test runs against Garage when the `S3_*` settings are set (from `.env`) and Garage answers; otherwise it is skipped, as in CI. Start Garage (README, Local services) to run it.
+- The account and session managers run on fakes too (users, sessions, mailed tokens, password hashing, CAPTCHA) with the in-memory mailer and rate limiter. Route tests build the account side with `accountDeps` from the server's test support and pass a client address as `app.request`'s third argument.
+- The SMTP mailer test sends through Mailpit and reads the message back from Mailpit's API when it answers on 127.0.0.1:8025; otherwise it is skipped. The Turnstile adapter is tested with a fake `fetch`, never against Cloudflare.
 
 ## Web app
 
 The web app's game logic is plain TypeScript with `*.test.ts` files beside it, so the root `bun test` runs those tests with everything else. Bun can't load `.svelte` files or SvelteKit's `$lib` and `$app` aliases, which only resolve inside Vite, so the tested modules import neither; Svelte components hold as little logic as possible.
 
 The components are covered by Playwright end-to-end tests (`*.e2e.ts` in the web app's `tests` folder). They build the app, serve it and drive it in Chromium at the design kit's phone sizes and on a desktop. Run them with `bun run test:e2e`. They are not part of `bun run check` because they need a local Chromium (`bunx playwright install chromium` in the web app folder).
+
+The account end-to-end test (`tests/accounts.auth-e2e.ts`) has its own config, `playwright.auth.config.ts`: it builds the app and starts the real API serving it on port 4174, with a fresh database, Mailpit for mail and Turnstile's test keys. It replaces Cloudflare's widget script with a stub and reads the confirmation link from Mailpit's API. Run it with `bun run test:e2e:auth`; it skips itself when Mailpit or challenges.cloudflare.com can't be reached.
 
 Frame-time checks (`tests/perf.e2e.ts`, tagged `@perf`) slow the CPU down and measure animation frames while drawing and zooming large boards. `bun run test:e2e` skips them; run them with `bun run test:perf`. They stay out of the gate because their timings depend on the machine.

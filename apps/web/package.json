@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && tsc -p tsconfig.test.json",
     "test:e2e": "playwright test --grep-invert @perf",
-    "test:perf": "playwright test --grep @perf"
+    "test:perf": "playwright test --grep @perf",
+    "test:e2e:auth": "playwright test --config playwright.auth.config.ts"
   },
   "dependencies": {
     "@loophole/api-client": "workspace:*",
