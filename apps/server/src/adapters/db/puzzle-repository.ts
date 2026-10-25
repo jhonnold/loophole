@@ -18,10 +18,11 @@ type PuzzleRow = {
   trace_key: string | null;
   created_at: number;
   creator_id: string | null;
+  release_at: number | null;
 };
 
 const COLUMNS =
-  "id, width, height, clues, seed, generator_version, level, origin, status, solution_key, trace_key, created_at, creator_id";
+  "id, width, height, clues, seed, generator_version, level, origin, status, solution_key, trace_key, created_at, creator_id, release_at";
 
 /** Puzzles in SQLite. Clues are stored as the wire format's clue string; only `meta.generator` is kept. */
 export class SqlitePuzzleRepository implements PuzzleRepository {
@@ -33,13 +34,14 @@ export class SqlitePuzzleRepository implements PuzzleRepository {
 
   constructor(db: Database) {
     this.#insert = db.query<void, PuzzleRow>(
-      `INSERT INTO puzzles (${COLUMNS}) VALUES ($id, $width, $height, $clues, $seed, $generator_version, $level, $origin, $status, $solution_key, $trace_key, $created_at, $creator_id) ON CONFLICT (id) DO NOTHING`,
+      `INSERT INTO puzzles (${COLUMNS}) VALUES ($id, $width, $height, $clues, $seed, $generator_version, $level, $origin, $status, $solution_key, $trace_key, $created_at, $creator_id, $release_at) ON CONFLICT (id) DO NOTHING`,
     );
     this.#get = db.query<PuzzleRow, { id: string }>(
       `SELECT ${COLUMNS} FROM puzzles WHERE id = $id`,
     );
+    // Daily puzzles (the only ones with a release time) are listed on their own.
     this.#listPublished = db.query<PuzzleRow, { limit: number }>(
-      `SELECT ${COLUMNS} FROM puzzles WHERE status = 'published' ORDER BY created_at DESC, id LIMIT $limit`,
+      `SELECT ${COLUMNS} FROM puzzles WHERE status = 'published' AND release_at IS NULL ORDER BY created_at DESC, id LIMIT $limit`,
     );
     this.#findByClues = db.query<PuzzleRow, { width: number; height: number; clues: string }>(
       `SELECT ${COLUMNS} FROM puzzles WHERE width = $width AND height = $height AND clues = $clues ORDER BY created_at, id LIMIT 1`,
@@ -89,6 +91,7 @@ function toRow(r: PuzzleRecord): PuzzleRow {
     trace_key: r.traceKey,
     created_at: r.createdAt,
     creator_id: r.creatorId,
+    release_at: r.releaseAt,
   };
 }
 
@@ -106,5 +109,6 @@ function fromRow(row: PuzzleRow): PuzzleRecord {
     traceKey: row.trace_key,
     createdAt: row.created_at,
     creatorId: row.creator_id,
+    releaseAt: row.release_at,
   };
 }

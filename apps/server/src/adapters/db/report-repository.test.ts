@@ -26,6 +26,7 @@ function setup() {
       traceKey: null,
       createdAt: 0,
       creatorId: null,
+      releaseAt: null,
     });
   }
   return { db, puzzles, repo: new SqliteReportRepository(db) };

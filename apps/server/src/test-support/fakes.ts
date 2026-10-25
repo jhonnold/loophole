@@ -2,7 +2,11 @@ import type { Puzzle } from "@loophole/core";
 import type {
   AccountTokenPurpose,
   AccountTokenRecord,
+  AttemptRecord,
+  DailyRecord,
   Job,
+  LeaderboardEntry,
+  LeaderboardSlice,
   ProgressRecord,
   PuzzleRecord,
   PuzzleStatus,
@@ -15,8 +19,11 @@ import type {
 } from "../domain.ts";
 import type {
   AccountTokenRepository,
+  AttemptRepository,
   CaptchaVerifier,
   Clock,
+  DailyRepository,
+  DisplayNameRepository,
   JobEnd,
   JobQueue,
   NewJob,
@@ -64,7 +71,7 @@ export class FakePuzzleRepository implements PuzzleRepository {
 
   listPublished(limit: number): PuzzleRecord[] {
     return [...this.records.values()]
-      .filter((r) => r.status === "published")
+      .filter((r) => r.status === "published" && r.releaseAt === null)
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, limit);
   }
@@ -372,3 +379,198 @@ export class FakeProgressRepository implements ProgressRepository {
       .slice(0, limit);
   }
 }
+
+export class FakeDailyRepository implements DailyRepository {
+  readonly rows = new Map<string, DailyRecord>();
+
+  get(day: string, size: number): DailyRecord | null {
+    return this.rows.get(`${day}/${size}`) ?? null;
+  }
+
+  getByPuzzle(puzzleId: string): DailyRecord | null {
+    return [...this.rows.values()].find((r) => r.puzzleId === puzzleId) ?? null;
+  }
+
+  listDay(day: string): DailyRecord[] {
+    return [...this.rows.values()].filter((r) => r.day === day).sort((a, b) => a.size - b.size);
+  }
+
+  insert(record: DailyRecord): boolean {
+    const key = `${record.day}/${record.size}`;
+    if (this.rows.has(key)) return false;
+    this.rows.set(key, record);
+    return true;
+  }
+
+  retry(day: string, size: number, fromAttempt: number, jobId: string): boolean {
+    const row = this.get(day, size);
+    if (row === null || row.attempt !== fromAttempt || row.puzzleId !== null) return false;
+    this.rows.set(`${day}/${size}`, { ...row, attempt: fromAttempt + 1, jobId });
+    return true;
+  }
+
+  setPuzzle(
+    day: string,
+    size: number,
+    jobId: string,
+    puzzleId: string,
+    generatorVersion: string | null,
+  ): boolean {
+    const row = this.get(day, size);
+    if (row === null || row.jobId !== jobId || row.puzzleId !== null) return false;
+    this.rows.set(`${day}/${size}`, { ...row, puzzleId, generatorVersion });
+    return true;
+  }
+
+  atomically<T>(fn: () => T): T {
+    return fn();
+  }
+}
+
+/** Attempts in a Map, with the same ranking rules as the SQLite repository. */
+export class FakeAttemptRepository implements AttemptRepository {
+  readonly records = new Map<string, AttemptRecord>();
+
+  constructor(private readonly names: DisplayNameRepository = new FakeDisplayNameRepository()) {}
+
+  get(userId: string, puzzleId: string): AttemptRecord | null {
+    return this.records.get(`${userId}/${puzzleId}`) ?? null;
+  }
+
+  insert(record: AttemptRecord): void {
+    const key = `${record.userId}/${record.puzzleId}`;
+    if (!this.records.has(key)) this.records.set(key, record);
+  }
+
+  markAssisted(userId: string, puzzleId: string): void {
+    const a = this.get(userId, puzzleId);
+    if (a !== null && a.finishedAt === null) this.insertOver({ ...a, assisted: true });
+  }
+
+  finish(
+    userId: string,
+    puzzleId: string,
+    result: { finishedAt: number; timeMs: number; ranked: boolean },
+  ): boolean {
+    const a = this.get(userId, puzzleId);
+    if (a === null || a.finishedAt !== null) return false;
+    this.insertOver({ ...a, ...result });
+    return true;
+  }
+
+  listForDay(userId: string, day: string): AttemptRecord[] {
+    return this.#all().filter((a) => a.userId === userId && a.day === day);
+  }
+
+  finishedDays(userId: string): string[] {
+    const days = this.#all().filter((a) => a.userId === userId && a.finishedAt !== null);
+    return [...new Set(days.map((a) => a.day))];
+  }
+
+  bests(userId: string): { area: number; level: number; timeMs: number }[] {
+    const best = new Map<string, { area: number; level: number; timeMs: number }>();
+    for (const a of this.#ranked().filter((r) => r.userId === userId)) {
+      const key = `${a.area}/${a.level}`;
+      const old = best.get(key);
+      if (old === undefined || a.timeMs < old.timeMs) {
+        best.set(key, { area: a.area, level: a.level, timeMs: a.timeMs });
+      }
+    }
+    return [...best.values()];
+  }
+
+  puzzleBoard(puzzleId: string, viewerId: string | null, limit: number): LeaderboardSlice {
+    return this.#slice(
+      this.#ranked().filter((a) => a.puzzleId === puzzleId),
+      viewerId,
+      limit,
+    );
+  }
+
+  bucketBoard(
+    area: number,
+    level: number,
+    viewerId: string | null,
+    limit: number,
+  ): LeaderboardSlice {
+    const best = new Map<string, AttemptRecord & { timeMs: number; finishedAt: number }>();
+    for (const a of this.#ranked().filter((r) => r.area === area && r.level === level)) {
+      const old = best.get(a.userId);
+      if (old === undefined || a.timeMs < old.timeMs) best.set(a.userId, a);
+    }
+    return this.#slice([...best.values()], viewerId, limit);
+  }
+
+  /** Replaces a stored attempt; tests use it to set up finished ones. */
+  insertOver(record: AttemptRecord): void {
+    this.records.set(`${record.userId}/${record.puzzleId}`, record);
+  }
+
+  #all(): AttemptRecord[] {
+    return [...this.records.values()];
+  }
+
+  #ranked() {
+    return this.#all().filter(
+      (a): a is AttemptRecord & { timeMs: number; finishedAt: number } =>
+        a.ranked && a.timeMs !== null && a.finishedAt !== null,
+    );
+  }
+
+  #slice(
+    rows: (AttemptRecord & { timeMs: number; finishedAt: number })[],
+    viewerId: string | null,
+    limit: number,
+  ): LeaderboardSlice {
+    const board: LeaderboardEntry[] = rows
+      .sort(
+        (a, b) =>
+          a.timeMs - b.timeMs ||
+          a.finishedAt - b.finishedAt ||
+          (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0),
+      )
+      .map((a, i) => ({
+        rank: i + 1,
+        userId: a.userId,
+        name: this.names.get(a.userId),
+        timeMs: a.timeMs,
+      }));
+    const mine = board.find((e) => e.userId === viewerId)?.rank ?? Number.NaN;
+    return {
+      total: board.length,
+      entries: board.filter((e) => e.rank <= limit || Math.abs(e.rank - mine) <= 1),
+    };
+  }
+}
+
+export class FakeDisplayNameRepository implements DisplayNameRepository {
+  readonly names = new Map<string, string>();
+
+  get(userId: string): string | null {
+    return this.names.get(userId) ?? null;
+  }
+
+  set(userId: string, name: string | null, _now: number): boolean {
+    if (name === null) {
+      this.names.delete(userId);
+      return true;
+    }
+    for (const [other, taken] of this.names) {
+      if (other !== userId && taken.toLowerCase() === name.toLowerCase()) return false;
+    }
+    this.names.set(userId, name);
+    return true;
+  }
+}
+
+/** Daily seeds that are easy to read in tests. */
+export const fakeSeeds = {
+  seed: (day: string, size: number, attempt: number) => `${day}/${size}/${attempt}`,
+};
+
+/** For job runs that never meet a daily puzzle. */
+export const noDailies = {
+  complete: async (): Promise<void> => {
+    throw new Error("unexpected daily puzzle");
+  },
+};

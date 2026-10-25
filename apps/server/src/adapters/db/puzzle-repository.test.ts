@@ -19,6 +19,7 @@ function record(id: string, createdAt: number, status: PuzzleRecord["status"] = 
     traceKey: `puzzles/${id}/trace.json`,
     createdAt,
     creatorId: null,
+    releaseAt: null,
   };
   return r;
 }
@@ -58,6 +59,15 @@ describe("SqlitePuzzleRepository", () => {
     repo.insert(record("mid", 2));
     expect(repo.listPublished(10).map((r) => r.id)).toEqual(["new", "mid", "old"]);
     expect(repo.listPublished(2).map((r) => r.id)).toEqual(["new", "mid"]);
+  });
+
+  test("keeps a daily puzzle's release time and leaves it out of the list", () => {
+    const repo = new SqlitePuzzleRepository(openDatabase(":memory:"));
+    repo.insert(record("practice", 1));
+    repo.insert({ ...record("daily", 2), releaseAt: 5000 });
+    expect(repo.get("daily")?.releaseAt).toBe(5000);
+    expect(repo.get("practice")?.releaseAt).toBeNull();
+    expect(repo.listPublished(10).map((r) => r.id)).toEqual(["practice"]);
   });
 
   test("findByClues finds the oldest puzzle with the same size and clues, published or not", () => {

@@ -26,7 +26,20 @@ export class PuzzleManager {
    */
   async saveGenerated(id: string, generated: GeneratedPuzzle): Promise<string> {
     const { puzzle, solution, steps } = generated;
-    return this.#save(id, parsePuzzle(puzzle), solution, steps, "generated", null);
+    return this.#save(id, parsePuzzle(puzzle), solution, steps, "generated", null, null);
+  }
+
+  /**
+   * Stores a generated daily puzzle (PRD FR-22) that players can't see before `releaseAt`. Its
+   * seed and generator version are left out, since with them anyone could rebuild the solution
+   * (DECISIONS, WT6 "Puzzle storage"); the daily's own record keeps them. Like `saveGenerated`
+   * otherwise. Returns `id`.
+   */
+  async saveDaily(id: string, generated: GeneratedPuzzle, releaseAt: number): Promise<string> {
+    const { puzzle, solution, steps } = generated;
+    const { width, height, clues } = puzzle;
+    const cluesOnly = parsePuzzle({ v: 1, width, height, clues });
+    return this.#save(id, cluesOnly, solution, steps, "generated", null, releaseAt);
   }
 
   /**
@@ -40,7 +53,7 @@ export class PuzzleManager {
     steps: readonly Step[],
     creatorId: string,
   ): Promise<string> {
-    return this.#save(id, puzzle, solution, steps, "submitted", creatorId);
+    return this.#save(id, puzzle, solution, steps, "submitted", creatorId, null);
   }
 
   async #save(
@@ -50,6 +63,7 @@ export class PuzzleManager {
     steps: readonly Step[],
     origin: PuzzleOrigin,
     creatorId: string | null,
+    releaseAt: number | null,
   ): Promise<string> {
     const { puzzles, blobs, clock } = this.#deps;
     if (puzzles.get(id) !== null) return id;
@@ -67,14 +81,20 @@ export class PuzzleManager {
       traceKey,
       createdAt: clock.now(),
       creatorId,
+      releaseAt,
     });
     return id;
   }
 
-  /** A published puzzle, or null when there is none with this id. */
+  /**
+   * A published puzzle that players may see, or null when there is none with this id. A daily
+   * puzzle stays hidden until its release time (00:00 UTC on its day).
+   */
   get(id: string): PuzzleRecord | null {
     const record = this.#deps.puzzles.get(id);
-    return record?.status === "published" ? record : null;
+    if (record?.status !== "published") return null;
+    if (record.releaseAt !== null && record.releaseAt > this.#deps.clock.now()) return null;
+    return record;
   }
 
   /** A puzzle whether published or not, for admins; null when there is none with this id. */
