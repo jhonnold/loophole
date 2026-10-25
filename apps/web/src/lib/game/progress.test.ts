@@ -49,6 +49,17 @@ describe("progress store", () => {
     });
   });
 
+  test("a clock value that is not a finite number counts as zero", () => {
+    const storage = memoryStorage();
+    const store = createProgressStore(storage);
+    // JSON.parse reads 1e999 as Infinity, which would otherwise render as "Infinity:NaN".
+    storage.data.set(
+      progressKey("a"),
+      '{"v":1,"edges":"000000000000","elapsedMs":1e999,"solved":false}',
+    );
+    expect(store.load("a", grid)?.elapsedMs).toBe(0);
+  });
+
   test("keeps working when storage throws or is missing", () => {
     const throwing: KeyValueStorage = {
       getItem: () => {

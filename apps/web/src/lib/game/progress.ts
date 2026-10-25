@@ -42,7 +42,11 @@ export function createProgressStore(storage: KeyValueStorage | null): ProgressSt
         const data = JSON.parse(text) as Partial<StoredProgressV1>;
         if (data.v !== 1 || typeof data.edges !== "string") return null;
         const elapsedMs =
-          typeof data.elapsedMs === "number" && data.elapsedMs > 0 ? data.elapsedMs : 0;
+          typeof data.elapsedMs === "number" &&
+          Number.isFinite(data.elapsedMs) &&
+          data.elapsedMs > 0
+            ? data.elapsedMs
+            : 0;
         return { edges: decodeEdges(grid, data.edges), elapsedMs, solved: data.solved === true };
       } catch {
         return null;
