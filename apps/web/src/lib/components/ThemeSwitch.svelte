@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { browserStorage } from "../game/progress.ts";
   import { applyThemeChoice, readThemeChoice, saveThemeChoice, type ThemeChoice } from "../theme.ts";
 
   const OPTIONS: { value: ThemeChoice; label: string }[] = [
@@ -11,12 +12,12 @@
   let choice: ThemeChoice = $state("system");
 
   onMount(() => {
-    choice = readThemeChoice(localStorage);
+    choice = readThemeChoice(browserStorage());
   });
 
   function pick(value: ThemeChoice) {
     choice = value;
-    saveThemeChoice(localStorage, value);
+    saveThemeChoice(browserStorage(), value);
     applyThemeChoice(document.documentElement, value);
   }
 </script>

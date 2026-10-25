@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { createGrid } from "@loophole/core";
 import { memoryStorage } from "../test-support/memory-storage.ts";
-import { createProgressStore, type KeyValueStorage, progressKey } from "./progress.ts";
+import {
+  browserStorage,
+  createProgressStore,
+  type KeyValueStorage,
+  progressKey,
+} from "./progress.ts";
 
 const grid = createGrid(2, 2);
 
@@ -58,6 +63,20 @@ describe("progress store", () => {
       '{"v":1,"edges":"000000000000","elapsedMs":1e999,"solved":false}',
     );
     expect(store.load("a", grid)?.elapsedMs).toBe(0);
+  });
+
+  test("browserStorage gives null when the browser refuses site data", () => {
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      get() {
+        throw new Error("SecurityError");
+      },
+    });
+    try {
+      expect(browserStorage()).toBeNull();
+    } finally {
+      Reflect.deleteProperty(globalThis, "localStorage");
+    }
   });
 
   test("keeps working when storage throws or is missing", () => {

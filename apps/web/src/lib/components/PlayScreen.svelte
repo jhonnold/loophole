@@ -20,7 +20,7 @@
   } from "../game/geometry.ts";
   import { type Command, screenCommand } from "../game/keyboard.ts";
   import { violationMessages } from "../game/messages.ts";
-  import { createProgressStore, type ProgressStore } from "../game/progress.ts";
+  import { browserStorage, createProgressStore, type ProgressStore } from "../game/progress.ts";
   import {
     createStopwatch,
     elapsed,
@@ -152,7 +152,7 @@
       wide = wideQuery.matches;
     };
     wideQuery.addEventListener("change", onwide);
-    store = createProgressStore(localStorage);
+    store = createProgressStore(browserStorage());
     const saved = store.load(entry.id, grid);
     if (saved !== null) {
       board = createBoard(grid.edgeCount, saved.edges);

@@ -24,6 +24,18 @@ export function progressKey(puzzleId: string): string {
 }
 
 /**
+ * `localStorage`, or null when the browser refuses it. Reading the global can itself throw (Chromium
+ * does so when site data is blocked), so components must go through this rather than touch it.
+ */
+export function browserStorage(): KeyValueStorage | null {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Saves and restores progress per puzzle id in browser storage. Storage errors (private mode, quota)
  * are swallowed: losing a save must never break play. Anything unreadable loads as null.
  */

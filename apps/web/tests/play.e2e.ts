@@ -94,6 +94,26 @@ test.describe("progress", () => {
   });
 });
 
+test.describe("blocked browser storage (FR-21)", () => {
+  test("plays and browses with site data blocked", async ({ page }) => {
+    // Chromium throws when script reads localStorage while site data is blocked.
+    await page.addInitScript(() => {
+      Object.defineProperty(window, "localStorage", {
+        get() {
+          throw new DOMException("blocked", "SecurityError");
+        },
+      });
+    });
+    const errors: Error[] = [];
+    page.on("pageerror", (e) => errors.push(e));
+    await page.goto("/play/small-7");
+    await expect(page.locator("svg[role=application]")).toHaveAttribute("tabindex", "0");
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: "夜 Night" })).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+});
+
 test.describe("desktop keyboard (NFR-5)", () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 

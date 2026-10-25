@@ -2,7 +2,7 @@
   import { createGrid } from "@loophole/core";
   import { onMount } from "svelte";
   import ThemeSwitch from "$lib/components/ThemeSwitch.svelte";
-  import { createProgressStore } from "$lib/game/progress.ts";
+  import { browserStorage, createProgressStore } from "$lib/game/progress.ts";
   import { formatClock } from "$lib/game/timer.ts";
   import type { PageProps } from "./$types";
 
@@ -12,7 +12,7 @@
   let statuses: Record<string, Status> = $state({});
 
   onMount(() => {
-    const store = createProgressStore(localStorage);
+    const store = createProgressStore(browserStorage());
     for (const p of data.puzzles) {
       const saved = store.load(p.id, createGrid(p.width, p.height));
       statuses[p.id] =
