@@ -13,7 +13,7 @@ export const GENERATOR_VERSION = "1";
 
 /** A clue's removal is tested with the edges this many cells around it unknown, the rest given. */
 const WINDOW_RADIUS = 3;
-/** Clues put back in one round are more than this many cells apart (in rows and columns). */
+/** Clues put back in one round are more than this many rows or columns apart. */
 const RESTORE_SPACING = 2;
 /** Loops tried before giving up. Only 2×2 and rare small boards need a second; this bounds the loop. */
 const MAX_ATTEMPTS = 100;
@@ -63,7 +63,7 @@ export interface GenerateResult {
  * Generates a puzzle with exactly one solution (PRD FR-7 to FR-10).
  *
  * 1. Grow a random loop that meets the thresholds (`generateLoop`).
- * 2. Give every cell its clue (a cell with 4 lines, only on a 1×1 board, gets none). If the rule
+ * 2. Give every cell its clue (a cell with 4 lines gets none). If the rule
  *    solver cannot solve that (two loops can share every clue, as the L shapes on a 2×2 board do),
  *    try a new loop, grown one cell further past the thresholds than the last.
  * 3. In random order, remove each clue if the solver can still decide the 7×7 window of cells
