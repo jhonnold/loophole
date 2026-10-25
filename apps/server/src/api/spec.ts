@@ -27,6 +27,7 @@ import { AccountManager } from "../managers/account-manager.ts";
 import { AttemptManager } from "../managers/attempt-manager.ts";
 import { DailyManager } from "../managers/daily-manager.ts";
 import { DisplayNameManager } from "../managers/display-name-manager.ts";
+import { HealthManager } from "../managers/health-manager.ts";
 import { HintManager } from "../managers/hint-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
 import { LeaderboardManager } from "../managers/leaderboard-manager.ts";
@@ -48,19 +49,22 @@ export function openApiDocument() {
     ttlMs: 1,
   });
   const limiter = new MemoryRateLimiter(systemClock);
+  const blobs = new MemoryBlobStore();
   const puzzles = new PuzzleManager({
     puzzles: new SqlitePuzzleRepository(db),
-    blobs: new MemoryBlobStore(),
+    blobs,
     clock: systemClock,
   });
+  const jobQueue = new SqliteJobQueue(db);
   const jobs = new JobManager({
-    jobs: new SqliteJobQueue(db),
+    jobs: jobQueue,
     clock: systemClock,
     newId: () => crypto.randomUUID(),
     maxQueued: 1,
   });
+  const dailyRepo = new SqliteDailyRepository(db);
   const dailies = new DailyManager({
-    dailies: new SqliteDailyRepository(db),
+    dailies: dailyRepo,
     puzzles,
     clock: systemClock,
   });
@@ -119,6 +123,15 @@ export function openApiDocument() {
       limiter,
       clock: systemClock,
     }),
+    health: new HealthManager({
+      jobs: jobQueue,
+      dailies: dailyRepo,
+      blobs,
+      clock: systemClock,
+      daysAhead: 1,
+      versions: { app: "spec", runtime: "spec" },
+      checkTimeoutMs: 1,
+    }),
   });
   const doc = app.getOpenAPI31Document({
     openapi: "3.1.0",
@@ -126,7 +139,7 @@ export function openApiDocument() {
       title: "Loophole API",
       version: "0.1.0",
       description:
-        "Puzzles, background jobs, accounts, saved progress, submitted puzzles and reports, daily puzzles, ranked attempts and leaderboards. Errors are RFC 9457 problem details. State-changing requests from other sites are refused (403).",
+        "Puzzles, background jobs, accounts, saved progress, submitted puzzles and reports, daily puzzles, ranked attempts, leaderboards and health checks. Errors are RFC 9457 problem details. State-changing requests from other sites are refused (403).",
     },
   });
   db.close();

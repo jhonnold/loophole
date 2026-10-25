@@ -29,6 +29,9 @@ const env = {
   S3_SECRET_ACCESS_KEY: "8b339f8231fe89196b07eb8766bf6f079805f64a9be09934697b94e0b1aa0a0b",
   // Today's and tomorrow's daily puzzles only, so the worker is soon free for the tests' own jobs.
   DAILY_DAYS_AHEAD: "2",
+  // No metrics listeners: a developer's .env may turn them on for the dev servers' ports.
+  API_METRICS_PORT: "0",
+  WORKER_METRICS_PORT: "0",
 };
 
 export default defineConfig({

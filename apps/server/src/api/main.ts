@@ -15,8 +15,14 @@ import { SqliteReportRepository } from "../adapters/db/report-repository.ts";
 import { SqliteSessionRepository } from "../adapters/db/session-repository.ts";
 import { SqliteSubmissionRepository } from "../adapters/db/submission-repository.ts";
 import { SqliteUserRepository } from "../adapters/db/user-repository.ts";
+import { installJsonLogging } from "../adapters/logging.ts";
 import { BackgroundMailer } from "../adapters/mail/background-mailer.ts";
 import { SmtpMailer } from "../adapters/mail/smtp-mailer.ts";
+import {
+  createRegistry,
+  PrometheusApiMetrics,
+  serveMetrics,
+} from "../adapters/metrics/prometheus.ts";
 import { argon2idHasher } from "../adapters/password-hasher.ts";
 import { randomToken } from "../adapters/random-token.ts";
 import { MemoryRateLimiter } from "../adapters/rate-limiter.ts";
@@ -25,6 +31,7 @@ import { AccountManager } from "../managers/account-manager.ts";
 import { AttemptManager } from "../managers/attempt-manager.ts";
 import { DailyManager } from "../managers/daily-manager.ts";
 import { DisplayNameManager } from "../managers/display-name-manager.ts";
+import { HealthManager } from "../managers/health-manager.ts";
 import { HintManager } from "../managers/hint-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
 import { LeaderboardManager } from "../managers/leaderboard-manager.ts";
@@ -33,20 +40,26 @@ import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { ReportManager } from "../managers/report-manager.ts";
 import { SessionManager } from "../managers/session-manager.ts";
 import { SubmissionManager } from "../managers/submission-manager.ts";
+import { requestContext } from "../request-context.ts";
 import { createApp } from "./app.ts";
 
+installJsonLogging({ process: "api", context: () => requestContext.getStore() });
 const config = loadConfig(process.env);
 const db = openDatabase(config.databasePath);
 // loadConfig refuses the test secret unless PUBLIC_URL is on localhost.
 const testCaptcha = config.turnstile.secretKey === TURNSTILE_TEST_SECRET_KEY;
+const registry = createRegistry(config.version);
+const metrics = new PrometheusApiMetrics(registry);
 
+const blobs = new S3BlobStore(config.s3);
 const puzzles = new PuzzleManager({
   puzzles: new SqlitePuzzleRepository(db),
-  blobs: new S3BlobStore(config.s3),
+  blobs,
   clock: systemClock,
 });
+const jobQueue = new SqliteJobQueue(db);
 const jobs = new JobManager({
-  jobs: new SqliteJobQueue(db),
+  jobs: jobQueue,
   clock: systemClock,
   newId: () => crypto.randomUUID(),
   maxQueued: config.maxQueuedJobs,
@@ -59,7 +72,7 @@ const sessions = new SessionManager({
   newToken: randomToken,
   ttlMs: config.sessionTtlMs,
 });
-const limiter = new MemoryRateLimiter(systemClock);
+const limiter = new MemoryRateLimiter(systemClock, () => metrics.rateLimitEviction());
 const accounts = new AccountManager({
   users,
   tokens: new SqliteAccountTokenRepository(db),
@@ -71,15 +84,16 @@ const accounts = new AccountManager({
     expectedHostname: testCaptcha ? undefined : new URL(config.publicUrl).hostname,
   }),
   // Mail goes out after the answer, so its timing and errors don't show who has an account.
-  mailer: new BackgroundMailer(new SmtpMailer(config.smtp)),
+  mailer: new BackgroundMailer(new SmtpMailer(config.smtp), () => metrics.mailFailure()),
   limiter,
   clock: systemClock,
   newId: () => crypto.randomUUID(),
   newToken: randomToken,
   publicUrl: config.publicUrl,
 });
+const dailyRepo = new SqliteDailyRepository(db);
 const dailies = new DailyManager({
-  dailies: new SqliteDailyRepository(db),
+  dailies: dailyRepo,
   puzzles,
   clock: systemClock,
 });
@@ -116,6 +130,15 @@ const reports = new ReportManager({
   limiter,
   clock: systemClock,
 });
+const health = new HealthManager({
+  jobs: jobQueue,
+  dailies: dailyRepo,
+  blobs,
+  clock: systemClock,
+  daysAhead: config.dailies.daysAhead,
+  versions: { app: config.version, runtime: `bun ${Bun.version}` },
+  checkTimeoutMs: 2_000,
+});
 const app = createApp({
   puzzles,
   jobs,
@@ -133,6 +156,9 @@ const app = createApp({
   trustProxy: config.trustProxy,
   turnstileSiteKey: config.turnstile.siteKey,
   webDir: config.webDir,
+  health,
+  metrics,
+  accessLog: true,
 });
 if (testCaptcha) {
   console.warn(
@@ -148,3 +174,7 @@ const server = Bun.serve({
   fetch: app.fetch,
 });
 console.log(`API listening on ${server.url}`);
+if (config.metrics.apiPort !== 0) {
+  const metricsServer = serveMetrics(registry, config.metrics.host, config.metrics.apiPort);
+  console.log(`API metrics on ${metricsServer.url}metrics`);
+}

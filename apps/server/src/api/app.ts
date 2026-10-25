@@ -25,9 +25,12 @@ import type { HintManager } from "../managers/hint-manager.ts";
 import type { JobManager } from "../managers/job-manager.ts";
 import type { ProgressManager } from "../managers/progress-manager.ts";
 import type { PuzzleManager } from "../managers/puzzle-manager.ts";
+import type { ApiMetrics } from "../ports.ts";
 import { type AccountRouteDeps, registerAccountRoutes, tooManyRequests } from "./accounts.ts";
 import { sameOriginOnly } from "./csrf.ts";
 import { type DailyRouteDeps, registerDailyRoutes } from "./daily.ts";
+import { type HealthRouteDeps, registerHealthRoutes } from "./health.ts";
+import { observe } from "./observe.ts";
 import { problem, problemResponse } from "./problem.ts";
 import { registerProgressRoutes } from "./progress.ts";
 import { type ReportRouteDeps, registerReportRoutes } from "./reports.ts";
@@ -49,14 +52,21 @@ export interface AppDeps
   extends AccountRouteDeps,
     SubmissionRouteDeps,
     ReportRouteDeps,
-    DailyRouteDeps {
+    DailyRouteDeps,
+    HealthRouteDeps {
   readonly puzzles: PuzzleManager;
   readonly jobs: JobManager;
   readonly hints: HintManager;
   readonly progress: ProgressManager;
   /** Folder of the built web app to serve at `/`, with `index.html` for unknown paths. */
   readonly webDir?: string;
+  /** Request counts and auth failures for monitoring; route tests leave it out. */
+  readonly metrics?: ApiMetrics;
+  /** Log a line for every answered request (the API process turns it on). */
+  readonly accessLog?: boolean;
 }
+
+const NO_METRICS: ApiMetrics = { request() {}, authFailure() {} };
 
 /** Largest request body the API reads. Leaves room for a 100×100 puzzle (about 10 KB). */
 const MAX_BODY_BYTES = 64 * 1024;
@@ -165,8 +175,10 @@ const validationHook: Hook<unknown, Env, string, unknown> = (result, c) => {
 /** The HTTP API: routes translate between wire shapes and domain types; managers do the work. */
 export function createApp(deps: AppDeps): OpenAPIHono {
   const { puzzles, jobs, hints } = deps;
+  const metrics = deps.metrics ?? NO_METRICS;
   const app = new OpenAPIHono({ defaultHook: validationHook });
 
+  app.use("*", observe(metrics, deps.accessLog ?? false));
   app.use(
     "/api/*",
     bodyLimit({
@@ -174,7 +186,7 @@ export function createApp(deps: AppDeps): OpenAPIHono {
       onError: (c) => problem(c, 413, "Request body too large"),
     }),
   );
-  app.use("/api/*", sameOriginOnly);
+  app.use("/api/*", sameOriginOnly(metrics));
 
   app.openapi(healthRoute, (c) => c.json({ status: "ok" as const }, 200));
 
@@ -219,6 +231,7 @@ export function createApp(deps: AppDeps): OpenAPIHono {
   registerSubmissionRoutes(app, deps);
   registerReportRoutes(app, deps);
   registerDailyRoutes(app, deps);
+  registerHealthRoutes(app, deps);
 
   app.all("/api/*", (c) => problem(c, 404, "Not found"));
 
@@ -236,12 +249,18 @@ export function createApp(deps: AppDeps): OpenAPIHono {
       return problem(c, 400, "Invalid board", { detail: err.message });
     if (err instanceof PuzzleNotFoundError)
       return problem(c, 404, "Puzzle not found", { detail: err.message });
-    if (err instanceof InvalidCredentialsError)
+    if (err instanceof InvalidCredentialsError) {
+      metrics.authFailure("login");
       return problem(c, 401, "Wrong email or password", { detail: err.message });
-    if (err instanceof CaptchaFailedError)
+    }
+    if (err instanceof CaptchaFailedError) {
+      metrics.authFailure("captcha");
       return problem(c, 400, "CAPTCHA check failed", { detail: err.message });
-    if (err instanceof InvalidTokenError)
+    }
+    if (err instanceof InvalidTokenError) {
+      metrics.authFailure("link");
       return problem(c, 400, "Invalid or expired link", { detail: err.message });
+    }
     if (err instanceof DailyNotFoundError)
       return problem(c, 404, "Daily puzzle not found", { detail: err.message });
     if (err instanceof DailyEndedError)
