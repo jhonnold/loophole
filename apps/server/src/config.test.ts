@@ -42,6 +42,8 @@ describe("loadConfig", () => {
       },
       sessionTtlMs: 30 * 24 * 60 * 60 * 1000,
       dailies: { seedSecret: "loophole-dev-daily-seed-secret", daysAhead: 3, stockMs: 60_000 },
+      version: "dev",
+      metrics: { host: "127.0.0.1", apiPort: 0, workerPort: 0 },
     });
     expect(config.workerId).toContain(String(process.pid));
   });
@@ -54,6 +56,10 @@ describe("loadConfig", () => {
       WEB_DIR: "apps/web/build",
       WORKER_ID: "w1",
       GENERATE_TIMEOUT_MS: "1000",
+      APP_VERSION: "4f8cb61",
+      METRICS_HOST: "0.0.0.0",
+      API_METRICS_PORT: "9464",
+      WORKER_METRICS_PORT: "9465",
     });
     expect(config).toMatchObject({
       port: 8080,
@@ -61,6 +67,8 @@ describe("loadConfig", () => {
       webDir: "apps/web/build",
       workerId: `w1-${process.pid}`,
       jobs: { generateTimeoutMs: 1000 },
+      version: "4f8cb61",
+      metrics: { host: "0.0.0.0", apiPort: 9464, workerPort: 9465 },
     });
   });
 
@@ -120,6 +128,43 @@ describe("loadConfig", () => {
     };
     expect(() => loadConfig(site)).toThrow(/DAILY_SEED_SECRET is the development value/);
     expect(() => loadConfig({ ...site, DAILY_SEED_SECRET: "short" })).toThrow(/DAILY_SEED_SECRET/);
+  });
+
+  test("refuses every development default for a site that isn't on localhost, naming each", () => {
+    let message = "";
+    try {
+      loadConfig({
+        ...S3,
+        S3_ACCESS_KEY_ID: "GK1a2b3c4d5e6f708192a3b4c5",
+        PUBLIC_URL: "http://loophole.example",
+      });
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    for (const name of [
+      "TURNSTILE_SECRET_KEY",
+      "TURNSTILE_SITE_KEY",
+      "DAILY_SEED_SECRET",
+      "S3_ACCESS_KEY_ID",
+      "PUBLIC_URL must be https",
+      "SMTP_HOST",
+      "MAIL_FROM",
+    ]) {
+      expect(message).toContain(name);
+    }
+  });
+
+  test("a production site with its own settings starts", () => {
+    const config = loadConfig({
+      ...S3,
+      PUBLIC_URL: "https://loophole.example",
+      TURNSTILE_SITE_KEY: "site",
+      TURNSTILE_SECRET_KEY: "secret",
+      DAILY_SEED_SECRET: "a-long-random-production-secret",
+      SMTP_HOST: "smtp.example",
+      MAIL_FROM: "Loophole <hi@loophole.example>",
+    });
+    expect(config.publicUrl).toBe("https://loophole.example");
   });
 
   test("requires PUBLIC_URL: there is no default", () => {

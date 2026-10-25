@@ -14,7 +14,14 @@ import type { JobRunSettings } from "./managers/job-run-manager.ts";
  */
 export const DEV_DAILY_SEED_SECRET = "loophole-dev-daily-seed-secret";
 
+/** Garage's development access key (scripts/garage-init.sh); public, so never for a real site. */
+export const DEV_S3_ACCESS_KEY_ID = "GK1a2b3c4d5e6f708192a3b4c5";
+
+const DEFAULT_MAIL_FROM = "Loophole <no-reply@loophole.localhost>";
+
 const Port = z.coerce.number().int().min(1).max(65535);
+/** A port, or 0 for "don't listen". */
+const OptionalPort = z.coerce.number().int().min(0).max(65535).default(0);
 const Ms = z.coerce.number().int().positive();
 
 const EnvSchema = z.object({
@@ -40,9 +47,13 @@ const EnvSchema = z.object({
   SMTP_USER: z.string().min(1).optional(),
   SMTP_PASSWORD: z.string().min(1).optional(),
   SMTP_REQUIRE_TLS: z.stringbool().optional(),
-  MAIL_FROM: z.string().min(1).default("Loophole <no-reply@loophole.localhost>"),
+  MAIL_FROM: z.string().min(1).default(DEFAULT_MAIL_FROM),
   DAILY_SEED_SECRET: z.string().min(16).default(DEV_DAILY_SEED_SECRET),
   DAILY_DAYS_AHEAD: z.coerce.number().int().min(1).max(30).default(3),
+  APP_VERSION: z.string().min(1).default("dev"),
+  METRICS_HOST: z.string().min(1).default("127.0.0.1"),
+  API_METRICS_PORT: OptionalPort,
+  WORKER_METRICS_PORT: OptionalPort,
 });
 
 export interface Config {
@@ -75,6 +86,14 @@ export interface Config {
     /** How often the worker checks that the coming days are generated. */
     readonly stockMs: number;
   };
+  /** Which build is running (the git commit in a production image), or "dev". */
+  readonly version: string;
+  /** Where each process serves Prometheus metrics; port 0 means it doesn't. */
+  readonly metrics: {
+    readonly host: string;
+    readonly apiPort: number;
+    readonly workerPort: number;
+  };
 }
 
 /** Reads the server's settings from environment variables (see `.env.example`). Throws on bad values. */
@@ -87,17 +106,48 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     );
   }
   const e = parsed.data;
-  const publicHost = new URL(e.PUBLIC_URL).hostname;
-  const local = publicHost === "localhost" || publicHost === "127.0.0.1";
-  if (e.TURNSTILE_SECRET_KEY === TURNSTILE_TEST_SECRET_KEY && !local) {
-    // Fail closed: the test secret passes every token, so it must never guard a real site.
-    throw new Error(
-      `TURNSTILE_SECRET_KEY is Cloudflare's always-pass test key, but PUBLIC_URL (${e.PUBLIC_URL}) is not localhost. Set TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY to a real Turnstile widget's keys.`,
-    );
+  const publicUrl = new URL(e.PUBLIC_URL);
+  const local = publicUrl.hostname === "localhost" || publicUrl.hostname === "127.0.0.1";
+  // A site that isn't on localhost is a real deployment: refuse every development default that
+  // would make it unsafe or quietly broken (DECISIONS, "Production settings").
+  const problems: string[] = [];
+  if (!local) {
+    if (e.TURNSTILE_SECRET_KEY === TURNSTILE_TEST_SECRET_KEY) {
+      // Fail closed: the test secret passes every token, so it must never guard a real site.
+      problems.push(
+        "TURNSTILE_SECRET_KEY is Cloudflare's always-pass test key. Set TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY to a real Turnstile widget's keys.",
+      );
+    }
+    if (e.TURNSTILE_SITE_KEY === TURNSTILE_TEST_SITE_KEY) {
+      problems.push("TURNSTILE_SITE_KEY is Cloudflare's test key. Set a real widget's site key.");
+    }
+    if (e.DAILY_SEED_SECRET === DEV_DAILY_SEED_SECRET) {
+      problems.push(
+        "DAILY_SEED_SECRET is the development value. Set it to a long random string (for example `openssl rand -base64 32`) and keep it secret.",
+      );
+    }
+    if (e.S3_ACCESS_KEY_ID === DEV_S3_ACCESS_KEY_ID) {
+      problems.push(
+        "S3_ACCESS_KEY_ID is Garage's public development key. Create a key of your own (README, Production).",
+      );
+    }
+    if (publicUrl.protocol !== "https:") {
+      problems.push(
+        "PUBLIC_URL must be https: the session cookie is Secure and links go out by mail.",
+      );
+    }
+    if (env.SMTP_HOST === undefined) {
+      problems.push(
+        "SMTP_HOST is not set, so mail would go to localhost:1025. Set the SMTP_* settings.",
+      );
+    }
+    if (e.MAIL_FROM === DEFAULT_MAIL_FROM) {
+      problems.push("MAIL_FROM is the development address. Set an address at your own domain.");
+    }
   }
-  if (e.DAILY_SEED_SECRET === DEV_DAILY_SEED_SECRET && !local) {
+  if (problems.length > 0) {
     throw new Error(
-      `DAILY_SEED_SECRET is the development value, but PUBLIC_URL (${e.PUBLIC_URL}) is not localhost. Set it to a long random string (for example \`openssl rand -base64 32\`) and keep it secret.`,
+      `PUBLIC_URL (${e.PUBLIC_URL}) is not localhost, so these development settings are refused:\n  ${problems.join("\n  ")}`,
     );
   }
   return {
@@ -137,5 +187,11 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     },
     sessionTtlMs: 30 * 24 * 60 * 60 * 1000,
     dailies: { seedSecret: e.DAILY_SEED_SECRET, daysAhead: e.DAILY_DAYS_AHEAD, stockMs: 60_000 },
+    version: e.APP_VERSION,
+    metrics: {
+      host: e.METRICS_HOST,
+      apiPort: e.API_METRICS_PORT,
+      workerPort: e.WORKER_METRICS_PORT,
+    },
   };
 }
