@@ -3,15 +3,6 @@ import { browserStorage } from "../game/progress.ts";
 import { createDailyApi } from "./api.ts";
 import { createFinisher, type Finisher } from "./finish.ts";
 
-export type {
-  Attempt,
-  DailySet,
-  DailySummary,
-  Leaderboard,
-  LeaderboardEntry,
-} from "./api.ts";
-export { BOARD_LIMIT } from "./api.ts";
-
 /** The app's daily puzzle, ranked attempt and leaderboard client. */
 export const daily = createDailyApi(createApiClient());
 

@@ -5,13 +5,12 @@
   import LeaderboardCard from "$lib/components/LeaderboardCard.svelte";
   import SiteHeader from "$lib/components/SiteHeader.svelte";
   import type { Leaderboard } from "$lib/daily/api.ts";
-  import { sizeName } from "$lib/daily/days.ts";
+  import { DAILY_SIZES, sizeName } from "$lib/daily/days.ts";
   import { daily } from "$lib/daily/index.ts";
 
-  const SIZES = [7, 10, 20, 40];
-
   // The board shown comes from the address, so it can be linked: ?size=10&scope=all.
-  const size = $derived(SIZES.includes(Number(page.url.searchParams.get("size"))) ? Number(page.url.searchParams.get("size")) : 7);
+  const asked = $derived(Number(page.url.searchParams.get("size")));
+  const size = $derived(DAILY_SIZES.includes(asked) ? asked : 7);
   const scope = $derived(page.url.searchParams.get("scope") === "all" ? "all" : "today");
 
   let board = $state<Leaderboard | null | undefined>(undefined);
@@ -56,7 +55,7 @@
 
   <fieldset class="choices">
     <legend class="visually-hidden">Size</legend>
-    {#each SIZES as s (s)}
+    {#each DAILY_SIZES as s (s)}
       <button type="button" class="chip" aria-pressed={s === size} onclick={() => choose(s, scope)}>
         {sizeName(s)} {s}×{s}
       </button>

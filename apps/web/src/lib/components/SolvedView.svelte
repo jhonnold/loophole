@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import type { Attempt, Leaderboard } from "../daily/api.ts";
-  import { dailyPath, shortDay, sizeName } from "../daily/days.ts";
+  import { DAILY_SIZES, dailyPath, shortDay, sizeName } from "../daily/days.ts";
   import { daily } from "../daily/index.ts";
   import { shareText } from "../daily/view.ts";
   import { formatClock } from "../game/timer.ts";
@@ -24,14 +24,12 @@
 
   let { entry, day, size, live, attempt, userId, onreplay }: Props = $props();
 
-  const SIZES = [7, 10, 20, 40];
-
   let edges: Uint8Array | null = $state.raw(null);
   let board = $state<Leaderboard | null | undefined>(undefined);
   let best: number | null = $state(null);
   let shared = $state(false);
 
-  const nextSize = $derived(SIZES[SIZES.indexOf(size) + 1]);
+  const nextSize = $derived(DAILY_SIZES[DAILY_SIZES.indexOf(size) + 1]);
   const note = $derived(
     attempt.assisted
       ? "A hint was used, so this solve isn't on the leaderboard."

@@ -15,7 +15,7 @@ export type Result<T> =
 const OFFLINE = "Couldn't reach the server. Check your connection and try again.";
 
 /** How many rows a leaderboard shows above the player's own (Solved artboard). */
-export const BOARD_LIMIT = 10;
+const BOARD_LIMIT = 10;
 
 /**
  * Daily puzzles, ranked attempts, leaderboards and display names from the API (PRD FR-22 to

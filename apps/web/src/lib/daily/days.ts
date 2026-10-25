@@ -2,6 +2,9 @@
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** The daily size classes, smallest first. */
+export const DAILY_SIZES = [7, 10, 20, 40];
+
 /** Display names of the daily size classes (Home artboard). */
 const SIZE_NAMES: Record<number, string> = { 7: "Small", 10: "Medium", 20: "Large", 40: "Giant" };
 
