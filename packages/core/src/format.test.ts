@@ -59,6 +59,12 @@ describe("parsePuzzle", () => {
     ["a missing version", { width: 2, height: 2, clues: "...." }, "v", "v: missing; expected 1"],
     ["version 2", { ...ok, v: 2 }, "v", "v: unsupported version 2; expected 1"],
     [
+      "version 2 with a new field",
+      { ...ok, v: 2, extra: 1 },
+      "v",
+      "v: unsupported version 2; expected 1",
+    ],
+    [
       "width 0",
       { ...ok, width: 0 },
       "width",

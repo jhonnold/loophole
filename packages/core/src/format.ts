@@ -32,12 +32,12 @@ const PUZZLE_FIELDS = new Set(["v", "width", "height", "clues", "seed", "meta"])
 /** Validates a decoded JSON value against the v1 puzzle format. Throws `FormatError`. */
 export function parsePuzzle(input: unknown): Puzzle {
   if (!isPlainObject(input)) throw new FormatError("", "expected a JSON object");
-  for (const key of Object.keys(input)) {
-    if (!PUZZLE_FIELDS.has(key)) throw new FormatError(key, "unknown field");
-  }
   if (!("v" in input)) throw new FormatError("v", "missing; expected 1");
   if (input.v !== 1) {
     throw new FormatError("v", `unsupported version ${JSON.stringify(input.v)}; expected 1`);
+  }
+  for (const key of Object.keys(input)) {
+    if (!PUZZLE_FIELDS.has(key)) throw new FormatError(key, "unknown field");
   }
   const width = parseSize(input, "width");
   const height = parseSize(input, "height");
