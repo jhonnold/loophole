@@ -31,9 +31,17 @@
     }
     return d;
   });
-  const washes = $derived(
-    Array.from({ length: grid.cellCount }, (_, c) => c).filter((c) => inside[c] === 1),
-  );
+  // The wash is one path: separate squares leave hairline seams where their edges meet.
+  const wash = $derived.by(() => {
+    let d = "";
+    for (let c = 0; c < grid.cellCount; c++) {
+      if (inside[c] !== 1) continue;
+      const p = cellPoint(grid, layout, c);
+      const h = layout.cell / 2;
+      d += `M${p.x - h} ${p.y - h}h${layout.cell}v${layout.cell}h${-layout.cell}z`;
+    }
+    return d;
+  });
   const clues = $derived(
     layout.cell < 10
       ? []
@@ -45,10 +53,7 @@
 </script>
 
 <svg class="solved-board" width={BOX} height={BOX} viewBox="0 0 {BOX} {BOX}" role="img" aria-label="Your solved board">
-  {#each washes as c (c)}
-    {@const p = cellPoint(grid, layout, c)}
-    <rect class="wash" x={p.x - layout.cell / 2} y={p.y - layout.cell / 2} width={layout.cell} height={layout.cell} />
-  {/each}
+  <path class="wash" d={wash} />
   <path class="line" d={lines} stroke-width={line} />
   {#each dots as p, i (i)}
     <circle class="dot" cx={p.x} cy={p.y} r={Math.max(1, layout.cell * 0.055)} />
