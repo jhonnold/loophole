@@ -1,6 +1,6 @@
 # Loophole design kit
 
-UI design for the Loophole web app (see [`PRD.md`](../../PRD.md)). The look is a Japanese pencil-puzzle book: warm paper, sumi ink, round dots, rounded display type. The inspiration is Nikoli's スリザーリンク pocket books.
+UI design for the Loophole web app (see [`PRD.md`](../PRD.md)). The look is a Japanese pencil-puzzle book: warm paper, sumi ink, round dots, rounded display type. The inspiration is Nikoli's スリザーリンク pocket books.
 
 ## Viewing
 
