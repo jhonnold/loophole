@@ -9,6 +9,8 @@ export interface PuzzleSummary {
   readonly subtitle: string;
   readonly width: number;
   readonly height: number;
+  /** Where a server puzzle came from; built-in puzzles have none. */
+  readonly origin?: "generated" | "submitted";
 }
 
 /** The header title, e.g. "Small · 7×7". */

@@ -39,9 +39,28 @@ describe("apiSource", () => {
       ],
     });
     expect(await apiSource(client).list()).toEqual([
-      { id: "p1", name: "Generated", subtitle: "Practice · 練習", width: 10, height: 7 },
+      {
+        id: "p1",
+        name: "Generated",
+        subtitle: "Practice · 練習",
+        width: 10,
+        height: 7,
+        origin: "generated",
+      },
     ]);
     expect(urls).toEqual(["/api/puzzles?limit=20"]);
+  });
+
+  test("a submitted puzzle is listed as player-made", async () => {
+    const { client } = clientFor({
+      "/api/puzzles": [
+        200,
+        { items: [{ id: "s1", width: 5, height: 5, origin: "submitted", createdAt: "x" }] },
+      ],
+    });
+    expect(await apiSource(client).list()).toMatchObject([
+      { id: "s1", name: "Player-made", origin: "submitted" },
+    ]);
   });
 
   test("get parses the wire puzzle, and is null on 404", async () => {
