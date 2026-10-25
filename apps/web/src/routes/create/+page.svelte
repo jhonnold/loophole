@@ -7,5 +7,5 @@
   <title>New puzzle · Loophole</title>
 </svelte:head>
 
-<SiteHeader />
+<SiteHeader wide />
 <EditorScreen />

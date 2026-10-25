@@ -2,10 +2,13 @@
   import { page } from "$app/state";
   import AccountLink from "./AccountLink.svelte";
   import ThemeSwitch from "./ThemeSwitch.svelte";
+
+  // The editor's page is wider than the play pages; its header lines up with the page content.
+  let { wide = false }: { wide?: boolean } = $props();
 </script>
 
 <header class="top">
-  <div class="top-inner">
+  <div class="top-inner" class:wide>
     <div class="start">
       <a class="brand" href="/">
         <svg width="24" height="30" viewBox="0 0 196 252" aria-hidden="true">
@@ -41,6 +44,10 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px 12px;
+  }
+
+  .top-inner.wide {
+    max-width: 1280px;
   }
 
   .brand {
