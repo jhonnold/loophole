@@ -147,9 +147,10 @@
       let dx = e.deltaX * unit;
       let dy = e.deltaY * unit;
       if (e.ctrlKey || e.metaKey) {
-        // A mouse-wheel notch is about 100 px of delta; clamp it so one notch is about 1.28×, not e×.
-        const step = Math.max(-50, Math.min(50, dy));
-        onview(zoomAround(grid, view, view.cell * Math.exp(-step * 0.005), local(e), port, zoom));
+        // A mouse-wheel notch is about 100 px of delta; clamp it so one notch is about 1.28×, not
+        // e×. Trackpad pinches send small deltas, which this rate keeps quick.
+        const step = Math.max(-25, Math.min(25, dy));
+        onview(zoomAround(grid, view, view.cell * Math.exp(-step * 0.01), local(e), port, zoom));
         return;
       }
       if (e.shiftKey && dx === 0) [dx, dy] = [dy, 0];
