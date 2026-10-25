@@ -172,7 +172,7 @@ The API and the worker each serve Prometheus metrics on a port of their own, off
 | `loophole_submissions{verdict}` | worker | Decided player submissions by verdict (PRD §10: the share rejected as `unknown`) |
 | `loophole_build_info{version,runtime}` | both | Which build is running |
 
-Both also export the standard process metrics (CPU, memory, event loop). `ops/prometheus.yml` is a sample scrape config for a Prometheus on the same host and `ops/alerts.yml` has example alerts (a target down, today's daily missing or the stock low, daily generations failing, mail failing, job timeouts, a queue backlog, server errors, rate-limit floods, many auth failures). Dashboards are left to you. Admins also see a summary at `/admin`: the database and Garage checks with their errors, the job queue, the daily stock, recent failed jobs and the versions.
+Both also export the standard process metrics (CPU, memory, event loop). `ops/prometheus.yml` is a sample scrape config for a Prometheus on the same host and `ops/alerts.yml` has example alerts (a target down, today's daily missing or the stock low, daily generations failing, mail failing, job timeouts, jobs lost on their last attempt, a queue backlog, server errors, rate-limit floods, many auth failures). Dashboards are left to you. Admins also see a summary at `/admin`: the database and Garage checks with their errors, the job queue, the daily stock, recent failed jobs and the versions.
 
 ## Backups
 
