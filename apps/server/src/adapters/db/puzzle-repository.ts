@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { type PuzzleWireV1, parsePuzzle, serializePuzzle } from "@loophole/core";
+import { type Puzzle, type PuzzleWireV1, parsePuzzle, serializePuzzle } from "@loophole/core";
 import type { PuzzleOrigin, PuzzleRecord, PuzzleStatus } from "../../domain.ts";
 import type { PuzzleRepository } from "../../ports.ts";
 
@@ -17,26 +17,35 @@ type PuzzleRow = {
   solution_key: string;
   trace_key: string | null;
   created_at: number;
+  creator_id: string | null;
 };
 
 const COLUMNS =
-  "id, width, height, clues, seed, generator_version, level, origin, status, solution_key, trace_key, created_at";
+  "id, width, height, clues, seed, generator_version, level, origin, status, solution_key, trace_key, created_at, creator_id";
 
 /** Puzzles in SQLite. Clues are stored as the wire format's clue string; only `meta.generator` is kept. */
 export class SqlitePuzzleRepository implements PuzzleRepository {
   readonly #insert;
   readonly #get;
   readonly #listPublished;
+  readonly #findByClues;
+  readonly #setStatus;
 
   constructor(db: Database) {
     this.#insert = db.query<void, PuzzleRow>(
-      `INSERT INTO puzzles (${COLUMNS}) VALUES ($id, $width, $height, $clues, $seed, $generator_version, $level, $origin, $status, $solution_key, $trace_key, $created_at) ON CONFLICT (id) DO NOTHING`,
+      `INSERT INTO puzzles (${COLUMNS}) VALUES ($id, $width, $height, $clues, $seed, $generator_version, $level, $origin, $status, $solution_key, $trace_key, $created_at, $creator_id) ON CONFLICT (id) DO NOTHING`,
     );
     this.#get = db.query<PuzzleRow, { id: string }>(
       `SELECT ${COLUMNS} FROM puzzles WHERE id = $id`,
     );
     this.#listPublished = db.query<PuzzleRow, { limit: number }>(
       `SELECT ${COLUMNS} FROM puzzles WHERE status = 'published' ORDER BY created_at DESC, id LIMIT $limit`,
+    );
+    this.#findByClues = db.query<PuzzleRow, { width: number; height: number; clues: string }>(
+      `SELECT ${COLUMNS} FROM puzzles WHERE width = $width AND height = $height AND clues = $clues ORDER BY created_at, id LIMIT 1`,
+    );
+    this.#setStatus = db.query<void, { id: string; status: PuzzleStatus }>(
+      "UPDATE puzzles SET status = $status WHERE id = $id",
     );
   }
 
@@ -51,6 +60,16 @@ export class SqlitePuzzleRepository implements PuzzleRepository {
 
   listPublished(limit: number): PuzzleRecord[] {
     return this.#listPublished.all({ limit }).map(fromRow);
+  }
+
+  findByClues(puzzle: Puzzle): PuzzleRecord | null {
+    const { width, height, clues } = serializePuzzle(puzzle);
+    const row = this.#findByClues.get({ width, height, clues });
+    return row === null ? null : fromRow(row);
+  }
+
+  setStatus(id: string, status: PuzzleStatus): boolean {
+    return this.#setStatus.run({ id, status }).changes === 1;
   }
 }
 
@@ -69,6 +88,7 @@ function toRow(r: PuzzleRecord): PuzzleRow {
     solution_key: r.solutionKey,
     trace_key: r.traceKey,
     created_at: r.createdAt,
+    creator_id: r.creatorId,
   };
 }
 
@@ -85,5 +105,6 @@ function fromRow(row: PuzzleRow): PuzzleRecord {
     solutionKey: row.solution_key,
     traceKey: row.trace_key,
     createdAt: row.created_at,
+    creatorId: row.creator_id,
   };
 }

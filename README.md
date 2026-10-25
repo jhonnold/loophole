@@ -4,7 +4,7 @@ Loophole is a web app for Slitherlink, the Japanese loop puzzle: draw one closed
 
 ## Status
 
-Early development. The repo has the build tooling, the local dev services, the design kit, the puzzle engine (the grid model, the wire format, rule checks for play, a brute-force solution counter for tests, a seeded random number generator, a rule-based solver that records each deduction for hints, a verifier that says whether a puzzle has one solution, none, several, or could not be decided in time, and a generator that makes a puzzle with exactly one solution from a seed) and a first web app. The web app plays a few built-in puzzles on phones and desktops: tap or drag to draw, keyboard play, undo and redo, a pausable timer, error highlighting, solve detection, light and dark themes, and progress saved in the browser. A Hint button (or H) shows the next forced deduction from the player's board, with the rule's name, a one-line explanation and its pattern drawn small, or points out a mark that doesn't fit; using one marks the attempt as assisted. Boards too big for the screen zoom and pan (pinch, wheel or the zoom buttons) with an overview map, and boards over 30×30 draw on a canvas. The server has its foundation: an HTTP API that serves puzzles, gives hints from each puzzle's stored solution and queues generation jobs, and a worker that generates puzzles in the background with progress and a time limit, keeping each solution in blob storage. The web app lists the server's puzzles after its built-in ones. Players can sign up with an email and password (behind a CAPTCHA, with email confirmation), log in and out, reset a forgotten password and delete their account; guests play exactly as before. Daily puzzles and the rest come in later phases; each phase's plan is in [`docs/plans/`](docs/plans/).
+Early development. The repo has the build tooling, the local dev services, the design kit, the puzzle engine (the grid model, the wire format, rule checks for play, a brute-force solution counter for tests, a seeded random number generator, a rule-based solver that records each deduction for hints, a verifier that says whether a puzzle has one solution, none, several, or could not be decided in time, and a generator that makes a puzzle with exactly one solution from a seed) and a first web app. The web app plays a few built-in puzzles on phones and desktops: tap or drag to draw, keyboard play, undo and redo, a pausable timer, error highlighting, solve detection, light and dark themes, and progress saved in the browser. A Hint button (or H) shows the next forced deduction from the player's board, with the rule's name, a one-line explanation and its pattern drawn small, or points out a mark that doesn't fit; using one marks the attempt as assisted. Boards too big for the screen zoom and pan (pinch, wheel or the zoom buttons) with an overview map, and boards over 30×30 draw on a canvas. The server has its foundation: an HTTP API that serves puzzles, gives hints from each puzzle's stored solution and queues generation jobs, and a worker that generates puzzles in the background with progress and a time limit, keeping each solution in blob storage. The web app lists the server's puzzles after its built-in ones. Players can sign up with an email and password (behind a CAPTCHA, with email confirmation), log in and out, reset a forgotten password and delete their account; guests play exactly as before. Anyone can make a puzzle in the editor (Create), which says as they place clues whether it has one answer, none or several, and shows two answers side by side when there are several; players with a confirmed email publish it, the worker proves it has one solution before it goes up, and its link can be shared. Players can report a puzzle, and admins see the reports and can unpublish it. Daily puzzles and the rest come in later phases; each phase's plan is in [`docs/plans/`](docs/plans/).
 
 ## Quickstart
 
@@ -90,14 +90,18 @@ Mail goes over SMTP (the `SMTP_*` settings). Off loopback the connection must up
 
 The session cookie is always `Secure`. Chromium and curl accept it on `http://localhost`, so development needs no HTTPS. In production, serve the site over HTTPS, and set `TRUST_PROXY=true` when a reverse proxy sits in front of the API, so rate limits see each client's own address. Set it only when the API is reachable solely through that proxy (bind `HOST` to loopback or the internal network): otherwise a client can send its own `X-Forwarded-For` and choose its rate-limit address.
 
-There is no admin UI. To make an account an admin (for unpublishing puzzles and the health view in later phases), run from the repo root:
+To make an account an admin (for the reported puzzles page at `/admin` and, later, the health view), run from the repo root:
 
 ```sh
 bun run admin you@example.com            # grant
 bun run admin you@example.com --revoke   # take away
 ```
 
-`bun run test:e2e:auth` builds the web app, starts the API serving it on port 4174 with a fresh database, and goes through sign-up, the emailed link, login and logout in Chromium. It needs Mailpit running and access to challenges.cloudflare.com, and skips itself without them.
+### Publishing puzzles in development
+
+Run the API and the worker (Server above) and `bun run dev:web`, log in with a confirmed account and open http://localhost:5173/create. The editor checks the draft in the browser as you go and keeps it on this device. Publish sends it to the API, and the worker verifies it (within `VERIFY_TIMEOUT_MS`, 45 s by default) and publishes it if it has exactly one solution; the page waits for the verdict and then shows the link to share. Your account page lists your puzzles and their verdicts. Each account can submit 20 puzzles an hour.
+
+`bun run test:e2e:auth` builds the web app, starts the API serving it on port 4174 and a worker, sharing a fresh database, and goes through sign-up, the emailed link, login and logout, then publishes a puzzle from the editor and opens its link, in Chromium. It needs Mailpit running and access to challenges.cloudflare.com, and skips itself without them; the publishing test also needs Garage.
 
 ## Scripts
 
@@ -115,7 +119,7 @@ bun run admin you@example.com --revoke   # take away
 | `bun run check:api` | Fail if `openapi.yaml` or the API client is out of date (part of the check) |
 | `bun run test:e2e` | Build the web app and run its Playwright tests |
 | `bun run test:perf` | Build the web app and run its frame-time checks |
-| `bun run test:e2e:auth` | Build the web app, serve it from the API and run the account end-to-end test (needs Mailpit) |
+| `bun run test:e2e:auth` | Build the web app, serve it from the API with a worker and run the account and publishing end-to-end tests (needs Mailpit; publishing also Garage) |
 | `bun run admin <email>` | Make an account an admin; `--revoke` takes it away |
 | `bun run --cwd packages/core bench` | Time puzzle verification on 10×10 to 100×100 boards (not part of the check) |
 | `bun run --cwd packages/core bench:generate` | Time puzzle generation on 7×7 to 100×100 boards and measure loop acceptance (not part of the check) |

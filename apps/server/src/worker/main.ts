@@ -5,10 +5,14 @@ import { systemClock } from "../adapters/clock.ts";
 import { openDatabase } from "../adapters/db/database.ts";
 import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
 import { SqlitePuzzleRepository } from "../adapters/db/puzzle-repository.ts";
+import { SqliteSubmissionRepository } from "../adapters/db/submission-repository.ts";
+import { MemoryRateLimiter } from "../adapters/rate-limiter.ts";
 import { ThreadTaskRunner } from "../adapters/tasks/thread-task-runner.ts";
 import { loadConfig } from "../config.ts";
+import { JobManager } from "../managers/job-manager.ts";
 import { JobRunManager } from "../managers/job-run-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
+import { SubmissionManager } from "../managers/submission-manager.ts";
 import { runWorkerLoop } from "./loop.ts";
 
 const config = loadConfig(process.env);
@@ -19,10 +23,26 @@ const puzzles = new PuzzleManager({
   blobs: new S3BlobStore(config.s3),
   clock: systemClock,
 });
+const queue = new SqliteJobQueue(db);
+// The worker only decides submissions; queueing them and the per-account limit are the API's.
+const submissions = new SubmissionManager({
+  submissions: new SqliteSubmissionRepository(db),
+  puzzles,
+  jobs: new JobManager({
+    jobs: queue,
+    clock: systemClock,
+    newId: () => crypto.randomUUID(),
+    maxQueued: config.maxQueuedJobs,
+  }),
+  limiter: new MemoryRateLimiter(systemClock),
+  clock: systemClock,
+  newId: () => crypto.randomUUID(),
+});
 const runs = new JobRunManager({
-  jobs: new SqliteJobQueue(db),
+  jobs: queue,
   tasks: new ThreadTaskRunner(),
   puzzles,
+  submissions,
   clock: systemClock,
   settings: config.jobs,
 });

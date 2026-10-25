@@ -35,9 +35,13 @@ export class JobManager {
     });
   }
 
-  /** Queues a uniqueness check of a puzzle (PRD FR-4). Throws `QueueFullError`. */
-  enqueueVerify(puzzle: PuzzleWireV1): Job {
-    return this.#enqueue({ kind: "verify", input: { puzzle } });
+  /**
+   * Queues a uniqueness check of a puzzle (PRD FR-4), for the submission `submissionId` when given.
+   * Throws `QueueFullError`.
+   */
+  enqueueVerify(puzzle: PuzzleWireV1, submissionId?: string): Job {
+    const input = submissionId === undefined ? { puzzle } : { puzzle, submissionId };
+    return this.#enqueue({ kind: "verify", input });
   }
 
   get(id: string): Job | null {

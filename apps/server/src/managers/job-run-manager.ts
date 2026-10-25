@@ -1,6 +1,7 @@
 import type { Job, JobResult, Task, TaskOutput } from "../domain.ts";
 import type { Clock, JobEnd, JobQueue, TaskRunner } from "../ports.ts";
 import type { PuzzleManager } from "./puzzle-manager.ts";
+import type { SubmissionManager } from "./submission-manager.ts";
 
 export interface JobRunSettings {
   /** Hard time limit for a generation. */
@@ -21,6 +22,8 @@ export interface JobRunManagerDeps {
   readonly jobs: JobQueue;
   readonly tasks: TaskRunner;
   readonly puzzles: PuzzleManager;
+  /** Decides the submission a verification was for. */
+  readonly submissions: SubmissionManager;
   readonly clock: Clock;
   readonly settings: JobRunSettings;
 }
@@ -86,13 +89,19 @@ export class JobRunManager {
     return jobs.recoverStale(now - settings.staleMs, settings.maxAttempts, now);
   }
 
-  /** Stores what a task produced. A generated puzzle takes its job's id. */
+  /**
+   * Stores what a task produced. A generated puzzle takes its job's id; a verification for a
+   * submission decides that submission.
+   */
   async #store(job: Job, output: TaskOutput): Promise<JobResult> {
     switch (output.kind) {
       case "generate":
         await this.#deps.puzzles.saveGenerated(job.id, output.generated);
         return { kind: "generate", puzzleId: job.id };
       case "verify":
+        if (job.kind === "verify" && job.input.submissionId !== undefined) {
+          await this.#deps.submissions.complete(job.input.submissionId, output.verified);
+        }
         return { kind: "verify", status: output.verified.status };
     }
   }

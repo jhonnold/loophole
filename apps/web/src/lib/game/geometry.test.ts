@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createGrid, hEdgeIndex, NONE, vEdgeIndex } from "@loophole/core";
 import fc from "fast-check";
 import {
+  cellAt,
   dotAt,
   dotPath,
   edgeAt,
@@ -188,5 +189,28 @@ describe("markSizes", () => {
     const s = markSizes(4);
     expect(s.line).toBeCloseTo(1.6, 9);
     expect(s.dotRadius).toBeCloseTo(0.8, 9);
+  });
+});
+
+describe("cellAt", () => {
+  const grid = createGrid(3, 2);
+  const layout: Layout = { cell: 40, margin: 10, width: 140, height: 100 };
+
+  test("finds the cell under a point, edges included on their top-left side", () => {
+    expect(cellAt(grid, layout, 10, 10)).toBe(0);
+    expect(cellAt(grid, layout, 49.9, 49.9)).toBe(0);
+    expect(cellAt(grid, layout, 50, 50)).toBe(4);
+    expect(cellAt(grid, layout, 129, 89)).toBe(5);
+  });
+
+  test("is NONE in the margin and beyond", () => {
+    for (const [x, y] of [
+      [9, 20],
+      [20, 9],
+      [130, 20],
+      [20, 90],
+    ]) {
+      expect(cellAt(grid, layout, x, y)).toBe(NONE);
+    }
   });
 });

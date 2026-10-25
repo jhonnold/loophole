@@ -18,6 +18,7 @@ import {
   viewLayout,
   viewMargin,
   visibleCells,
+  wheelView,
   ZOOM_MAX_CELL,
   zoomAround,
   zoomLimits,
@@ -338,5 +339,38 @@ describe("overview map", () => {
     const l = viewLayout(grid, 44);
     expect(v.x).toBeCloseTo((l.width - port.width) / 2, 9);
     expect(v.y).toBeCloseTo((l.height - port.height) / 2, 9);
+  });
+});
+
+describe("wheelView", () => {
+  const view = clampView(grid, { cell: 44, x: 100, y: 100 }, port, limits);
+  const wheel = {
+    deltaX: 0,
+    deltaY: 0,
+    deltaMode: 0,
+    ctrlKey: false,
+    metaKey: false,
+    shiftKey: false,
+  };
+  const at = { x: 100, y: 120 };
+
+  test("the wheel pans, by lines in line mode, sideways with Shift", () => {
+    expect(wheelView(grid, view, { ...wheel, deltaY: 30 }, at, port, limits)).toEqual(
+      panBy(grid, view, 0, -30, port, limits),
+    );
+    expect(wheelView(grid, view, { ...wheel, deltaY: 2, deltaMode: 1 }, at, port, limits)).toEqual(
+      panBy(grid, view, 0, -32, port, limits),
+    );
+    expect(
+      wheelView(grid, view, { ...wheel, deltaY: 30, shiftKey: true }, at, port, limits),
+    ).toEqual(panBy(grid, view, -30, 0, port, limits));
+  });
+
+  test("Ctrl or ⌘ + wheel zooms around the pointer, one notch about 1.28×", () => {
+    for (const key of ["ctrlKey", "metaKey"] as const) {
+      const out = wheelView(grid, view, { ...wheel, deltaY: -100, [key]: true }, at, port, limits);
+      expect(out.cell / view.cell).toBeCloseTo(Math.exp(0.25), 5);
+      expect(out).toEqual(zoomAround(grid, view, out.cell, at, port, limits));
+    }
   });
 });

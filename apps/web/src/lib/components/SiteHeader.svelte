@@ -1,17 +1,26 @@
 <script lang="ts">
+  import { page } from "$app/state";
   import AccountLink from "./AccountLink.svelte";
   import ThemeSwitch from "./ThemeSwitch.svelte";
+
+  // The editor's page is wider than the play pages; its header lines up with the page content.
+  let { wide = false }: { wide?: boolean } = $props();
 </script>
 
 <header class="top">
-  <div class="top-inner">
-    <a class="brand" href="/">
-      <svg width="24" height="30" viewBox="0 0 196 252" aria-hidden="true">
-        <polyline points="14,14 182,14 182,126 126,126 126,238 70,238 70,126 14,126" fill="none" stroke="currentColor" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
-        <line x1="14" y1="126" x2="14" y2="14" stroke="var(--shu)" stroke-width="24" stroke-linecap="round" />
-      </svg>
-      <span>Loophole</span>
-    </a>
+  <div class="top-inner" class:wide>
+    <div class="start">
+      <a class="brand" href="/">
+        <svg width="24" height="30" viewBox="0 0 196 252" aria-hidden="true">
+          <polyline points="14,14 182,14 182,126 126,126 126,238 70,238 70,126 14,126" fill="none" stroke="currentColor" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
+          <line x1="14" y1="126" x2="14" y2="14" stroke="var(--shu)" stroke-width="24" stroke-linecap="round" />
+        </svg>
+        <span>Loophole</span>
+      </a>
+      <nav class="main" aria-label="Main">
+        <a href="/create" aria-current={page.url.pathname === "/create" ? "page" : undefined}>Create</a>
+      </nav>
+    </div>
     <nav class="nav">
       <AccountLink />
       <ThemeSwitch />
@@ -37,6 +46,10 @@
     gap: 8px 12px;
   }
 
+  .top-inner.wide {
+    max-width: 1280px;
+  }
+
   .brand {
     display: flex;
     align-items: center;
@@ -45,6 +58,29 @@
     font-weight: 900;
     font-size: 24px;
     letter-spacing: -0.01em;
+  }
+
+  .start {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  /* Main navigation (Editor artboard): the current page is underlined in shu. */
+  .main a {
+    height: 44px;
+    padding: 0 6px;
+    display: inline-flex;
+    align-items: center;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink-soft);
+    border-bottom: 3px solid transparent;
+  }
+
+  .main a[aria-current="page"] {
+    color: var(--ink);
+    border-bottom-color: var(--shu);
   }
 
   .nav {
