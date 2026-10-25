@@ -22,6 +22,16 @@
       "linter": {
         "rules": {
           "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "Bun": "Managers reach I/O through the interfaces in ports.ts.",
+                  "process": "Settings come in through the composition roots.",
+                  "fetch": "Managers reach I/O through the interfaces in ports.ts."
+                }
+              }
+            },
             "noRestrictedImports": {
               "level": "error",
               "options": {
@@ -34,8 +44,8 @@
                 },
                 "patterns": [
                   {
-                    "group": ["**/adapters/**", "**/api/**", "**/worker/**"],
-                    "message": "Managers depend only on ports.ts, domain.ts, the core package and other managers."
+                    "group": ["**/adapters/**", "**/api/**", "**/worker/**", "**/config.ts"],
+                    "message": "Managers depend only on ports.ts, domain.ts, the core package and other managers; settings come in through the composition roots."
                   },
                   {
                     "group": ["hono/**", "@hono/**", "zod/**", "node:*"],
