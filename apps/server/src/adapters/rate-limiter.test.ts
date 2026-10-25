@@ -21,16 +21,15 @@ test("counts each key on its own", () => {
   expect(limiter.hit("b", RULE).allowed).toBe(true);
 });
 
-test("refuses new keys once it holds 100,000 live ones, then recovers after pruning", () => {
-  const clock = new FakeClock(0);
-  const limiter = new MemoryRateLimiter(clock);
+test("at 100,000 keys, a new key evicts the oldest one instead of being refused", () => {
+  const limiter = new MemoryRateLimiter(new FakeClock(0));
   for (let i = 0; i < 100_000; i++) limiter.hit(`k${i}`, RULE);
-  expect(limiter.hit("new", RULE)).toEqual({ allowed: false, retryAfterMs: RULE.windowMs });
-  expect(limiter.size).toBe(100_000);
-  expect(limiter.hit("k0", RULE)).toEqual({ allowed: true });
-  clock.advance(61_000);
+  limiter.hit("k0", RULE);
+  limiter.hit("k0", RULE); // k0 is now at its limit of 3
+  expect(limiter.hit("k0", RULE).allowed).toBe(false);
   expect(limiter.hit("new", RULE)).toEqual({ allowed: true });
-  expect(limiter.size).toBe(1);
+  expect(limiter.size).toBe(100_000);
+  expect(limiter.hit("k0", RULE)).toEqual({ allowed: true }); // k0 was the oldest, so it's gone
 });
 
 test("drops ended windows once it holds many keys, at most once a minute", () => {

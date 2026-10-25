@@ -4,8 +4,9 @@ import type { Clock, RateDecision, RateLimiter, RateRule } from "../ports.ts";
 const PRUNE_AT = 10_000;
 const PRUNE_EVERY_MS = 60_000;
 /**
- * The most keys held at once. A new key past this is refused (fail closed), so a flood of distinct
- * emails or addresses can't grow the process's memory without bound.
+ * The most keys held at once. A new key past this evicts the oldest one, so a flood of distinct
+ * emails or addresses can't grow the process's memory without bound, and can't lock other clients
+ * out either.
  */
 const MAX_KEYS = 100_000;
 
@@ -35,7 +36,9 @@ export class MemoryRateLimiter implements RateLimiter {
     }
     let w = this.#windows.get(key);
     if (w === undefined && this.#windows.size >= MAX_KEYS) {
-      return { allowed: false, retryAfterMs: rule.windowMs };
+      // Map iterates in insertion order, so the first key is the oldest one held.
+      const oldest = this.#windows.keys().next();
+      if (!oldest.done) this.#windows.delete(oldest.value);
     }
     if (w === undefined || now >= w.start + w.windowMs) {
       w = { start: now, windowMs: rule.windowMs, count: 0 };
