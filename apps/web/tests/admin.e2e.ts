@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { mockAdminApi } from "./admin-mocks.ts";
 import { scrollsSideways } from "./board.ts";
+import { USER } from "./daily-mocks.ts";
 
 // The admin page's health view (PRD §5), against the stand-in in admin-mocks.ts.
 
@@ -29,6 +30,14 @@ test("shows system health in words: checks, queue, daily stock, failures, versio
 });
 
 test("a player who isn't an admin sees nothing of it", async ({ page }) => {
+  await page.route("**/api/session", (route) => route.fulfill({ json: { user: USER } }));
+  await page.route("**/api/admin/health", (route) => route.fulfill({ status: 403, json: {} }));
+  await page.goto("/admin");
+  await expect(page.getByText("Admins only.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "System health" })).toHaveCount(0);
+});
+
+test("a guest sees nothing of it either", async ({ page }) => {
   await page.route("**/api/session", (route) => route.fulfill({ json: { user: null } }));
   await page.goto("/admin");
   await expect(page.getByText("Admins only.")).toBeVisible();
