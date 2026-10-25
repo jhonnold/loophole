@@ -128,6 +128,52 @@ test.describe("daily play", () => {
     await expect(page.getByText("#214")).toBeVisible();
     await expect(page.getByRole("listitem").filter({ hasText: "You" })).toContainText("03:18");
   });
+
+  test("a hint during a ranked attempt makes it unranked, and the clock starts from the server's time (FR-12)", async ({
+    page,
+  }) => {
+    await mockDailyApi(page, { user: true, attempt: attempt({ elapsedMs: 30_000 }) });
+    await page.goto(`/daily/${TODAY}/7`);
+    await expect(page.getByRole("timer")).toContainText("00:3");
+    await page.getByRole("button", { name: "Hint" }).click();
+    await expect(page.getByText("Hint used · unranked").first()).toBeVisible();
+  });
+
+  test("a ranked solve the server never got is sent again (FR-17)", async ({ page }) => {
+    await mockDailyApi(page, {
+      user: true,
+      attempt: attempt(),
+      // The board is solved on reopening, as if the answer was lost with the tab.
+      progress: SOLUTION,
+      finished: attempt({
+        status: "finished",
+        elapsedMs: 198_000,
+        ranked: true,
+        rank: 214,
+        finishedAt: new Date().toISOString(),
+      }),
+    });
+    let lost = false;
+    await page.route(`**/api/users/u1/attempts/${DAILY_ID}/finish`, (route) => {
+      if (lost) return route.fallback();
+      lost = true;
+      return route.abort();
+    });
+    await page.goto(`/daily/${TODAY}/7`);
+    await expect(page.getByText("Couldn't reach the server")).toBeVisible();
+    await expect(page.getByRole("img", { name: "Solved", exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+    expect(lost).toBe(true);
+  });
+
+  test("a Start refused because the day ended plays on unranked (FR-22)", async ({ page }) => {
+    await mockDailyApi(page, { user: true, endsOnStart: true });
+    await page.goto(`/daily/${TODAY}/7`);
+    await page.getByRole("button", { name: "Start" }).click();
+    await expect(page.getByText("This daily's day is over")).toBeVisible();
+    await expect(board(page)).toBeVisible();
+  });
 });
 
 test.describe("Solved screen (Solved artboard, FR-23, FR-24)", () => {

@@ -1,6 +1,8 @@
 import type { Schemas } from "@loophole/api-client";
+import { decodeEdges, EdgeState, findHint, parsePuzzle } from "@loophole/core";
 import type { Page, Route } from "@playwright/test";
 import { FIXTURES } from "../src/lib/puzzles/fixtures.ts";
+import { FIXTURE_SOLUTIONS } from "../src/lib/test-support/solutions.ts";
 
 // A stand-in for the daily puzzle API, so the guest end-to-end tests (`bun run test:e2e`, no
 // server) can open daily puzzles, ranked attempts and leaderboards. Today's 7×7 daily is the
@@ -11,6 +13,10 @@ export const TODAY = new Date().toISOString().slice(0, 10);
 
 const small7 = FIXTURES.find((f) => f.id === "small-7");
 if (small7 === undefined) throw new Error("small-7 fixture missing");
+const small7Puzzle = parsePuzzle(small7.wire);
+const small7Text = FIXTURE_SOLUTIONS["small-7"];
+if (small7Text === undefined) throw new Error("small-7 solution missing");
+const small7Solution = decodeEdges(small7Puzzle.grid, small7Text);
 
 export const USER: Schemas["User"] = {
   id: "u1",
@@ -73,6 +79,8 @@ export interface MockOptions {
   readonly inProgress?: boolean;
   /** The day the daily API serves; a test changes `current` to make the next day's set come out. */
   readonly day?: { current: string };
+  /** Starting the attempt is refused with a 409 because the day has ended (and the set says so). */
+  readonly endsOnStart?: boolean;
 }
 
 /** The UTC day after `day` (`YYYY-MM-DD`). */
@@ -88,10 +96,11 @@ export async function mockDailyApi(page: Page, options: MockOptions = {}) {
   await page.route("**/api/session", (route) => json(route, { user: options.user ? USER : null }));
   // The day the set is for; a test moves it on to show the next day's set.
   const served = options.day ?? { current: TODAY };
+  let ended = false;
   await page.route("**/api/daily*", (route) =>
     json(route, {
       day: served.current,
-      live: true,
+      live: !ended,
       nextAt: `${dayAfter(served.current)}T00:00:00.000Z`,
       puzzles: [
         { size: 7, puzzleId: DAILY_ID },
@@ -123,8 +132,34 @@ export async function mockDailyApi(page: Page, options: MockOptions = {}) {
     }),
   );
   await page.route(`**/api/users/u1/attempts/${DAILY_ID}`, (route) => {
-    if (route.request().method() === "POST") current = attempt();
+    if (route.request().method() === "POST") {
+      if (options.endsOnStart) {
+        ended = true;
+        return json(
+          route,
+          { title: "The day has ended", status: 409, detail: "That day is over." },
+          409,
+        );
+      }
+      current = attempt();
+    }
     return json(route, { attempt: current });
+  });
+  // The hint for today's 7×7, worked out from its solution as the app's own hints are.
+  await page.route(`**/api/puzzles/${DAILY_ID}/hint`, (route) => {
+    const { edges } = route.request().postDataJSON() as { edges: string };
+    const hint = findHint(small7Puzzle, small7Solution, decodeEdges(small7Puzzle.grid, edges));
+    if (hint.kind !== "step") throw new Error(`expected a step, got ${hint.kind}`);
+    return json(route, {
+      kind: "step",
+      rule: hint.step.rule,
+      cells: hint.step.cells,
+      dots: hint.step.dots,
+      changes: hint.step.changes.map((c) => ({
+        edge: c.edge,
+        state: c.state === EdgeState.Line ? "line" : "cross",
+      })),
+    });
   });
   await page.route(`**/api/users/u1/attempts/${DAILY_ID}/finish`, (route) => {
     current = options.finished ?? attempt({ status: "finished", ranked: true, rank: 1 });
