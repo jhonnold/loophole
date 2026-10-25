@@ -3,6 +3,7 @@
   import { auth } from "$lib/auth/index.ts";
   import GuestImport from "$lib/components/GuestImport.svelte";
   import SiteHeader from "$lib/components/SiteHeader.svelte";
+  import { daily } from "$lib/daily/index.ts";
   import { submissions } from "$lib/editor/index.ts";
   import { type Submission, verdictText } from "$lib/editor/submit.ts";
   import { forgetAccount, forgetSyncedProgress } from "$lib/sync/index.ts";
@@ -14,6 +15,37 @@
   let busy = $state(false);
   let mine: Submission[] | null = $state(null);
   let mineFailed = $state(false);
+  // The name shown on leaderboards: undefined until loaded.
+  let displayName: string | null | undefined = $state(undefined);
+  let nameDraft = $state("");
+  let nameError = $state("");
+  let nameSaved = $state(false);
+  let nameBusy = $state(false);
+
+  $effect(() => {
+    if ($auth.status === "user" && displayName === undefined) {
+      daily.displayName($auth.user.id).then((result) => {
+        displayName = result.ok ? result.value : null;
+        nameDraft = displayName ?? "";
+      });
+    }
+  });
+
+  async function saveName(event: SubmitEvent | null, userId: string, name: string | null) {
+    event?.preventDefault();
+    nameBusy = true;
+    nameError = "";
+    nameSaved = false;
+    const result = await daily.setDisplayName(userId, name);
+    nameBusy = false;
+    if (!result.ok) {
+      nameError = result.message;
+      return;
+    }
+    displayName = result.value;
+    nameDraft = result.value ?? "";
+    nameSaved = true;
+  }
 
   // The player's submitted puzzles and their verdicts (PRD FR-27).
   $effect(() => {
@@ -73,7 +105,7 @@
       {:else}
         <p>
           Your email isn't confirmed yet. You can play as usual; confirming it will let you submit
-          puzzles and appear on leaderboards when those arrive.
+          puzzles, play daily puzzles ranked and appear on leaderboards.
         </p>
         <button class="secondary" type="button" onclick={() => resend(user.email)}>Send a new link</button>
       {/if}
@@ -82,6 +114,27 @@
     <p><button class="primary" type="button" onclick={() => logOut(user.id)}>Log out</button></p>
     {#if logOutError}<p class="error" role="alert">{logOutError}</p>{/if}
     {#if user.isAdmin}<p><a href="/admin">Reported puzzles</a></p>{/if}
+
+    <h2 id="name">Name on leaderboards</h2>
+    <p>
+      Leaderboards show this name next to your times, for anyone to see. Without one you're listed as
+      Anonymous.
+    </p>
+    {#if displayName !== undefined}
+      <form onsubmit={(e) => saveName(e, user.id, nameDraft)}>
+        <label>
+          Name
+          <input type="text" autocomplete="nickname" required minlength="3" maxlength="20" bind:value={nameDraft} />
+          <span class="hint">3 to 20 of A–Z, 0–9, _ . or -, with a letter or digit</span>
+        </label>
+        {#if nameError}<p class="error" role="alert">{nameError}</p>{/if}
+        {#if nameSaved}<p class="done" role="status">Saved.</p>{/if}
+        <button class="primary" type="submit" disabled={nameBusy}>Save name</button>
+        {#if displayName !== null}
+          <button class="secondary" type="button" disabled={nameBusy} onclick={() => saveName(null, user.id, null)}>Remove my name</button>
+        {/if}
+      </form>
+    {/if}
 
     <h2>Your puzzles</h2>
     {#if mineFailed}
@@ -109,8 +162,9 @@
     <h2>Delete account</h2>
     <p>
       This removes your email, password and everything saved for your account, for good, including
-      this browser's copy of it. Puzzles you published stay up for others to play, no longer linked to
-      you. Progress you saved here without an account stays.
+      your times and name on the leaderboards and this browser's copy of your progress. Puzzles you
+      published stay up for others to play, no longer linked to you. Progress you saved here without
+      an account stays.
     </p>
     <form onsubmit={(e) => deleteAccount(e, user.id)}>
       <label>
