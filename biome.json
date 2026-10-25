@@ -40,7 +40,8 @@
                   "bun": "Managers reach I/O through the interfaces in ports.ts.",
                   "hono": "Managers know nothing of HTTP; routes in api/ translate for them.",
                   "@hono/zod-openapi": "Managers know nothing of HTTP; routes in api/ translate for them.",
-                  "zod": "Input is validated at the entrypoints, before it reaches a manager."
+                  "zod": "Input is validated at the entrypoints, before it reaches a manager.",
+                  "nodemailer": "Managers send mail through the Mailer interface in ports.ts."
                 },
                 "patterns": [
                   {
@@ -74,7 +75,8 @@
               "level": "error",
               "options": {
                 "paths": {
-                  "bun:sqlite": "Entrypoints call managers; only the composition roots build adapters."
+                  "bun:sqlite": "Entrypoints call managers; only the composition roots build adapters.",
+                  "nodemailer": "Entrypoints call managers; only the composition roots build adapters."
                 },
                 "patterns": [
                   {
