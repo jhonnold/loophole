@@ -11,12 +11,14 @@
   let logOutError = $state("");
   let busy = $state(false);
   let mine: Submission[] | null = $state(null);
+  let mineFailed = $state(false);
 
   // The player's submitted puzzles and their verdicts (PRD FR-27).
   $effect(() => {
     if ($auth.status === "user" && mine === null) {
       submissions.list().then((list) => {
-        mine = list ?? [];
+        if (list === null) mineFailed = true;
+        else mine = list;
       });
     }
   });
@@ -75,7 +77,9 @@
     {#if user.isAdmin}<p><a href="/admin">Reported puzzles</a></p>{/if}
 
     <h2>Your puzzles</h2>
-    {#if mine === null}
+    {#if mineFailed}
+      <p role="alert">Couldn't load your puzzles.</p>
+    {:else if mine === null}
       <p role="status">Loading…</p>
     {:else if mine.length === 0}
       <p>None yet. <a href="/create">Make one</a>.</p>
