@@ -8,7 +8,7 @@ const Id = z.string().min(1).max(64);
 const Timestamp = z.iso.datetime().openapi({ example: "2026-10-25T12:00:00.000Z" });
 
 /** 100 days: far more than anyone plays one attempt, and a safe integer. */
-export const MAX_ELAPSED_MS = 100 * 24 * 60 * 60 * 1000;
+const MAX_ELAPSED_MS = 100 * 24 * 60 * 60 * 1000;
 
 const ElapsedMs = z
   .int()

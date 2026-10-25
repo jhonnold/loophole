@@ -1,6 +1,6 @@
 import { createRoute, type OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
-import type { ProgressRecord, UserRecord } from "../domain.ts";
+import type { ProgressRecord } from "../domain.ts";
 import type { ProgressManager } from "../managers/progress-manager.ts";
 import type { SessionManager } from "../managers/session-manager.ts";
 import type { RateLimiter, RateRule } from "../ports.ts";
@@ -126,7 +126,7 @@ export function registerProgressRoutes(app: OpenAPIHono, deps: ProgressRouteDeps
    * tab) gets a 403 instead of reading or writing the new account's progress.
    */
   async function owner(c: Context, userId: string) {
-    const user: UserRecord | null = await currentUser(c, sessions);
+    const user = await currentUser(c, sessions);
     if (user === null) return { error: problem(c, 401, "Not logged in") };
     if (user.id !== userId) {
       return {
