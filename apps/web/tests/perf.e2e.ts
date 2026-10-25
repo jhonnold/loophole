@@ -97,6 +97,10 @@ test.describe("@perf frame times", () => {
         touchPoints: fingers(120 - i * 3.5, 0, 0),
       });
     }
+    // The pinch reached the board: the view zoomed out while both fingers were down. Without this
+    // the frame times would pass even if no gesture happened.
+    await expect.poll(async () => (await boardView(page)).cell).toBeLessThan(v.cell);
+    const mid = await boardView(page);
     for (let i = 0; i <= 30; i++) {
       await cdp.send("Input.dispatchTouchEvent", {
         type: "touchMove",
@@ -111,6 +115,7 @@ test.describe("@perf frame times", () => {
       });
     }
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await expect.poll(async () => (await boardView(page)).cell).toBeGreaterThan(mid.cell);
     const f = await stopFrames(page);
     console.log(`100×100 canvas pinch and pan: ${JSON.stringify(f)}`);
     expect(f.p95).toBeLessThan(20);
