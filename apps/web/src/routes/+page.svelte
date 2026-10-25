@@ -1,26 +1,38 @@
 <script lang="ts">
+  import type { Schemas } from "@loophole/api-client";
   import { createGrid } from "@loophole/core";
   import { onMount } from "svelte";
+  import GuestImport from "$lib/components/GuestImport.svelte";
   import SiteHeader from "$lib/components/SiteHeader.svelte";
-  import { browserStorage, createProgressStore } from "$lib/game/progress.ts";
   import { formatClock } from "$lib/game/timer.ts";
+  import { inProgress, localProgress } from "$lib/sync/index.ts";
   import type { PageProps } from "./$types";
 
   let { data }: PageProps = $props();
 
   type Status = { kind: "new" } | { kind: "playing" | "solved"; clock: string };
   let statuses: Record<string, Status> = $state({});
+  // A logged-in player's unsolved puzzles from the server, so they can carry on from any device.
+  let resume: Schemas["ProgressSummary"][] = $state([]);
 
-  onMount(() => {
-    const store = createProgressStore(browserStorage());
+  async function refresh() {
     for (const p of data.puzzles) {
-      const saved = store.load(p.id, createGrid(p.width, p.height));
+      const saved = await localProgress(p.id, createGrid(p.width, p.height));
       statuses[p.id] =
         saved === null
           ? { kind: "new" }
           : { kind: saved.solved ? "solved" : "playing", clock: formatClock(saved.elapsedMs) };
     }
+    resume = await inProgress();
+  }
+
+  onMount(() => {
+    refresh();
   });
+
+  function nameOf(id: string): string {
+    return data.puzzles.find((p) => p.id === id)?.name ?? "Puzzle";
+  }
 
   // Pale cover tints per size class (design kit, Colour). Text on covers is always ink.
   function tint(width: number): string {
@@ -38,6 +50,20 @@
 <SiteHeader />
 
 <main class="page">
+  <GuestImport dismissible onimported={refresh} />
+  {#if resume.length > 0}
+    <h2>Continue</h2>
+    <ul class="resume">
+      {#each resume as r (r.puzzleId)}
+        <li>
+          <a href="/play/{r.puzzleId}">
+            <b>{nameOf(r.puzzleId)} · {r.width}×{r.height}</b>
+            <span>In progress · {formatClock(r.elapsedMs)}</span>
+          </a>
+        </li>
+      {/each}
+    </ul>
+  {/if}
   <h1>Practice puzzles</h1>
   <ul class="covers">
     {#each data.puzzles as p (p.id)}
@@ -77,6 +103,40 @@
     font-weight: 900;
     font-size: 32px;
     line-height: 1.15;
+  }
+
+  h2 {
+    margin: 0 0 10px;
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 22px;
+  }
+
+  .resume {
+    list-style: none;
+    margin: 0 0 20px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .resume a {
+    min-height: 44px;
+    padding: 8px 14px;
+    border: 2px solid var(--ink);
+    border-radius: 6px;
+    background: var(--sheet);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px 12px;
+  }
+
+  .resume span {
+    font-size: 14px;
+    color: var(--ink-soft);
   }
 
   .covers {
