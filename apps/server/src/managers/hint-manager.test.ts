@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { createPuzzle, serializePuzzle } from "@loophole/core";
 import { MemoryBlobStore } from "../adapters/blob/memory-blob-store.ts";
 import { FakeClock, FakePuzzleRepository } from "../test-support/fakes.ts";
-import { HintManager, InvalidBoardError } from "./hint-manager.ts";
+import { InvalidBoardError } from "./errors.ts";
+import { HintManager } from "./hint-manager.ts";
 import { PuzzleManager } from "./puzzle-manager.ts";
 
 // 2×2 all 2s; its only loop runs around the outside.

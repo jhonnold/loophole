@@ -37,3 +37,19 @@ export class RateLimitedError extends Error {
     this.name = "RateLimitedError";
   }
 }
+
+/** A board does not fit its puzzle (wrong length or a bad character). */
+export class InvalidBoardError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidBoardError";
+  }
+}
+
+/** There is no published puzzle with this id. */
+export class PuzzleNotFoundError extends Error {
+  constructor(id: string) {
+    super(`No published puzzle with id ${id}.`);
+    this.name = "PuzzleNotFoundError";
+  }
+}

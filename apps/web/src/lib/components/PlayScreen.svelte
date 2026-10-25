@@ -22,7 +22,7 @@
   import { type HintView, hintCurrent, hintView } from "../game/hint.ts";
   import { type Command, screenCommand } from "../game/keyboard.ts";
   import { violationMessages } from "../game/messages.ts";
-  import { browserStorage, createProgressStore, type ProgressStore } from "../game/progress.ts";
+  import type { Progress } from "../game/progress.ts";
   import {
     createStopwatch,
     elapsed,
@@ -34,6 +34,7 @@
   } from "../game/timer.ts";
   import { clampView, type View, viewLayout, zoomLimits } from "../game/viewport.ts";
   import { type PuzzleEntry, puzzleSource, puzzleTitle } from "../puzzles/index.ts";
+  import { openSaves, type PuzzleSaves } from "../sync/index.ts";
   import BoardView from "./BoardView.svelte";
   import HintCard from "./HintCard.svelte";
   import PauseButton from "./PauseButton.svelte";
@@ -56,7 +57,11 @@
   let now = $state(0);
   let paused = $state(false);
   let ready = $state(false);
-  let store: ProgressStore | null = null;
+  let saves: PuzzleSaves | null = null;
+  // Whether progress goes to the account (logged in, server puzzle) or stays on this device.
+  let synced = $state(false);
+  // The board was just replaced with a newer one saved on another device.
+  let remoteNote = $state(false);
   let boardView: { focus(): void } | undefined = $state();
 
   // Hints (FR-12). `hint` stays drawn on the board until its move is made or overtaken; `hintOpen`
@@ -124,8 +129,15 @@
     return { layout: viewLayout(grid, view.cell), view, port, zoom };
   });
 
+  // Saves and sends it now, as the page may be going away.
+  function saveNow() {
+    save();
+    saves?.flush();
+  }
+
   function save() {
-    store?.save(entry.id, {
+    if (!ready) return;
+    saves?.save({
       edges: board.edges,
       elapsedMs: elapsed(watch, performance.now()),
       solved,
@@ -137,6 +149,7 @@
     if (next === board) return;
     board = next;
     hintFailed = false;
+    remoteNote = false;
     save();
   }
 
@@ -150,6 +163,23 @@
     const join = merge && board.past.at(-1) === lastEdit;
     update(applyChanges(board, changes, join));
     lastEdit = board.past.at(-1);
+  }
+
+  // Another device saved further, or the server kept a solved board: show that board instead.
+  // Usually this happens while paused, when the tab comes back into sight.
+  function adopt(saved: Progress | null) {
+    if (!ready || destroyed) return;
+    board = createBoard(grid.edgeCount, saved?.edges);
+    lastEdit = undefined;
+    hint = null;
+    hintOpen = false;
+    assisted = saved?.assisted ?? false;
+    now = performance.now();
+    watch = createStopwatch(saved?.elapsedMs ?? 0);
+    const done = analyzeBoard(puzzle, board.edges).solved;
+    if (done) paused = false;
+    else if (!paused) watch = start(watch, now);
+    remoteNote = true;
   }
 
   // Pausing unmounts the board, so after it remounts (on resume or start over) focus goes back to
@@ -243,7 +273,8 @@
   }
 
   function startOver() {
-    store?.clear(entry.id);
+    saves?.clear();
+    remoteNote = false;
     board = createBoard(grid.edgeCount);
     now = performance.now();
     watch = start(createStopwatch(), now);
@@ -270,36 +301,43 @@
       wide = wideQuery.matches;
     };
     wideQuery.addEventListener("change", onwide);
-    store = createProgressStore(browserStorage());
-    const saved = store.load(entry.id, grid);
-    if (saved !== null) {
-      board = createBoard(grid.edgeCount, saved.edges);
-      watch = createStopwatch(saved.elapsedMs);
-      assisted = saved.assisted;
-    }
-    now = performance.now();
-    if (!analyzeBoard(puzzle, board.edges).solved) watch = start(watch, now);
-    ready = true;
+    const opened = openSaves(entry.id, grid, adopt);
+    saves = opened;
+    opened.load().then((saved) => {
+      if (destroyed) return;
+      if (saved !== null) {
+        board = createBoard(grid.edgeCount, saved.edges);
+        watch = createStopwatch(saved.elapsedMs);
+        assisted = saved.assisted;
+      }
+      synced = opened.synced;
+      now = performance.now();
+      if (!analyzeBoard(puzzle, board.edges).solved) watch = start(watch, now);
+      ready = true;
+    });
 
     const tick = setInterval(() => {
       now = performance.now();
     }, 250);
     // Leaving the tab pauses the clock (and hides the board) and saves, since a phone may never
-    // come back to this page.
+    // come back to this page. Coming back picks up a board saved meanwhile on another device.
     const onvisibility = () => {
       if (document.visibilityState === "hidden") {
         setPaused(true);
-        save();
+        saveNow();
+      } else {
+        saves?.refresh();
       }
     };
     document.addEventListener("visibilitychange", onvisibility);
-    window.addEventListener("pagehide", save);
+    window.addEventListener("pagehide", saveNow);
     return () => {
       clearInterval(tick);
       wideQuery.removeEventListener("change", onwide);
       document.removeEventListener("visibilitychange", onvisibility);
-      window.removeEventListener("pagehide", save);
-      save();
+      window.removeEventListener("pagehide", saveNow);
+      saveNow();
+      saves?.close();
     };
   });
 </script>
@@ -389,7 +427,7 @@
             <div class="solved-text">
               <span class="solved-title">Solved in {clock}</span>
               {#if assisted}<span class="assisted">Hint used</span>{/if}
-              <span class="soft">Saved on this device.</span>
+              <span class="soft">{synced ? "Saved to your account." : "Saved on this device."}</span>
             </div>
             <button type="button" class="primary" onclick={startOver}>Start over</button>
           </div>
@@ -397,6 +435,8 @@
           <HintCard {grid} view={hint} onapply={applyHint} onlater={closeHint} />
         {:else if hintFailed}
           <p class="card hint-failed" role="status">Couldn't get a hint just now. Try again in a moment.</p>
+        {:else if remoteNote}
+          <p class="card hint-failed" role="status">Picked up your progress from another device.</p>
         {:else if messages.length > 0}
           <div class="card errors" role="status">
             {#each messages as m (m.title)}

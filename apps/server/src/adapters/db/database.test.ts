@@ -17,6 +17,7 @@ describe("openDatabase and migrate", () => {
     expect(tables).toEqual([
       "account_tokens",
       "jobs",
+      "progress",
       "puzzles",
       "reports",
       "schema_migrations",
@@ -28,7 +29,8 @@ describe("openDatabase and migrate", () => {
     const versions = db
       .query<{ version: number }, []>("SELECT version FROM schema_migrations")
       .all();
-    expect(versions).toEqual([{ version: 1 }, { version: 2 }, { version: 5 }]);
+    // 003 was set aside for hints, which needed no table.
+    expect(versions).toEqual([{ version: 1 }, { version: 2 }, { version: 4 }, { version: 5 }]);
   });
 
   test("applies new numbered files in numeric order and skips applied ones", () => {

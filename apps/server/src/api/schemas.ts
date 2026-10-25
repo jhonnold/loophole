@@ -96,18 +96,17 @@ export const JobSchema = z
 
 export const HealthSchema = z.object({ status: z.literal("ok") }).openapi("Health");
 
-export const HintRequestSchema = z
-  .strictObject({
-    edges: z
-      .string()
-      .regex(/^[012]*$/)
-      .max(20_200)
-      .openapi({
-        description:
-          "The player's board: one character per edge, 0 empty, 1 line, 2 cross (docs/FORMAT.md).",
-      }),
-  })
-  .openapi("HintRequest");
+/** A player's board; its length is checked against the puzzle after validation. */
+export const EdgesSchema = z
+  .string()
+  .regex(/^[012]*$/)
+  .max(20_200)
+  .openapi({
+    description:
+      "The player's board: one character per edge, 0 empty, 1 line, 2 cross (docs/FORMAT.md).",
+  });
+
+export const HintRequestSchema = z.strictObject({ edges: EdgesSchema }).openapi("HintRequest");
 
 const EdgeIndex = z.int().min(0);
 

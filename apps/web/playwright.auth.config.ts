@@ -3,10 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineConfig } from "@playwright/test";
 
-// End-to-end tests of accounts and publishing against the real API, which also serves the built
-// app (as in production), and the job worker. Needs Mailpit and, for publishing, Garage
-// (`docker compose up -d`), and access to Cloudflare's Turnstile check; the tests skip themselves
-// without them. Run with `bun run test:e2e:auth` from this package.
+// End-to-end tests of accounts, publishing and saved progress against the real API, which also
+// serves the built app (as in production), and the job worker. Needs Mailpit and, for publishing
+// and progress, Garage (`docker compose up -d`), and access to Cloudflare's Turnstile check; the
+// tests skip themselves without them. Run with `bun run test:e2e:auth` from this package.
 
 // A fresh database file for every run, shared by the API and the worker. Playwright loads this
 // file in the runner and again in each worker process; the runner makes the folder once and the

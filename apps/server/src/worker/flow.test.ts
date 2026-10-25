@@ -12,6 +12,7 @@ import { JobManager } from "../managers/job-manager.ts";
 import { JobRunManager } from "../managers/job-run-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { accountDeps } from "../test-support/accounts.ts";
+import { sqliteProgress } from "../test-support/progress.ts";
 import { submissionDeps } from "../test-support/submissions.ts";
 
 // The whole path in one process: the API queues a generation or a submission's check, the
@@ -58,7 +59,15 @@ function setup(verifyTimeoutMs = 10_000) {
     createdAt: 1,
   });
   return {
-    app: createApp({ puzzles, jobs, hints, submissions, reports, ...accounts }),
+    app: createApp({
+      puzzles,
+      jobs,
+      hints,
+      progress: sqliteProgress(db, puzzles, systemClock),
+      submissions,
+      reports,
+      ...accounts,
+    }),
     runs,
     puzzles,
     submissions,

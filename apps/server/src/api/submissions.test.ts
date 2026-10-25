@@ -11,6 +11,7 @@ import { REPORTS_PER_ACCOUNT } from "../managers/report-manager.ts";
 import { SUBMISSIONS_PER_ACCOUNT } from "../managers/submission-manager.ts";
 import { accountDeps } from "../test-support/accounts.ts";
 import { FakeClock, sequentialIds } from "../test-support/fakes.ts";
+import { sqliteProgress } from "../test-support/progress.ts";
 import { submissionDeps } from "../test-support/submissions.ts";
 import { createApp } from "./app.ts";
 import type { Problem } from "./problem.ts";
@@ -33,6 +34,7 @@ function setup() {
     puzzles,
     jobs,
     hints: new HintManager({ puzzles }),
+    progress: sqliteProgress(db, puzzles, clock),
     ...submissionDeps(db, clock, puzzles, jobs),
     ...deps,
   });

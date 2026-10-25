@@ -43,6 +43,11 @@ export const FIXTURES: readonly FixtureRecord[] = [
   ...LARGE_FIXTURES,
 ];
 
+/** Whether `id` is a built-in puzzle. The server doesn't hold these, so their progress stays on the device. */
+export function isBuiltIn(id: string): boolean {
+  return FIXTURES.some((f) => f.id === id);
+}
+
 function summary(f: FixtureRecord): PuzzleSummary {
   return {
     id: f.id,

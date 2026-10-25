@@ -135,6 +135,27 @@ export interface AccountTokenRecord {
   readonly expiresAt: number;
 }
 
+/** A player's saved board on one puzzle (PRD FR-21). */
+export interface ProgressRecord {
+  readonly userId: string;
+  readonly puzzleId: string;
+  /** Edge states in the wire format's encoding, one character per edge. */
+  readonly edges: string;
+  /** Play time on this attempt, as the player's clock counted it. */
+  readonly elapsedMs: number;
+  /** Worked out on the server from `edges`, never taken from the client. */
+  readonly solved: boolean;
+  /** A hint was shown during this attempt, on any device (PRD FR-12). */
+  readonly assisted: boolean;
+  /** Starts at the clock's time when the attempt is first saved, then goes up by one with every save that replaces the board. */
+  readonly version: number;
+  /** Random id of the browser that saved this board, so it never conflicts with itself. */
+  readonly device: string;
+  /** When this attempt was first saved. */
+  readonly createdAt: number;
+  readonly updatedAt: number;
+}
+
 export type SubmissionStatus = "pending" | "published" | "rejected";
 
 /**

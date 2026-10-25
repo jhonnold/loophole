@@ -10,6 +10,7 @@ import { systemClock } from "../adapters/clock.ts";
 import { SqliteAccountTokenRepository } from "../adapters/db/account-token-repository.ts";
 import { openDatabase } from "../adapters/db/database.ts";
 import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
+import { SqliteProgressRepository } from "../adapters/db/progress-repository.ts";
 import { SqlitePuzzleRepository } from "../adapters/db/puzzle-repository.ts";
 import { SqliteReportRepository } from "../adapters/db/report-repository.ts";
 import { SqliteSessionRepository } from "../adapters/db/session-repository.ts";
@@ -22,6 +23,7 @@ import { MemoryRateLimiter } from "../adapters/rate-limiter.ts";
 import { AccountManager } from "../managers/account-manager.ts";
 import { HintManager } from "../managers/hint-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
+import { ProgressManager } from "../managers/progress-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { ReportManager } from "../managers/report-manager.ts";
 import { SessionManager } from "../managers/session-manager.ts";
@@ -70,6 +72,11 @@ export function openApiDocument() {
     turnstileSiteKey: TURNSTILE_TEST_SITE_KEY,
     puzzles,
     hints: new HintManager({ puzzles }),
+    progress: new ProgressManager({
+      progress: new SqliteProgressRepository(db),
+      puzzles,
+      clock: systemClock,
+    }),
     jobs,
     submissions: new SubmissionManager({
       submissions: new SqliteSubmissionRepository(db),
@@ -92,7 +99,7 @@ export function openApiDocument() {
       title: "Loophole API",
       version: "0.1.0",
       description:
-        "Puzzles, background jobs, accounts, submitted puzzles and reports. Errors are RFC 9457 problem details. State-changing requests from other sites are refused (403).",
+        "Puzzles, background jobs, accounts, saved progress, submitted puzzles and reports. Errors are RFC 9457 problem details. State-changing requests from other sites are refused (403).",
     },
   });
   db.close();

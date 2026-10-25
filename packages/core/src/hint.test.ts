@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
 import { analyzeBoard } from "./analyze.ts";
+import { countSolutions } from "./bruteforce.ts";
 import { decodeEdges, parsePuzzle } from "./format.ts";
 import { EdgeState, hEdgeIndex } from "./grid.ts";
 import { findHint } from "./hint.ts";
@@ -111,6 +112,9 @@ describe("findHint", () => {
         fc.boolean(),
         fc.array(fc.integer({ min: 0, max: 9 }), { minLength: 40, maxLength: 40 }),
         ({ puzzle: p, solution }, withMistakes, picks) => {
+          // A puzzle with several solutions has no mistake relative to one of them (a board can be
+          // another valid solution), so the oracle only holds for puzzles with exactly one.
+          if (countSolutions(p, 2) !== 1) return;
           // Per edge: 0-5 left open, 6-8 copied from the solution, 9 wrong (or open without mistakes).
           const board = new Uint8Array(p.grid.edgeCount);
           let wrong = 0;

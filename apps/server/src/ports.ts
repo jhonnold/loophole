@@ -5,6 +5,7 @@ import type {
   Job,
   JobInput,
   JobResult,
+  ProgressRecord,
   PuzzleRecord,
   PuzzleStatus,
   ReportRecord,
@@ -161,6 +162,16 @@ export type RateDecision =
 export interface RateLimiter {
   /** Counts one hit under `key` and says whether it is within `rule`. */
   hit(key: string, rule: RateRule): RateDecision;
+}
+
+/** Saved progress, one record per user and puzzle (PRD FR-21). */
+export interface ProgressRepository {
+  get(userId: string, puzzleId: string): ProgressRecord | null;
+  /** Stores `record`, replacing any record for the same user and puzzle. */
+  put(record: ProgressRecord): void;
+  delete(userId: string, puzzleId: string): void;
+  /** The user's unsolved records, most recently updated first. */
+  listUnsolved(userId: string, limit: number): ProgressRecord[];
 }
 
 /** How a pending submission ended. */
