@@ -520,4 +520,4 @@ Entry format:
 ## 2026-10-25 · WT11b `daily-leaderboards-web` · Earlier days' dailies under Continue
 - **Question:** An unfinished daily from an earlier day shows under Continue as a plain puzzle linking to `/play`, because progress rows don't say which puzzles are dailies. Should the server tag them?
 - **Decision:** No, not for v1. Today's dailies link to their daily page; earlier days' dailies open in `/play`.
-- **Reason:** A daily's ranked window closes at the next 00:00 UTC, so an earlier day's daily can only be played unranked, which is what `/play` does. Only the label is generic. Tagging progress rows would need a server and schema change for a cosmetic gain.
+- **Reason:** Starting a ranked attempt closes at 00:00 UTC, so most earlier days' dailies can only be played unranked, which is what `/play` does. One case is accepted as a known gap: an attempt started before midnight and left unfinished also opens in `/play` from Continue, so its ranked finish is never sent and that day's streak is lost unless the player still has the daily URL. It is rare, and fixing it needs a server-side tag on progress rows (a server and schema change).
