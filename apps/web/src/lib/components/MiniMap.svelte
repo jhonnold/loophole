@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { edgeSegment } from "../game/geometry.ts";
   import { miniLayout, miniRect, type Size, type View } from "../game/viewport.ts";
+  import { onThemeChange } from "../theme.ts";
 
   interface Props {
     grid: Grid;
@@ -67,17 +68,9 @@
 
   onMount(() => {
     ratio = window.devicePixelRatio || 1;
-    const bump = () => {
+    return onThemeChange(() => {
       restyle++;
-    };
-    const observer = new MutationObserver(bump);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    const dark = matchMedia("(prefers-color-scheme: dark)");
-    dark.addEventListener("change", bump);
-    return () => {
-      observer.disconnect();
-      dark.removeEventListener("change", bump);
-    };
+    });
   });
 </script>
 

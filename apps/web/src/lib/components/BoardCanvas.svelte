@@ -4,6 +4,7 @@
   import type { Layout } from "../game/geometry.ts";
   import { type Palette, paintBoard } from "../game/paint.ts";
   import type { Size, View } from "../game/viewport.ts";
+  import { onThemeChange } from "../theme.ts";
 
   interface Props {
     puzzle: Puzzle;
@@ -49,15 +50,11 @@
     const bump = () => {
       restyle++;
     };
-    const observer = new MutationObserver(bump);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    const dark = matchMedia("(prefers-color-scheme: dark)");
-    dark.addEventListener("change", bump);
+    const stopTheme = onThemeChange(bump);
     window.addEventListener("resize", onresize);
     document.fonts.load('500 16px "Zen Kaku Gothic New"', "0123").then(bump, () => {});
     return () => {
-      observer.disconnect();
-      dark.removeEventListener("change", bump);
+      stopTheme();
       window.removeEventListener("resize", onresize);
     };
   });
