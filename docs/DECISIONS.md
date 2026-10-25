@@ -120,3 +120,8 @@ Entry format:
 - **Question:** How will hints (WT8) get the next deduction for a player?
 - **Decision:** `solve(puzzle, { initial: board, maxSteps: 1 })`. Deductions are sound for the board they start from, so the caller first drops player edges that disagree with the stored solution. Use `steps[0]` when present (status is then `incomplete`, because `maxSteps` was hit). No step with status `stuck` means no rule applies; `solved` with no steps means the board was already complete.
 - **Reason:** One solver serves both uses, and its step already holds what a hint shows.
+
+## 2026-10-25 · WT2 `core-solver` · Deterministic generation must not depend on wall-clock budgets
+- **Question:** `solve` and `verify` accept `timeLimitMs`. May the generator (WT3) use it to accept or reject candidates?
+- **Decision:** No. Anything that must give the same puzzle for the same seed uses `solve` with no time limit, or `verify` with `maxNodes` and `timeLimitMs: Infinity`. Wall-clock limits belong to the outer job timeout (WT6).
+- **Reason:** A time limit makes the result depend on machine speed and load, so the same seed could produce different puzzles on different hosts. A node count is the same everywhere.
