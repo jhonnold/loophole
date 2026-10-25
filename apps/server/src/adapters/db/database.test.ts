@@ -42,6 +42,24 @@ describe("openDatabase and migrate", () => {
     }
   });
 
+  test("refuses two migrations with the same number, before running either", () => {
+    const dir = mkdtempSync(join(tmpdir(), "loophole-migrations-"));
+    try {
+      writeFileSync(join(dir, "002_users.sql"), "CREATE TABLE users (id INTEGER) STRICT;");
+      writeFileSync(join(dir, "002_progress.sql"), "CREATE TABLE progress (id INTEGER) STRICT;");
+      const db = new Database(":memory:", { strict: true });
+      expect(() => migrate(db, dir)).toThrow(
+        /Duplicate migration number 2: 002_\w+\.sql, 002_\w+\.sql/,
+      );
+      const tables = db
+        .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type = 'table'")
+        .all();
+      expect(tables.map((r) => r.name)).toEqual(["schema_migrations"]);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
   test("a file database uses write-ahead logging", () => {
     const dir = mkdtempSync(join(tmpdir(), "loophole-db-"));
     try {

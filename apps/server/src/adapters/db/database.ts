@@ -48,6 +48,15 @@ export function migrate(db: Database, dir = MIGRATIONS_DIR): void {
   const files = readdirSync(dir)
     .filter((f) => /^\d+_.+\.sql$/.test(f))
     .sort((a, b) => Number.parseInt(a, 10) - Number.parseInt(b, 10));
+  const numbers = new Map<number, string>();
+  for (const file of files) {
+    const version = Number.parseInt(file, 10);
+    const other = numbers.get(version);
+    if (other !== undefined) {
+      throw new Error(`Duplicate migration number ${version}: ${other}, ${file}`);
+    }
+    numbers.set(version, file);
+  }
   const applied = db.query<{ version: number }, []>("SELECT version FROM schema_migrations");
   const record = db.query(
     "INSERT INTO schema_migrations (version, name, applied_at) VALUES ($version, $name, $now)",
