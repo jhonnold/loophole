@@ -1,7 +1,15 @@
 import { createGrid, dotIndex, hEdgeIndex, vEdgeIndex } from "@loophole/core";
 import { expect, type Page, test } from "@playwright/test";
 import { FIXTURE_SOLUTIONS } from "../src/lib/test-support/solutions.ts";
-import { crosses, dotPoints, edgePoint, lines, scrollsSideways, touchDrag } from "./board.ts";
+import {
+  board,
+  crosses,
+  dotPoints,
+  edgePoint,
+  lines,
+  scrollsSideways,
+  touchDrag,
+} from "./board.ts";
 
 const grid7 = createGrid(7, 7);
 
@@ -26,7 +34,7 @@ for (const [width, height] of [
 
     test.beforeEach(async ({ page }) => {
       await page.goto("/play/small-7");
-      await expect(page.locator("svg[role=application]")).toBeVisible();
+      await expect(board(page)).toBeVisible();
     });
 
     test("fits the width with 44px cells or more (NFR-2, FR-13)", async ({ page }) => {
@@ -73,9 +81,9 @@ for (const [width, height] of [
     test("pause hides the board (FR-14)", async ({ page }) => {
       await page.getByRole("button", { name: "Pause" }).first().click();
       await expect(page.getByText("一時停止")).toBeVisible();
-      await expect(page.locator("svg[role=application]")).toHaveCount(0);
+      await expect(board(page)).toHaveCount(0);
       await page.getByRole("button", { name: "Resume" }).first().click();
-      await expect(page.locator("svg[role=application]")).toBeVisible();
+      await expect(board(page)).toBeVisible();
     });
 
     test("detects the solve and keeps it after a reload (FR-17, FR-21)", async ({ page }) => {
@@ -89,7 +97,7 @@ for (const [width, height] of [
     test("start over returns focus to the board (NFR-5)", async ({ page }) => {
       await solveSmall7(page);
       await page.getByRole("button", { name: "Start over" }).click();
-      await expect(page.locator("svg[role=application]")).toBeFocused();
+      await expect(board(page)).toBeFocused();
     });
   });
 }
@@ -118,7 +126,7 @@ test.describe("blocked browser storage (FR-21)", () => {
     const errors: Error[] = [];
     page.on("pageerror", (e) => errors.push(e));
     await page.goto("/play/small-7");
-    await expect(page.locator("svg[role=application]")).toHaveAttribute("tabindex", "0");
+    await expect(board(page)).toHaveAttribute("tabindex", "0");
     await page.goto("/");
     await expect(page.getByRole("button", { name: "夜 Night" })).toBeVisible();
     expect(errors).toEqual([]);
@@ -132,8 +140,8 @@ test.describe("desktop keyboard (NFR-5)", () => {
     page,
   }) => {
     await page.goto("/play/small-7");
-    const board = page.locator("svg[role=application]");
-    await board.focus();
+    const surface = board(page);
+    await surface.focus();
     await page.keyboard.press("ArrowRight");
     await expect(page.getByText("Row 1 · between columns 2 and 3 · empty").first()).toBeVisible();
     await page.keyboard.press("Space");
@@ -178,22 +186,26 @@ test.describe("desktop keyboard (NFR-5)", () => {
 
   test("resuming with P returns focus to the board (NFR-5)", async ({ page }) => {
     await page.goto("/play/small-7");
-    const board = page.locator("svg[role=application]");
-    await board.focus();
+    const surface = board(page);
+    await surface.focus();
     await page.keyboard.press("p");
     await expect(page.getByText("一時停止")).toBeVisible();
     await page.keyboard.press("p");
-    await expect(board).toBeFocused();
+    await expect(surface).toBeFocused();
   });
 
   test("tabbing to the board shows the edge cursor (NFR-5)", async ({ page }) => {
     await page.goto("/play/small-7");
-    const board = page.locator("svg[role=application]");
+    const surface = board(page);
     // The header's back link and pause button come before the board in Tab order.
-    for (let i = 0; i < 6 && !(await board.evaluate((el) => el === document.activeElement)); i++) {
+    for (
+      let i = 0;
+      i < 6 && !(await surface.evaluate((el) => el === document.activeElement));
+      i++
+    ) {
       await page.keyboard.press("Tab");
     }
-    await expect(board).toBeFocused();
+    await expect(surface).toBeFocused();
     await expect(page.locator("rect.cursor")).toBeVisible();
   });
 });

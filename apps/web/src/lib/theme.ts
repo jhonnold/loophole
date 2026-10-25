@@ -29,3 +29,15 @@ export function applyThemeChoice(root: HTMLElement, choice: ThemeChoice): void {
   if (choice === "system") delete root.dataset.theme;
   else root.dataset.theme = choice;
 }
+
+/** Calls `onchange` whenever the theme in effect changes; returns a function that stops it. */
+export function onThemeChange(onchange: () => void): () => void {
+  const observer = new MutationObserver(onchange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  const dark = matchMedia("(prefers-color-scheme: dark)");
+  dark.addEventListener("change", onchange);
+  return () => {
+    observer.disconnect();
+    dark.removeEventListener("change", onchange);
+  };
+}

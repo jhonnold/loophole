@@ -1,7 +1,8 @@
 import { type PuzzleWireV1, parsePuzzle } from "@loophole/core";
+import { LARGE_FIXTURES } from "./large-fixtures.ts";
 import type { PuzzleEntry, PuzzleSource, PuzzleSummary } from "./source.ts";
 
-interface FixtureRecord {
+export interface FixtureRecord {
   readonly id: string;
   readonly name: string;
   readonly subtitle: string;
@@ -10,7 +11,8 @@ interface FixtureRecord {
 
 /**
  * Built-in puzzles in wire format (docs/FORMAT.md), each with exactly one solution. The 7×7 is the
- * one on the Play artboard and the 10×10 the one on the Night and Desktop artboards.
+ * one on the Play artboard and the 10×10 the one on the Night and Desktop artboards. The large
+ * ones (20×20 to 100×100) are for layout and performance work and show every clue.
  */
 export const FIXTURES: readonly FixtureRecord[] = [
   {
@@ -37,6 +39,7 @@ export const FIXTURES: readonly FixtureRecord[] = [
         ".0.0..0.1.....1..2..3.0.21.1.1..0.3....22......3..2.1...01.121.32.....2...013.1...20....3..2....0...",
     },
   },
+  ...LARGE_FIXTURES,
 ];
 
 function summary(f: FixtureRecord): PuzzleSummary {

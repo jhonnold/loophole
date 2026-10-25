@@ -9,6 +9,7 @@ import {
   edgeSegment,
   fitLayout,
   type Layout,
+  markSizes,
   minBoardHeight,
 } from "./geometry.ts";
 
@@ -172,5 +173,20 @@ describe("dotPath", () => {
         },
       ),
     );
+  });
+});
+
+describe("markSizes", () => {
+  test("follow the design kit at 46px cells", () => {
+    const s = markSizes(46);
+    expect(s.line).toBe(5);
+    expect(s.dotRadius).toBe(2.5);
+    expect(s.clue).toBeCloseTo(25.76, 9);
+  });
+
+  test("dots and lines stay within 0.4 of a tiny cell", () => {
+    const s = markSizes(4);
+    expect(s.line).toBeCloseTo(1.6, 9);
+    expect(s.dotRadius).toBeCloseTo(0.8, 9);
   });
 });
