@@ -136,7 +136,11 @@
     {onpointerup}
     {onpointercancel}
     {onkeydown}
-    onfocus={() => (focused = true)}
+    onfocus={() => {
+      focused = true;
+      // Tab and other keyboard focus show the cursor at once; a click does not.
+      keyboardMode = svg?.matches(":focus-visible") ?? false;
+    }}
     onblur={() => (focused = false)}
   >
     {#if inside}

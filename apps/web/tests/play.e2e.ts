@@ -139,6 +139,17 @@ test.describe("desktop keyboard (NFR-5)", () => {
     await page.keyboard.press("p");
     await expect(page.getByText("一時停止")).toBeVisible();
   });
+
+  test("tabbing to the board shows the edge cursor (NFR-5)", async ({ page }) => {
+    await page.goto("/play/small-7");
+    const board = page.locator("svg[role=application]");
+    // The header's back link and pause button come before the board in Tab order.
+    for (let i = 0; i < 6 && !(await board.evaluate((el) => el === document.activeElement)); i++) {
+      await page.keyboard.press("Tab");
+    }
+    await expect(board).toBeFocused();
+    await expect(page.locator("rect.cursor")).toBeVisible();
+  });
 });
 
 test.describe("theme (FR-16)", () => {
