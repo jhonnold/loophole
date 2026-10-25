@@ -349,7 +349,7 @@ Entry format:
 ## 2026-10-25 · WT9 `progress-sync` · Progress conflicts
 - **Question:** Two devices can save different boards for one puzzle. Which one is kept?
 - **Decision:** Every save names the `version` it continued from (`baseVersion`, null when the client had none) and a random id for its browser (`device`, kept in `localStorage` under `loophole:device`). The server decides in this order:
-  1. With no stored record, the save is stored as version 1.
+  1. With no stored record, the save is stored as a new attempt. Its version is the server's time in milliseconds, not 1, so no later attempt reuses a version an older device still holds.
   2. A solved stored record is kept (only `DELETE`, "Start over", removes it).
   3. The stored board sent again, as when a tab is hidden or left without a move, is accepted without a new version. It keeps the stored device and takes the larger play time.
   4. A different board replaces the record, with the version plus one, when it is solved, when it continues from the stored version, or when the same device made the stored record.

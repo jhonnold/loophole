@@ -11,6 +11,8 @@ const SOLVED = "112211121121";
 const EMPTY = "000000000000";
 const ONE_LINE = "100000000000";
 const OTHER_LINE = "010000000000";
+// A new record's first version is the clock's time (see ProgressManager); setup() starts at 1000.
+const FIRST = 1000;
 
 function setup() {
   const clock = new FakeClock(1000);
@@ -65,7 +67,7 @@ describe("ProgressManager", () => {
         elapsedMs: 1000,
         solved: false,
         assisted: true,
-        version: 1,
+        version: FIRST,
         device: "a",
         createdAt: 1000,
         updatedAt: 1000,
@@ -80,12 +82,12 @@ describe("ProgressManager", () => {
     const { manager, clock } = setup();
     manager.save("u1", "p1", input(ONE_LINE, null, "a"));
     clock.advance(500);
-    const next = manager.save("u1", "p1", input(EMPTY, 1, "b", { elapsedMs: 10 }));
+    const next = manager.save("u1", "p1", input(EMPTY, FIRST, "b", { elapsedMs: 10 }));
     expect(next.accepted).toBe(true);
     expect(next.record).toMatchObject({
       edges: EMPTY,
       elapsedMs: 10,
-      version: 2,
+      version: FIRST + 1,
       device: "b",
       createdAt: 1000,
       updatedAt: 1500,
@@ -95,10 +97,10 @@ describe("ProgressManager", () => {
   test("a stale save from another device is refused and gets the stored record", () => {
     const { manager, clock } = setup();
     manager.save("u1", "p1", input(ONE_LINE, null, "a"));
-    const stored = manager.save("u1", "p1", input(OTHER_LINE, 1, "b")).record;
+    const stored = manager.save("u1", "p1", input(OTHER_LINE, FIRST, "b")).record;
     clock.advance(500);
     // Device a still thinks version 1 is current, even with far more time on its clock.
-    expect(manager.save("u1", "p1", input(ONE_LINE, 1, "a", { elapsedMs: 99_000 }))).toEqual({
+    expect(manager.save("u1", "p1", input(ONE_LINE, FIRST, "a", { elapsedMs: 99_000 }))).toEqual({
       accepted: false,
       record: stored,
     });
@@ -112,56 +114,74 @@ describe("ProgressManager", () => {
     manager.save("u1", "p1", input(ONE_LINE, null, "a", { elapsedMs: 5000 }));
     clock.advance(100);
     // Device b opens the puzzle and is hidden without a move.
-    const glance = manager.save("u1", "p1", input(ONE_LINE, 1, "b", { elapsedMs: 4000 }));
+    const glance = manager.save("u1", "p1", input(ONE_LINE, FIRST, "b", { elapsedMs: 4000 }));
     expect(glance).toMatchObject({
       accepted: true,
-      record: { version: 1, device: "a", elapsedMs: 5000, updatedAt: 1100 },
+      record: { version: FIRST, device: "a", elapsedMs: 5000, updatedAt: 1100 },
     });
     expect(
-      manager.save("u1", "p1", input(ONE_LINE, 1, "b", { elapsedMs: 6000 })).record,
-    ).toMatchObject({ version: 1, device: "a", elapsedMs: 6000 });
+      manager.save("u1", "p1", input(ONE_LINE, FIRST, "b", { elapsedMs: 6000 })).record,
+    ).toMatchObject({ version: FIRST, device: "a", elapsedMs: 6000 });
     // So device a, still on version 1, carries on.
-    expect(manager.save("u1", "p1", input(OTHER_LINE, 1, "a"))).toMatchObject({
+    expect(manager.save("u1", "p1", input(OTHER_LINE, FIRST, "a"))).toMatchObject({
       accepted: true,
-      record: { edges: OTHER_LINE, version: 2 },
+      record: { edges: OTHER_LINE, version: FIRST + 1 },
     });
   });
 
   test("a device's own save is never refused as stale", () => {
     const { manager } = setup();
     manager.save("u1", "p1", input(ONE_LINE, null, "a"));
-    manager.save("u1", "p1", input(OTHER_LINE, 1, "a"));
+    manager.save("u1", "p1", input(OTHER_LINE, FIRST, "a"));
     // A save whose answer was lost (the page closed) is sent again with the old version. The
     // client sends one save per puzzle at a time, so its saves can't arrive out of order.
-    const resent = manager.save("u1", "p1", input(EMPTY, 1, "a"));
-    expect(resent).toMatchObject({ accepted: true, record: { edges: EMPTY, version: 3 } });
+    const resent = manager.save("u1", "p1", input(EMPTY, FIRST, "a"));
+    expect(resent).toMatchObject({ accepted: true, record: { edges: EMPTY, version: FIRST + 2 } });
   });
 
   test("a cleared board is a real move: a stale device doesn't overwrite it", () => {
     const { manager } = setup();
     manager.save("u1", "p1", input(ONE_LINE, null, "a"));
-    manager.save("u1", "p1", input(EMPTY, 1, "a"));
-    expect(manager.save("u1", "p1", input(OTHER_LINE, 1, "b")).accepted).toBe(false);
+    manager.save("u1", "p1", input(EMPTY, FIRST, "a"));
+    expect(manager.save("u1", "p1", input(OTHER_LINE, FIRST, "b")).accepted).toBe(false);
   });
 
   test("a solved board wins even when stale, and stays until it is deleted", () => {
     const { manager } = setup();
     manager.save("u1", "p1", input(ONE_LINE, null, "a"));
-    manager.save("u1", "p1", input(EMPTY, 1, "a"));
-    const solved = manager.save("u1", "p1", input(SOLVED, 1, "b"));
-    expect(solved).toMatchObject({ accepted: true, record: { solved: true, version: 3 } });
-    for (const late of [input(ONE_LINE, 3, "b"), input(SOLVED, 3, "a")]) {
+    manager.save("u1", "p1", input(EMPTY, FIRST, "a"));
+    const solved = manager.save("u1", "p1", input(SOLVED, FIRST, "b"));
+    expect(solved).toMatchObject({ accepted: true, record: { solved: true, version: FIRST + 2 } });
+    for (const late of [input(ONE_LINE, FIRST + 2, "b"), input(SOLVED, FIRST + 2, "a")]) {
       expect(manager.save("u1", "p1", late)).toEqual({ accepted: false, record: solved.record });
     }
     manager.delete("u1", "p1");
     expect(manager.get("u1", "p1")).toBeNull();
-    expect(manager.save("u1", "p1", input(ONE_LINE, 3, "b")).record.version).toBe(1);
+    expect(manager.save("u1", "p1", input(ONE_LINE, FIRST + 2, "b")).record.version).toBe(FIRST);
+  });
+
+  test("a new attempt after Start over never reuses a version a stale device holds", () => {
+    const { manager, clock } = setup();
+    manager.save("u1", "p1", input(ONE_LINE, null, "a"));
+    manager.save("u1", "p1", input(EMPTY, FIRST, "a"));
+    const old = manager.save("u1", "p1", input(ONE_LINE, FIRST + 1, "a")).record;
+    expect(old.version).toBe(FIRST + 2);
+    manager.delete("u1", "p1");
+    clock.advance(10);
+    // Another device plays three moves on the new attempt: its versions are the clock's, not 1, 2, 3.
+    manager.save("u1", "p1", input(OTHER_LINE, null, "b"));
+    manager.save("u1", "p1", input(EMPTY, 1010, "b"));
+    const current = manager.save("u1", "p1", input(OTHER_LINE, 1011, "b")).record;
+    expect(current.version).toBe(1012);
+    // The first device still holds the old attempt's version 3 and can't overwrite the new one.
+    const stale = manager.save("u1", "p1", input(ONE_LINE, FIRST + 2, "a"));
+    expect(stale).toEqual({ accepted: false, record: current });
   });
 
   test("assisted only turns on, whichever board wins", () => {
     const { manager, clock } = setup();
     manager.save("u1", "p1", input(ONE_LINE, null, "a", { assisted: true }));
-    expect(manager.save("u1", "p1", input(EMPTY, 1, "a")).record.assisted).toBe(true);
+    expect(manager.save("u1", "p1", input(EMPTY, FIRST, "a")).record.assisted).toBe(true);
     clock.advance(100);
     // A refused save that saw a hint still marks the record, without taking its version.
     manager.save("u1", "p2", input(ONE_LINE, null, "a"));
@@ -170,7 +190,7 @@ describe("ProgressManager", () => {
     expect(refused.record).toMatchObject({
       edges: ONE_LINE,
       assisted: true,
-      version: 1,
+      version: 1100,
       device: "a",
       updatedAt: 1100,
     });

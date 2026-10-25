@@ -83,7 +83,9 @@ export class ProgressManager {
         elapsedMs: input.elapsedMs,
         solved,
         assisted: input.assisted,
-        version: 1,
+        // The clock's time, not 1: a new attempt after "Start over" must never reuse a version a
+        // stale device still holds (DECISIONS, "Progress conflicts").
+        version: now,
         device: input.device,
         createdAt: now,
         updatedAt: now,

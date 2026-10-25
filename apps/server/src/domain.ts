@@ -141,7 +141,7 @@ export interface ProgressRecord {
   readonly solved: boolean;
   /** A hint was shown during this attempt, on any device (PRD FR-12). */
   readonly assisted: boolean;
-  /** Starts at 1 and goes up with every save that replaces the board. */
+  /** Starts at the clock's time when the attempt is first saved, then goes up by one with every save that replaces the board. */
   readonly version: number;
   /** Random id of the browser that saved this board, so it never conflicts with itself. */
   readonly device: string;

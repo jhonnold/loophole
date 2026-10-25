@@ -18,10 +18,11 @@ import { SESSION_COOKIE } from "./session-cookie.ts";
 const SOLVED = "112211121121";
 const ONE_LINE = "100000000000";
 const OTHER_LINE = "010000000000";
+const T0 = Date.UTC(2026, 9, 25, 12);
 
 async function setup() {
   const db = openDatabase(":memory:");
-  const clock = new FakeClock(Date.UTC(2026, 9, 25, 12));
+  const clock = new FakeClock(T0);
   const deps = accountDeps(db, clock);
   const puzzles = new PuzzleManager({
     puzzles: new SqlitePuzzleRepository(db),
@@ -120,7 +121,8 @@ describe("saved progress routes", () => {
       elapsedMs: 4200,
       solved: false,
       assisted: true,
-      version: 1,
+      // A new attempt's version is the server's time, so it can't repeat after Start over.
+      version: T0,
       updatedAt: "2026-10-25T12:00:00.000Z",
     };
     expect(await saved.json()).toEqual({ progress, accepted: true });
@@ -154,41 +156,48 @@ describe("saved progress routes", () => {
     const phone = { device: "phone" };
     const laptop = { device: "laptop" };
 
-    await send("PUT", path, save(ONE_LINE, 1000, phone), { cookie });
+    const first = await send("PUT", path, save(ONE_LINE, 1000, phone), { cookie });
+    const v1 = ((await first.json()) as { progress: { version: number } }).progress.version;
     const continued = await send(
       "PUT",
       path,
-      save(OTHER_LINE, 2000, { ...laptop, baseVersion: 1 }),
+      save(OTHER_LINE, 2000, { ...laptop, baseVersion: v1 }),
       {
         cookie,
       },
     );
-    expect(await continued.json()).toMatchObject({ accepted: true, progress: { version: 2 } });
+    expect(await continued.json()).toMatchObject({
+      accepted: true,
+      progress: { version: v1 + 1 },
+    });
 
     // The laptop's board sent again from elsewhere (a tab hidden without a move) takes no version.
-    const glance = await send("PUT", path, save(OTHER_LINE, 2500, { ...phone, baseVersion: 2 }), {
-      cookie,
-    });
+    const glance = await send(
+      "PUT",
+      path,
+      save(OTHER_LINE, 2500, { ...phone, baseVersion: v1 + 1 }),
+      { cookie },
+    );
     expect(await glance.json()).toMatchObject({
       accepted: true,
-      progress: { edges: OTHER_LINE, elapsedMs: 2500, version: 2 },
+      progress: { edges: OTHER_LINE, elapsedMs: 2500, version: v1 + 1 },
     });
 
     // The phone's tab still shows version 1: its save is stale and gets the laptop's board.
-    const stale = await send("PUT", path, save(ONE_LINE, 90_000, { ...phone, baseVersion: 1 }), {
+    const stale = await send("PUT", path, save(ONE_LINE, 90_000, { ...phone, baseVersion: v1 }), {
       cookie,
     });
     expect(await stale.json()).toMatchObject({
       accepted: false,
-      progress: { edges: OTHER_LINE, elapsedMs: 2500, version: 2 },
+      progress: { edges: OTHER_LINE, elapsedMs: 2500, version: v1 + 1 },
     });
 
     // A solved board wins even when stale, and then stays.
-    const solved = await send("PUT", path, save(SOLVED, 7000, { ...phone, baseVersion: 1 }), {
+    const solved = await send("PUT", path, save(SOLVED, 7000, { ...phone, baseVersion: v1 }), {
       cookie,
     });
     expect(await solved.json()).toMatchObject({ accepted: true, progress: { solved: true } });
-    const after = await send("PUT", path, save(ONE_LINE, 8000, { ...phone, baseVersion: 3 }), {
+    const after = await send("PUT", path, save(ONE_LINE, 8000, { ...phone, baseVersion: v1 + 2 }), {
       cookie,
     });
     expect(await after.json()).toMatchObject({ accepted: false, progress: { edges: SOLVED } });
