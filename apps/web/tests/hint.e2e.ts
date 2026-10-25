@@ -198,6 +198,39 @@ test.describe("phone 390×664, zoomed board", () => {
       expect(b.y + b.height).toBeLessThanOrEqual(frame.y + frame.height);
     }
   });
+  test("resuming after a pause does not pan a zoomed board back to the hint", async ({ page }) => {
+    await page.goto("/play/medium-10");
+    await expect(board(page)).toBeVisible();
+    const box = (await boardView(page)).box;
+    const c = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    // Two fingers up and to the left move the view to the board's bottom-right corner.
+    const panToCorner = () =>
+      twoFingers(
+        page,
+        [
+          { x: c.x + 60, y: c.y + 80 },
+          { x: c.x + 120, y: c.y + 80 },
+        ],
+        [
+          { x: c.x - 160, y: c.y - 140 },
+          { x: c.x - 100, y: c.y - 140 },
+        ],
+      );
+    await panToCorner();
+    await expect.poll(async () => (await boardView(page)).y).toBeGreaterThan(100);
+    await page.getByRole("button", { name: "Hint" }).click();
+    await expect(page.locator("[role=application] .ghost-cross")).toHaveCount(4);
+    // Pan away from the hint, then pause and resume: the board remounts and must stay where it is.
+    await panToCorner();
+    await expect.poll(async () => (await boardView(page)).y).toBeGreaterThan(100);
+    const before = await boardView(page);
+    // Pointer pause and resume: a keyboard resume would bring the cursor into view, which is a different pan.
+    await page.getByRole("button", { name: "Pause" }).click();
+    await page.locator(".paused").getByRole("button", { name: "Resume" }).click();
+    await expect(board(page)).toBeVisible();
+    const after = await boardView(page);
+    expect([after.x, after.y]).toEqual([before.x, before.y]);
+  });
 });
 
 test.describe("desktop", () => {

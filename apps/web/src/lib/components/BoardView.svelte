@@ -1,3 +1,9 @@
+<script lang="ts" module>
+  // Hints this page has already panned to. A board remounts on resume, and must not pan back to a hint
+  // the player has since moved away from, so this lives outside the component.
+  const panned = new WeakSet<object>();
+</script>
+
 <script lang="ts">
   import { type BoardAnalysis, EdgeState, NONE, type Puzzle } from "@loophole/core";
   import { untrack } from "svelte";
@@ -190,10 +196,12 @@
   // so this runs once per hint, not on every pan.
   $effect(() => {
     const marks = hint;
-    if (marks === null) return;
+    if (marks === null || panned.has(marks)) return;
     untrack(() => {
       const rect = hintRect(grid, layout, marks);
-      if (zoom !== null && rect !== null) onview(revealRect(grid, view, rect, port, zoom));
+      if (zoom === null || rect === null) return;
+      panned.add(marks);
+      onview(revealRect(grid, view, rect, port, zoom));
     });
   });
 
