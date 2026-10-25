@@ -7,6 +7,7 @@ const S3 = {
   S3_BUCKET: "loophole-dev",
   S3_ACCESS_KEY_ID: "key",
   S3_SECRET_ACCESS_KEY: "secret",
+  PUBLIC_URL: "http://localhost:5173",
 };
 
 describe("loadConfig", () => {
@@ -98,6 +99,10 @@ describe("loadConfig", () => {
     expect(loadConfig({ ...S3, PUBLIC_URL: "http://127.0.0.1:4174" }).turnstile.secretKey).toBe(
       "1x0000000000000000000000000000000AA",
     );
+  });
+
+  test("requires PUBLIC_URL: there is no default", () => {
+    expect(() => loadConfig({ ...S3, PUBLIC_URL: undefined })).toThrow(/PUBLIC_URL/);
   });
 
   test("names every missing or bad setting", () => {

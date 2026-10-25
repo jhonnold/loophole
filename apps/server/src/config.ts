@@ -24,7 +24,7 @@ const EnvSchema = z.object({
   WORKER_ID: z.string().min(1).optional(),
   GENERATE_TIMEOUT_MS: Ms.default(60_000),
   VERIFY_TIMEOUT_MS: Ms.default(45_000),
-  PUBLIC_URL: z.url().default("http://localhost:5173"),
+  PUBLIC_URL: z.url(),
   TRUST_PROXY: z.stringbool().default(false),
   TURNSTILE_SITE_KEY: z.string().min(1).default(TURNSTILE_TEST_SITE_KEY),
   TURNSTILE_SECRET_KEY: z.string().min(1).default(TURNSTILE_TEST_SECRET_KEY),
