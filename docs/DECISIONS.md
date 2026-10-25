@@ -30,3 +30,8 @@ Entry format:
 - **Question:** Which compiler checks go beyond `strict`?
 - **Decision:** `noImplicitOverride` and `noFallthroughCasesInSwitch`. Not `noUncheckedIndexedAccess` or `exactOptionalPropertyTypes`.
 - **Reason:** The core package indexes typed arrays in hot loops, where `noUncheckedIndexedAccess` would force a non-null assertion on every access. A later worktree can turn on stricter flags if they prove worth it.
+
+## 2026-10-25 · WT0 `scaffold` · Merge gate without branch protection
+- **Question:** NFR-3 says CI blocks merges, but worktrees merge into main locally and push directly. What enforces the gate?
+- **Decision:** The orchestrator runs `bun run check` on the merged main before every push; CI on push is a second signal. Branch protection on GitHub is left to the repo owner.
+- **Reason:** Changing repository settings is outside the build agents' remit; the local gate gives the same guarantee for this build flow.
