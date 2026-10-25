@@ -39,6 +39,15 @@ describe("createRng", () => {
     expect(createRng("x").int(1)).toBe(0);
   });
 
+  test("int rejects draws from the top partial block (n = 2^31 + 1)", () => {
+    // About half the raw outputs are rejected here; 5 of the first 10 are, so these pin that path.
+    const rng = createRng("loophole");
+    expect(Array.from({ length: 10 }, () => rng.int(2 ** 31 + 1))).toEqual([
+      677394555, 640741612, 1272511792, 1315991963, 433539835, 2110421466, 1082663696, 2131492054,
+      1417229918, 1405386422,
+    ]);
+  });
+
   test("int rejects n outside 1 to 2^32", () => {
     const rng = createRng("x");
     for (const n of [0, -1, 1.5, 2 ** 32 + 1, Number.NaN])
