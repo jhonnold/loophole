@@ -3,6 +3,11 @@ import type { Clock, RateDecision, RateLimiter, RateRule } from "../ports.ts";
 /** From this many keys on, ended windows are dropped, at most once per `PRUNE_EVERY_MS`. */
 const PRUNE_AT = 10_000;
 const PRUNE_EVERY_MS = 60_000;
+/**
+ * The most keys held at once. A new key past this is refused (fail closed), so a flood of distinct
+ * emails or addresses can't grow the process's memory without bound.
+ */
+const MAX_KEYS = 100_000;
 
 /**
  * Fixed-window counters in memory. Enough for the single API process; the counts reset when it
@@ -29,6 +34,9 @@ export class MemoryRateLimiter implements RateLimiter {
       this.#prune(now);
     }
     let w = this.#windows.get(key);
+    if (w === undefined && this.#windows.size >= MAX_KEYS) {
+      return { allowed: false, retryAfterMs: rule.windowMs };
+    }
     if (w === undefined || now >= w.start + w.windowMs) {
       w = { start: now, windowMs: rule.windowMs, count: 0 };
       this.#windows.set(key, w);
