@@ -49,6 +49,8 @@
 
   // Keyboard cursor (NFR-5): shown while the board has focus and the keyboard was used last.
   let surface: HTMLDivElement | undefined = $state();
+  // The whole board, overview map and zoom pill included: wheel events over either must not reach the page.
+  let boardEl: HTMLDivElement | undefined = $state();
   let cursor = $state(0);
   let focused = $state(false);
   let keyboardMode = $state(false);
@@ -135,7 +137,7 @@
   // The listener stays put while the view moves (a new `zoom` object comes with every view).
   const zoomable = $derived(zoom !== null);
   $effect(() => {
-    const el = surface;
+    const el = boardEl;
     if (el === undefined || !zoomable) return;
     const onwheel = (e: WheelEvent) => {
       // Never let the page scroll or zoom under the board, even while a stroke is held.
@@ -145,7 +147,9 @@
       let dx = e.deltaX * unit;
       let dy = e.deltaY * unit;
       if (e.ctrlKey || e.metaKey) {
-        onview(zoomAround(grid, view, view.cell * Math.exp(-dy * 0.01), local(e), port, zoom));
+        // A mouse-wheel notch is about 100 px of delta; clamp it so one notch is about 1.28×, not e×.
+        const step = Math.max(-50, Math.min(50, dy));
+        onview(zoomAround(grid, view, view.cell * Math.exp(-step * 0.005), local(e), port, zoom));
         return;
       }
       if (e.shiftKey && dx === 0) [dx, dy] = [dy, 0];
@@ -207,7 +211,12 @@
   const percent = $derived(zoom === null ? 100 : Math.round((view.cell / zoom.min) * 100));
 </script>
 
-<div class="board" style:width="{port.width}px" style:height="{port.height}px">
+<div
+  bind:this={boardEl}
+  class="board"
+  style:width="{port.width}px"
+  style:height="{port.height}px"
+>
   <!-- The board is one focusable widget: pointer input is hit-tested by geometry and keyboard input
        moves an edge cursor, so its edges need no DOM elements of their own. The data attributes
        give tests the board's geometry, which a canvas cannot show. -->

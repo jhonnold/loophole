@@ -267,6 +267,31 @@ test.describe("desktop, zoomable boards (FR-13, NFR-5)", () => {
     await expect.poll(() => savedLines(page, "giant-100")).toBe(1);
   });
 
+  test("one Ctrl + wheel notch zooms by about 1.3×", async ({ page }) => {
+    await page.goto("/play/giant-100");
+    const before = await boardView(page);
+    await page.mouse.move(before.box.x + 200, before.box.y + 200);
+    await page.keyboard.down("Control");
+    await page.mouse.wheel(0, -100);
+    await page.keyboard.up("Control");
+    await expect.poll(async () => (await boardView(page)).cell).toBeGreaterThan(before.cell);
+    const ratio = (await boardView(page)).cell / before.cell;
+    expect(ratio).toBeGreaterThan(1.2);
+    expect(ratio).toBeLessThan(1.35);
+  });
+
+  test("Ctrl + wheel over the overview map zooms the board, not the page", async ({ page }) => {
+    await page.goto("/play/giant-100");
+    const before = await boardView(page);
+    const map = await page.getByRole("img", { name: /Overview/ }).boundingBox();
+    if (map === null) throw new Error("no map");
+    await page.mouse.move(map.x + map.width / 2, map.y + map.height / 2);
+    await page.keyboard.down("Control");
+    await page.mouse.wheel(0, -100);
+    await page.keyboard.up("Control");
+    await expect.poll(async () => (await boardView(page)).cell).toBeGreaterThan(before.cell);
+  });
+
   test("the keyboard cursor keeps its edge in view", async ({ page }) => {
     await page.goto("/play/giant-100");
     await board(page).focus();
