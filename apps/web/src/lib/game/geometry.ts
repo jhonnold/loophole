@@ -44,7 +44,8 @@ export const MAX_CELL = 58;
 /**
  * The largest layout that fits `availWidth` × `availHeight`, with cells between `minCell` and
  * `maxCell`. Width always wins: the board never gets wider than `availWidth` (NFR-2), so a wide
- * puzzle on a narrow screen gets smaller cells than `minCell`; pinch-zoom for those comes later.
+ * puzzle on a narrow screen gets smaller cells than `minCell`; the play screen zooms those instead
+ * (`viewport.ts`).
  * Height gives way to `minCell`, and the page scrolls vertically instead.
  */
 export function fitLayout(
@@ -62,6 +63,38 @@ export function fitLayout(
   const room = Math.min(availWidth - cols * cell, availHeight - rows * cell) / 2;
   const margin = Math.max(MIN_MARGIN, Math.min(Math.round(cell * 0.34), Math.floor(room)));
   return { cell, margin, width: cols * cell + 2 * margin, height: rows * cell + 2 * margin };
+}
+
+/** Sizes of the board's marks at cell size S (design kit, Board), shared by both renderers. */
+export interface MarkSizes {
+  /** Line thickness. */
+  readonly line: number;
+  readonly dotRadius: number;
+  /** Half the width of a cross. */
+  readonly crossArm: number;
+  readonly crossWidth: number;
+  /** Clue font size. */
+  readonly clue: number;
+  /** Radius of the error ring around a clue. */
+  readonly clueRing: number;
+  /** Radius of the error ring around a dot. */
+  readonly dotRing: number;
+}
+
+/**
+ * Mark sizes for cell size `cell`. Dots and lines never take more than 0.4 of a cell, so a board
+ * zoomed far out stays readable; from 10px cells up that cap never applies.
+ */
+export function markSizes(cell: number): MarkSizes {
+  return {
+    line: Math.min(Math.max(2, Math.round(cell * 0.11)), cell * 0.4),
+    dotRadius: Math.min(Math.max(4, Math.round(cell * 0.11)), cell * 0.4) / 2,
+    crossArm: cell * 0.1,
+    crossWidth: Math.max(1.5, cell * 0.05),
+    clue: cell * 0.56,
+    clueRing: cell * 0.34 - 1,
+    dotRing: cell * 0.26 - 1,
+  };
 }
 
 /** The height a board needs at its smallest allowed cell size for `availWidth`. */
