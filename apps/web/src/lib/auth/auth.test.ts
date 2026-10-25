@@ -119,6 +119,17 @@ describe("auth store", () => {
     });
   });
 
+  test("a failed logOut stays logged in and reports the failure", async () => {
+    const { auth } = setup({
+      "POST /api/auth/login": [200, USER],
+      "POST /api/auth/logout": [403, { title: "Forbidden" }],
+    });
+    await auth.logIn("ann@example.com", "hunter22");
+    const result = await auth.logOut();
+    expect(result.ok).toBe(false);
+    expect(get(auth)).toEqual({ status: "user", user: USER });
+  });
+
   test("verifying an email refreshes the logged-in user", async () => {
     const { auth } = setup({
       "POST /api/auth/verify-email": [204],

@@ -20,7 +20,7 @@ export interface Auth extends Readable<AuthState> {
   turnstileSiteKey(): Promise<string | null>;
   signUp(email: string, password: string, captchaToken: string): Promise<AuthResult>;
   logIn(email: string, password: string): Promise<AuthResult>;
-  logOut(): Promise<void>;
+  logOut(): Promise<AuthResult>;
   verifyEmail(token: string): Promise<AuthResult>;
   resendVerification(email: string): Promise<AuthResult>;
   requestPasswordReset(email: string): Promise<AuthResult>;
@@ -105,8 +105,10 @@ export function createAuth(client: ApiClient): Auth {
     },
 
     async logOut() {
-      await run(() => client.POST("/api/auth/logout"));
-      guest();
+      // Only a logout the server confirmed ends the local login; otherwise the cookie may still work.
+      const result = await run(() => client.POST("/api/auth/logout"));
+      if (result.ok) guest();
+      return result;
     },
 
     async verifyEmail(token) {

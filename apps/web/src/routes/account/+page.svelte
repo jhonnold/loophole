@@ -6,6 +6,7 @@
   let resent = $state(false);
   let password = $state("");
   let error = $state("");
+  let logOutError = $state("");
   let busy = $state(false);
 
   async function resend(email: string) {
@@ -14,8 +15,10 @@
   }
 
   async function logOut() {
-    await auth.logOut();
-    await goto("/");
+    logOutError = "";
+    const result = await auth.logOut();
+    if (result.ok) await goto("/");
+    else logOutError = result.message;
   }
 
   async function deleteAccount(event: SubmitEvent) {
@@ -56,6 +59,7 @@
       {/if}
     {/if}
     <p><button class="primary" type="button" onclick={logOut}>Log out</button></p>
+    {#if logOutError}<p class="error" role="alert">{logOutError}</p>{/if}
 
     <h2>Delete account</h2>
     <p>
