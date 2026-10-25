@@ -12,6 +12,7 @@ import { JobManager } from "../managers/job-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { accountDeps } from "../test-support/accounts.ts";
 import { FakeClock, sequentialIds } from "../test-support/fakes.ts";
+import { submissionDeps } from "../test-support/submissions.ts";
 import { createApp } from "./app.ts";
 import type { Problem } from "./problem.ts";
 
@@ -38,6 +39,7 @@ function setup(options: { webDir?: string; maxQueued?: number } = {}) {
     jobs,
     ...accountDeps(db, clock),
     hints: new HintManager({ puzzles }),
+    ...submissionDeps(db, clock, puzzles, jobs),
     webDir: options.webDir,
   });
   const puzzleIds = sequentialIds("p");

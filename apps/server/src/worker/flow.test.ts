@@ -31,7 +31,7 @@ function setup(verifyTimeoutMs = 10_000) {
     newId: () => crypto.randomUUID(),
     maxQueued: 10,
   });
-  const { submissions } = submissionDeps(db, systemClock, puzzles, jobs);
+  const { submissions, reports } = submissionDeps(db, systemClock, puzzles, jobs);
   const runs = new JobRunManager({
     jobs: queue,
     tasks: new ThreadTaskRunner(),
@@ -58,7 +58,7 @@ function setup(verifyTimeoutMs = 10_000) {
     createdAt: 1,
   });
   return {
-    app: createApp({ puzzles, jobs, hints, ...accounts }),
+    app: createApp({ puzzles, jobs, hints, submissions, reports, ...accounts }),
     runs,
     puzzles,
     submissions,
