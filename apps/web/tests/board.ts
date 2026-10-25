@@ -1,4 +1,4 @@
-import { createGrid, type Grid } from "@loophole/core";
+import type { Grid } from "@loophole/core";
 import type { Locator, Page } from "@playwright/test";
 
 /** Page coordinates of every dot, read from the rendered board (dots render in index order). */
@@ -18,10 +18,6 @@ export async function edgePoint(page: Page, grid: Grid, edge: number) {
   const a = dots[grid.edgeDots[edge * 2]];
   const b = dots[grid.edgeDots[edge * 2 + 1]];
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-}
-
-export function gridFor(width: number, height: number): Grid {
-  return createGrid(width, height);
 }
 
 /** Drawn lines. Use with `expect(...).toHaveCount(n)`, which retries until the DOM settles. */

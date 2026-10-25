@@ -1,17 +1,9 @@
-import { hEdgeIndex, vEdgeIndex } from "@loophole/core";
+import { createGrid, hEdgeIndex, vEdgeIndex } from "@loophole/core";
 import { expect, test } from "@playwright/test";
 import { FIXTURE_SOLUTIONS } from "../src/lib/test-support/solutions.ts";
-import {
-  crosses,
-  dotPoints,
-  edgePoint,
-  gridFor,
-  lines,
-  scrollsSideways,
-  touchDrag,
-} from "./board.ts";
+import { crosses, dotPoints, edgePoint, lines, scrollsSideways, touchDrag } from "./board.ts";
 
-const grid7 = gridFor(7, 7);
+const grid7 = createGrid(7, 7);
 
 // The two phone sizes from the design kit: Small (360×560) and Play (390×664).
 for (const [width, height] of [
@@ -94,11 +86,11 @@ for (const [width, height] of [
 test.describe("progress", () => {
   test("survives a reload (FR-21, guest)", async ({ page }) => {
     await page.goto("/play/tiny-5");
-    const grid5 = gridFor(5, 5);
+    const grid5 = createGrid(5, 5);
     const p = await edgePoint(page, grid5, vEdgeIndex(grid5, 2, 2));
     await page.mouse.click(p.x, p.y);
     await page.reload();
-    await expect(page.locator("svg[role=application] line.line")).toHaveCount(1);
+    await expect(lines(page)).toHaveCount(1);
   });
 });
 
