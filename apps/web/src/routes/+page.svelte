@@ -27,6 +27,10 @@
   let now = $state(Date.now());
 
   const day = $derived(today?.day ?? utcDay(now));
+  // Today's dailies by puzzle id: an unfinished one under "Continue" opens on its daily page.
+  const dailySizes = $derived(
+    new Map((today?.puzzles ?? []).flatMap((p) => (p.puzzleId === null ? [] : [[p.puzzleId, p.size] as const]))),
+  );
 
   async function progressOf(id: string, width: number, height: number) {
     return localProgress(id, createGrid(width, height));
@@ -128,9 +132,14 @@
       <h2 id="continue-h">Continue</h2>
       <ul class="resume">
         {#each resume as r (r.puzzleId)}
+          {@const dailySize = dailySizes.get(r.puzzleId)}
           <li>
-            <a href="/play/{r.puzzleId}">
-              <b>{nameOf(r.puzzleId)} · {r.width}×{r.height}</b>
+            <a href={dailySize === undefined ? `/play/${r.puzzleId}` : dailyPath(day, dailySize)}>
+              <b>
+                {dailySize === undefined
+                  ? `${nameOf(r.puzzleId)} · ${r.width}×${r.height}`
+                  : `Daily · ${sizeName(dailySize)} · ${r.width}×${r.height}`}
+              </b>
               <span>In progress · {formatClock(r.elapsedMs)}</span>
             </a>
           </li>

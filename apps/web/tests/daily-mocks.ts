@@ -69,6 +69,8 @@ export interface MockOptions {
   readonly progress?: string;
   /** What finishing the attempt answers. */
   readonly finished?: Schemas["Attempt"];
+  /** The player has today's 7×7 unfinished, so it is listed under "Continue". */
+  readonly inProgress?: boolean;
 }
 
 /** Answers the daily API (and the session and progress routes it needs) from fixed data. */
@@ -119,7 +121,22 @@ export async function mockDailyApi(page: Page, options: MockOptions = {}) {
     current = options.finished ?? attempt({ status: "finished", ranked: true, rank: 1 });
     return json(route, { attempt: current });
   });
-  await page.route("**/api/users/u1/progress*", (route) => json(route, { items: [] }));
+  await page.route("**/api/users/u1/progress*", (route) =>
+    json(route, {
+      items: options.inProgress
+        ? [
+            {
+              puzzleId: DAILY_ID,
+              width: 7,
+              height: 7,
+              elapsedMs: 30_000,
+              assisted: false,
+              updatedAt: new Date().toISOString(),
+            },
+          ]
+        : [],
+    }),
+  );
   await page.route(`**/api/users/u1/progress/${DAILY_ID}`, async (route) => {
     const request = route.request();
     if (request.method() === "DELETE") {

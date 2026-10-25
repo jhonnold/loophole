@@ -41,6 +41,16 @@ test.describe("home on a phone (Home artboard, FR-22, FR-24)", () => {
     await expect(covers.getByRole("link", { name: /Small.*Solved · 03:18/ })).toBeVisible();
   });
 
+  test("an unfinished daily under Continue opens its daily page, not practice (FR-22)", async ({
+    page,
+  }) => {
+    await mockDailyApi(page, { user: true, inProgress: true });
+    await page.goto("/");
+    const resume = page.getByRole("link", { name: /Daily · Small · 7×7/ });
+    await expect(resume).toHaveAttribute("href", `/daily/${TODAY}/7`);
+    await expect(page.locator(`a[href="/play/${DAILY_ID}"]`)).toHaveCount(0);
+  });
+
   test("without the server, practice still works", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByText("Daily puzzles need the server")).toBeVisible();
