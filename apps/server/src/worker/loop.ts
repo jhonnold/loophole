@@ -5,21 +5,37 @@ export interface WorkerLoopOptions {
   readonly workerId: string;
   /** How long to wait when the queue is empty. */
   readonly pollMs: number;
+  /** Least time between two sweeps for abandoned jobs, whether the worker is busy or idle. */
+  readonly sweepMs: number;
   /** Stops the loop after the current job. */
   readonly signal: AbortSignal;
+  /** Milliseconds, for the sweep timer. */
+  readonly now?: () => number;
 }
 
 /**
  * The worker's main loop: run jobs back to back while there are any; when the queue is empty,
- * take back abandoned jobs and wait `pollMs` before looking again. An error (say, the database
- * staying busy) is logged and the loop carries on after the same wait.
+ * wait `pollMs` before looking again. Abandoned jobs are taken back once at start and then every
+ * `sweepMs`, busy or idle, so a dead worker's job does not wait for the queue to drain. An error
+ * (say, the database staying busy) is logged and the loop carries on after the same wait.
  */
-export async function runWorkerLoop({ runs, workerId, pollMs, signal }: WorkerLoopOptions) {
+export async function runWorkerLoop({
+  runs,
+  workerId,
+  pollMs,
+  sweepMs,
+  signal,
+  now = () => performance.now(),
+}: WorkerLoopOptions) {
+  let lastSweep = Number.NEGATIVE_INFINITY;
   while (!signal.aborted) {
     try {
+      if (now() - lastSweep >= sweepMs) {
+        lastSweep = now();
+        const recovered = runs.recoverStale();
+        if (recovered > 0) console.log(`Recovered ${recovered} abandoned job(s)`);
+      }
       if (await runs.runNext(workerId)) continue;
-      const recovered = runs.recoverStale();
-      if (recovered > 0) console.log(`Recovered ${recovered} abandoned job(s)`);
     } catch (err) {
       console.error("Worker loop error:", err);
     }

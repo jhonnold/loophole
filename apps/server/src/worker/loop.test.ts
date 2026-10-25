@@ -2,33 +2,76 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { runWorkerLoop } from "./loop.ts";
 
 describe("runWorkerLoop", () => {
-  test("runs jobs back to back, recovers when idle, and stops on abort", async () => {
+  test("sweeps abandoned jobs at start and on a timer, even while jobs keep coming", async () => {
     const controller = new AbortController();
     const calls: string[] = [];
-    let queued = 3;
+    let time = 0;
+    let queued = 12;
     const runs = {
       async runNext(workerId: string) {
         calls.push(`run:${workerId}`);
-        if (queued === 0) return false;
+        time += 1_000;
+        if (queued === 0) {
+          controller.abort();
+          return false;
+        }
         queued--;
         return true;
       },
       recoverStale() {
         calls.push("recover");
-        controller.abort();
         return 0;
       },
     };
-    await runWorkerLoop({ runs, workerId: "w", pollMs: 60_000, signal: controller.signal });
-    expect(calls).toEqual(["run:w", "run:w", "run:w", "run:w", "recover"]);
+    await runWorkerLoop({
+      runs,
+      workerId: "w",
+      pollMs: 60_000,
+      sweepMs: 5_000,
+      now: () => time,
+      signal: controller.signal,
+    });
+    const run = "run:w";
+    expect(calls).toEqual([
+      "recover",
+      run,
+      run,
+      run,
+      run,
+      run,
+      "recover",
+      run,
+      run,
+      run,
+      run,
+      run,
+      "recover",
+      run,
+      run,
+      run,
+    ]);
   });
 
-  test("an abort wakes an idle loop at once", async () => {
+  test("an idle loop sweeps, and an abort wakes it at once", async () => {
     const controller = new AbortController();
-    const runs = { runNext: async () => false, recoverStale: () => 0 };
+    let recovered = 0;
+    const runs = {
+      runNext: async () => false,
+      recoverStale: () => {
+        recovered++;
+        return 0;
+      },
+    };
     const started = performance.now();
     setTimeout(() => controller.abort(), 20);
-    await runWorkerLoop({ runs, workerId: "w", pollMs: 60_000, signal: controller.signal });
+    await runWorkerLoop({
+      runs,
+      workerId: "w",
+      pollMs: 60_000,
+      sweepMs: 60_000,
+      signal: controller.signal,
+    });
+    expect(recovered).toBe(1);
     expect(performance.now() - started).toBeLessThan(1_000);
   });
 
@@ -45,7 +88,13 @@ describe("runWorkerLoop", () => {
       },
       recoverStale: () => 0,
     };
-    await runWorkerLoop({ runs, workerId: "w", pollMs: 1, signal: controller.signal });
+    await runWorkerLoop({
+      runs,
+      workerId: "w",
+      pollMs: 1,
+      sweepMs: 60_000,
+      signal: controller.signal,
+    });
     expect(calls).toBe(2);
     expect(error).toHaveBeenCalledTimes(1);
     error.mockRestore();

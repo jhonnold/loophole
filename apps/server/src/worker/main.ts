@@ -37,6 +37,7 @@ await runWorkerLoop({
   runs,
   workerId: config.workerId,
   pollMs: config.pollMs,
+  sweepMs: config.jobs.staleMs / 2,
   signal: controller.signal,
 });
 db.close();
