@@ -4,11 +4,8 @@ import { board } from "./board.ts";
 // PRD §10: p95 time to first interaction on a mid-range phone under 2 s. Each load starts with an
 // empty cache, the CPU slowed 4× and a slow 4G network (150 ms round trips, 1.6 Mbit/s down), as
 // Lighthouse models a mid-range phone. The time runs from navigation until the page takes input.
-// Run with `bun run test:perf`; like the frame-time checks, it depends on the machine.
-//
-// The design kit's fonts load in two parts so this holds: the Latin subsets block the first paint
-// (about 2 KB of rules), and the full stylesheets with the Japanese glyph ranges (about 700 KB) load
-// after it (DECISIONS, "Time to first interaction").
+// Run with `bun run test:perf`; like the frame-time checks, it depends on the machine. Why it
+// holds: DECISIONS, "Time to first interaction".
 
 const LOADS = 5;
 const BUDGET_MS = 2_000;

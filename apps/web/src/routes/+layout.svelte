@@ -1,7 +1,7 @@
 <script lang="ts">
-  // Latin first: these small stylesheets block the first paint; their files still swap in with
-  // font-display: swap, within tens of milliseconds. The full ones (every Japanese glyph range, about
-  // 700 KB of rules) load after it ($lib/fonts.ts), so Japanese glyphs arrive without moving anything.
+  // Latin first: only these small stylesheets block the first paint (their files still swap in with
+  // font-display: swap). The full ones, with every Japanese glyph range, load after it
+  // ($lib/fonts.ts).
   import "@fontsource/zen-kaku-gothic-new/latin-400.css";
   import "@fontsource/zen-kaku-gothic-new/latin-500.css";
   import "@fontsource/zen-kaku-gothic-new/latin-700.css";

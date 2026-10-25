@@ -7,7 +7,7 @@ import { attempt, mockDailyApi, TODAY } from "./daily-mocks.ts";
 
 // Automated accessibility checks (PRD NFR-5): axe-core's WCAG 2.2 A and AA rules, contrast
 // included, on the main screens in both themes, on a phone and a desktop. Screens that need the
-// API get the daily stand-in from daily-mocks.ts.
+// API get the daily and admin stand-ins.
 
 interface Screen {
   readonly name: string;
