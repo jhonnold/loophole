@@ -12,7 +12,7 @@ import {
 import { expect, type Page, test } from "@playwright/test";
 import { FIXTURES } from "../src/lib/puzzles/fixtures.ts";
 import { FIXTURE_SOLUTIONS } from "../src/lib/test-support/solutions.ts";
-import { board, boardView, crosses, edgePoint, lines, twoFingers } from "./board.ts";
+import { board, boardView, crosses, edgePoint, lines, savedLines, twoFingers } from "./board.ts";
 
 const wire = FIXTURES.find((f) => f.id === "small-7")?.wire;
 if (wire === undefined) throw new Error("small-7 fixture missing");
@@ -270,5 +270,53 @@ test.describe("desktop", () => {
     await page.keyboard.press("z");
     await expect(page.getByRole("button", { name: "Erase it" })).toHaveCount(0);
     await expect(board(page)).toBeFocused();
+  });
+
+  test("a hint that comes back after the screen was left does not overwrite newer progress", async ({
+    page,
+  }) => {
+    const id = "srv-1";
+    const stamp = "2026-10-25T12:00:00.000Z";
+    await page.route(/\/api\/puzzles\/srv-1$/, (route) =>
+      route.fulfill({
+        json: {
+          id,
+          puzzle: { ...wire, seed: "s", meta: { generator: "1" } },
+          origin: "generated",
+          createdAt: stamp,
+        },
+      }),
+    );
+    await page.route(/\/api\/puzzles(\?.*)?$/, (route) =>
+      route.fulfill({
+        json: { items: [{ id, width: 7, height: 7, origin: "generated", createdAt: stamp }] },
+      }),
+    );
+    // Hold the hint answer until the screen has been left and the player has drawn a line.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let answered = false;
+    await page.route(/\/api\/puzzles\/srv-1\/hint$/, async (route) => {
+      await gate;
+      await route.fulfill({ json: { kind: "reveal", edge: solution.indexOf(EdgeState.Line) } });
+      answered = true;
+    });
+    await page.goto(`/play/${id}`);
+    await expect(board(page)).toBeVisible();
+    await page.getByRole("button", { name: "Hint" }).click();
+    await page.getByRole("link", { name: "Back to puzzles" }).click();
+    await page.locator(`a[href="/play/${id}"]`).click();
+    await expect(board(page)).toBeVisible();
+    const p = await edgePoint(page, grid, solution.indexOf(EdgeState.Line));
+    await page.mouse.click(p.x, p.y);
+    await expect(lines(page)).toHaveCount(1);
+    release();
+    await expect.poll(() => answered).toBe(true);
+    await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 300)));
+    expect(await savedLines(page, id)).toBe(1);
+    const raw = await page.evaluate((key) => localStorage.getItem(key), `loophole:progress:${id}`);
+    expect(JSON.parse(raw ?? "{}").assisted).not.toBe(true);
   });
 });

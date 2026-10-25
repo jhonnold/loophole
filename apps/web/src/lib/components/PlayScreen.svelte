@@ -1,6 +1,6 @@
 <script lang="ts">
   import { analyzeBoard } from "@loophole/core";
-  import { onMount, tick } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import {
     applyChanges,
     type Board,
@@ -67,6 +67,11 @@
   let hintBusy = $state(false);
   let hintFailed = $state(false);
   let assisted = $state(false);
+  // Set when the puzzle screen goes away, so a hint that arrives late cannot save over newer progress.
+  let destroyed = false;
+  onDestroy(() => {
+    destroyed = true;
+  });
 
   const analysis = $derived(analyzeBoard(puzzle, board.edges));
   const solved = $derived(analysis.solved);
@@ -164,8 +169,8 @@
     const edges = board.edges;
     try {
       const result = await puzzleSource.hint(entry.id, puzzle, edges);
-      // The board changed while the hint was on its way; the player can ask again.
-      if (board.edges !== edges) return;
+      // The screen was left, or the board changed, while the hint was on its way.
+      if (destroyed || board.edges !== edges) return;
       const view = hintView(grid, result, edges);
       if (view === null) return;
       hint = view;
