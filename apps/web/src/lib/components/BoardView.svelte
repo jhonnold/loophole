@@ -49,8 +49,6 @@
 
   // Keyboard cursor (NFR-5): shown while the board has focus and the keyboard was used last.
   let surface: HTMLDivElement | undefined = $state();
-  // The whole board, overview map and zoom pill included: wheel events over either must not reach the page.
-  let boardEl: HTMLDivElement | undefined = $state();
   let cursor = $state(0);
   let focused = $state(false);
   let keyboardMode = $state(false);
@@ -133,8 +131,10 @@
 
   // Wheel and trackpad: Ctrl/⌘ + wheel (and trackpad pinch, which the browser reports the same
   // way) zooms around the pointer; plain wheel and two-finger scroll pan. Svelte adds wheel
-  // listeners as passive, so this one is added by hand to be able to stop page zoom and scroll.
-  // The listener stays put while the view moves (a new `zoom` object comes with every view).
+  // listeners as passive, so this one is added by hand to be able to stop page zoom and scroll. It
+  // covers the whole board, overview map and zoom pill included, and stays put while the view moves
+  // (a new `zoom` object comes with every view).
+  let boardEl: HTMLDivElement | undefined = $state();
   const zoomable = $derived(zoom !== null);
   $effect(() => {
     const el = boardEl;
