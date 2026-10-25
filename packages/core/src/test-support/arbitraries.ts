@@ -1,7 +1,14 @@
 import fc from "fast-check";
 import { bruteForceSolutions } from "../bruteforce.ts";
-import { MAX_META_KEY_LENGTH, MAX_SEED_LENGTH, type PuzzleWireV1 } from "../format.ts";
-import { createPuzzle, deriveClues, NO_CLUE, type Puzzle } from "../puzzle.ts";
+import type { PuzzleWireV1 } from "../format.ts";
+import {
+  createPuzzle,
+  deriveClues,
+  MAX_META_KEY_LENGTH,
+  MAX_SEED_LENGTH,
+  NO_CLUE,
+  type Puzzle,
+} from "../puzzle.ts";
 
 /** Valid v1 wire objects, with optional seed and meta. */
 export function arbPuzzleWire(maxWidth = 12, maxHeight = 12): fc.Arbitrary<PuzzleWireV1> {

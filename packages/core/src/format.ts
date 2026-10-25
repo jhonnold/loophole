@@ -1,5 +1,13 @@
 import { EdgeState, type Grid, MAX_SIZE, MIN_SIZE } from "./grid.ts";
-import { createPuzzle, NO_CLUE, type Puzzle } from "./puzzle.ts";
+import {
+  createPuzzle,
+  MAX_META_ENTRIES,
+  MAX_META_KEY_LENGTH,
+  MAX_META_VALUE_LENGTH,
+  MAX_SEED_LENGTH,
+  NO_CLUE,
+  type Puzzle,
+} from "./puzzle.ts";
 
 /** Version 1 of the puzzle wire format. `docs/FORMAT.md` is the specification. */
 export interface PuzzleWireV1 {
@@ -10,11 +18,6 @@ export interface PuzzleWireV1 {
   seed?: string;
   meta?: Record<string, string>;
 }
-
-export const MAX_SEED_LENGTH = 128;
-export const MAX_META_ENTRIES = 32;
-export const MAX_META_KEY_LENGTH = 64;
-export const MAX_META_VALUE_LENGTH = 1024;
 
 /** Thrown for input that does not follow `docs/FORMAT.md`. `path` names the offending field. */
 export class FormatError extends Error {
