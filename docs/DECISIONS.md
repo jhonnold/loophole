@@ -273,7 +273,7 @@ Entry format:
 
 ## 2026-10-25 · WT7 `accounts` · Sessions: opaque cookie tokens
 - **Question:** How are logins kept (NFR-4)?
-- **Decision:** Login sets `loophole_session` to 32 random bytes (base64url) with `HttpOnly; Secure; SameSite=Lax; Path=/`, expiring 30 days after login, with no sliding renewal. The `sessions` table stores only the token's SHA-256 with the user id and expiry. Every login issues a new token and ends the session of any cookie sent with it; logout deletes the row and clears the cookie; a password reset ends every session of the account. Expired rows are deleted when looked up and whenever a session starts. `Secure` is always on: Chromium and curl accept it on `http://localhost`.
+- **Decision:** Login sets `__Host-loophole_session` to 32 random bytes (base64url) with `HttpOnly; Secure; SameSite=Lax; Path=/`, expiring 30 days after login, with no sliding renewal. The `__Host-` prefix makes browsers refuse a `Domain` attribute, so a sibling subdomain can't set the cookie (cookie tossing). The `sessions` table stores only the token's SHA-256 with the user id and expiry. Every login issues a new token and ends the session of any cookie sent with it; logout deletes the row and clears the cookie; a password reset ends every session of the account. Expired rows are deleted when looked up and whenever a session starts. `Secure` is always on: Chromium and curl accept it on `http://localhost`.
 - **Reason:** A server-side token can be revoked, unlike a signed one; storing a hash means a leaked database logs nobody in; a new token per login rules out session fixation. A fixed lifetime keeps the code small.
 
 ## 2026-10-25 · WT7 `accounts` · CSRF: Fetch Metadata, SameSite and JSON-only bodies

@@ -3,7 +3,8 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { UserRecord } from "../domain.ts";
 import type { NewSession, SessionManager } from "../managers/session-manager.ts";
 
-export const SESSION_COOKIE = "loophole_session";
+/** The `__Host-` prefix makes browsers refuse a Domain attribute, so a sibling subdomain can't set it. */
+export const SESSION_COOKIE = "__Host-loophole_session";
 
 /** Real tokens are 43 characters; anything much longer is not worth hashing. */
 const MAX_TOKEN_LENGTH = 128;

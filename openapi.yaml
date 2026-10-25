@@ -10,7 +10,7 @@ components:
     session:
       type: apiKey
       in: cookie
-      name: loophole_session
+      name: __Host-loophole_session
   schemas:
     Health:
       type: object

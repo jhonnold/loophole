@@ -118,6 +118,8 @@ describe("sign-up, verification, login and logout", () => {
     expect(cookie).toContain("Secure");
     expect(cookie).toContain("SameSite=Lax");
     expect(cookie).toContain("Path=/");
+    expect(cookie).not.toContain("Domain=");
+    expect(cookie).toStartWith("__Host-loophole_session=");
     expect(cookie).toContain("Expires=Tue, 24 Nov 2026 12:00:00 GMT"); // 30 days
     const token = sessionCookie(login);
 
