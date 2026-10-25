@@ -107,7 +107,6 @@ Run the API and the worker (Server above) and `bun run dev:web`, log in with a c
 
 Guests' progress stays in the browser, as before. For a logged-in player, progress on server puzzles is kept in the browser under their account and sent to the API a couple of seconds after each change, and when the tab is hidden or closed; saves that fail are sent again later. Opening a puzzle takes the account's board from the API (or the browser's copy when offline), and coming back to a tab picks up a board saved meanwhile on another device. The built-in puzzles aren't on the server, so their progress stays in the browser even when logged in. After logging in, the home page and the account page offer to add progress saved as a guest in this browser to the account; nothing moves until the player says so. `docs/DECISIONS.md` has the rules for conflicting saves.
 
-
 ## Scripts
 
 | Command | What it does |
