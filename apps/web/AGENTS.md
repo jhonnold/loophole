@@ -5,7 +5,7 @@ The Loophole player app: a SvelteKit single-page app (Svelte 5 runes, static ada
 - Game logic (edge history, stopwatch, hit-testing, drag strokes, keyboard cursor, saved progress, theme choice) lives in plain TypeScript modules with `bun:test` tests beside them. Keep those modules free of runes, `$lib`/`$app` imports and DOM access so the root `bun test` runs them. Components stay thin; the Playwright end-to-end tests cover them.
 - One set of board geometry and zoom math serves both renderers and all input: a board point is the viewport point plus the view offset, in pixels at the current cell size. A new kind of mark has to be drawn in both the SVG and the canvas renderer.
 - Rule checks and completion come from the core package (`analyzeBoard`), not from code here.
-- Screens get puzzles through the puzzle source interface, so the built-in fixtures can be replaced by the API without touching the screens.
+- Screens get puzzles through the puzzle source interface. The built-in fixtures come first, so their ids work with no server running; the rest come from the API through the generated client package. In development Vite proxies `/api` to the API server.
 - Theme colours come from the CSS custom properties in the app stylesheet, which follow the design kit (`docs/design/README.md`). Book-cover tints are the one exception: they are the same in both themes.
 - App code type-checks without Bun's types; tests and test helpers use a second config that adds them.
 - End-to-end tests end in `.e2e.ts` and run with `bun run test:e2e`. They need a local Chromium and are not part of `bun run check`. Frame-time checks are tagged `@perf` and run with `bun run test:perf` instead.

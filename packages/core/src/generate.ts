@@ -78,7 +78,9 @@ export interface GenerateResult {
 export function generate(options: GenerateOptions): GenerateResult {
   const { width, height, seed, onProgress } = options;
   const thresholds = options.thresholds ?? LOOP_THRESHOLDS;
-  for (const [name, share] of Object.entries(thresholds)) {
+  // Each field by name, so a partial object (say, parsed JSON) fails here too.
+  for (const name of ["minCoverage", "minSpan"] as const) {
+    const share = thresholds[name];
     if (!(share >= 0 && share <= 1)) {
       throw new RangeError(`thresholds.${name} must be from 0 to 1, got ${share}`);
     }

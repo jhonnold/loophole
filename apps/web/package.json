@@ -12,6 +12,7 @@
     "test:perf": "playwright test --grep @perf"
   },
   "dependencies": {
+    "@loophole/api-client": "workspace:*",
     "@loophole/core": "workspace:*"
   },
   "devDependencies": {

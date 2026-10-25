@@ -4,7 +4,7 @@ Loophole is a web app for Slitherlink, the Japanese loop puzzle: draw one closed
 
 ## Status
 
-Early development. The repo has the build tooling, the local dev services, the design kit, the puzzle engine (the grid model, the wire format, rule checks for play, a brute-force solution counter for tests, a seeded random number generator, a rule-based solver that records each deduction for hints, a verifier that says whether a puzzle has one solution, none, several, or could not be decided in time, and a generator that makes a puzzle with exactly one solution from a seed) and a first web app. The web app plays a few built-in puzzles on phones and desktops: tap or drag to draw, keyboard play, undo and redo, a pausable timer, error highlighting, solve detection, light and dark themes, and progress saved in the browser. Boards too big for the screen zoom and pan (pinch, wheel or the zoom buttons) with an overview map, and boards over 30×30 draw on a canvas. The server is being built in phases; each phase's plan is in [`docs/plans/`](docs/plans/).
+Early development. The repo has the build tooling, the local dev services, the design kit, the puzzle engine (the grid model, the wire format, rule checks for play, a brute-force solution counter for tests, a seeded random number generator, a rule-based solver that records each deduction for hints, a verifier that says whether a puzzle has one solution, none, several, or could not be decided in time, and a generator that makes a puzzle with exactly one solution from a seed) and a first web app. The web app plays a few built-in puzzles on phones and desktops: tap or drag to draw, keyboard play, undo and redo, a pausable timer, error highlighting, solve detection, light and dark themes, and progress saved in the browser. Boards too big for the screen zoom and pan (pinch, wheel or the zoom buttons) with an overview map, and boards over 30×30 draw on a canvas. The server has its foundation: an HTTP API that serves puzzles and queues generation jobs, and a worker that generates puzzles in the background with progress and a time limit, keeping each solution in blob storage. The web app lists the server's puzzles after its built-in ones. Accounts, hints, daily puzzles and the rest come in later phases; each phase's plan is in [`docs/plans/`](docs/plans/).
 
 ## Quickstart
 
@@ -26,7 +26,7 @@ bun run check
 bun run dev:web
 ```
 
-Then open http://localhost:5173. Puzzles come from a few built-in fixtures until the server exists. `bun run --cwd apps/web build` writes the static site to `apps/web/build/`; `bun run --cwd apps/web preview` serves that build.
+Then open http://localhost:5173. The list shows the built-in puzzles, then any from the API if it is running (see Server below; Vite forwards `/api` to it). `bun run --cwd apps/web build` writes the static site to `apps/web/build/`; `bun run --cwd apps/web preview` serves that build.
 
 The end-to-end tests drive the built app in Chromium at the design kit's phone sizes (360×560 and 390×664) and on a desktop. They are not part of `bun run check`. The first time, install the browser:
 
@@ -51,7 +51,7 @@ docker compose up -d
 ./scripts/garage-init.sh
 ```
 
-The init script is safe to run again. To pick up the dev settings, copy `.env.example` to `.env`; Bun loads `.env` automatically.
+The init script is safe to run again. To pick up the dev settings, copy `.env.example` to `.env` at the repo root. Bun loads `.env` from the directory a command runs in, so run the scripts below from the repo root.
 
 | Service | Address | Notes |
 |---|---|---|
@@ -62,16 +62,39 @@ The init script is safe to run again. To pick up the dev settings, copy `.env.ex
 
 All of these credentials are for local development only. `docker compose down` stops the services. `docker compose down -v` also deletes their data, so run the init script again afterwards.
 
+### Server
+
+With the local services running and `.env` in place, start the API and the worker, each in its own terminal, from the repo root:
+
+```sh
+bun run dev:api      # http://localhost:3000
+bun run dev:worker
+```
+
+Both restart when a file changes. They share the SQLite database at `data/loophole.sqlite` (created on first start) and keep solutions in Garage. Ask for a puzzle, poll the job, then fetch the puzzle:
+
+```sh
+curl -s -X POST localhost:3000/api/jobs/generate -H 'content-type: application/json' -d '{"width":10,"height":10}'
+curl -s localhost:3000/api/jobs/<job id>        # status, progress, then result.puzzleId
+curl -s localhost:3000/api/puzzles/<puzzle id>  # clues only
+```
+
+The API is described in [`openapi.yaml`](openapi.yaml). To serve the built web app from the API as in production, build it (`bun run --cwd apps/web build`) and set `WEB_DIR=apps/web/build` in `.env`.
+
 ## Scripts
 
 | Command | What it does |
 |---|---|
-| `bun run check` | Lint, typecheck every workspace and run all tests. CI runs this. |
+| `bun run check` | Lint, typecheck every workspace, check the API contract is current and run all tests. CI runs this. |
 | `bun run lint` | Biome lint and format check |
 | `bun run format` | Apply Biome fixes |
 | `bun run typecheck` | Run each workspace's `typecheck` script |
 | `bun run test` | Run all tests with `bun test` |
 | `bun run dev:web` | Start the web app's dev server on port 5173 |
+| `bun run dev:api` | Start the HTTP API on port 3000, restarting on changes |
+| `bun run dev:worker` | Start the job worker, restarting on changes |
+| `bun run gen:api` | Regenerate `openapi.yaml` and the API client from the server's routes |
+| `bun run check:api` | Fail if `openapi.yaml` or the API client is out of date (part of the check) |
 | `bun run test:e2e` | Build the web app and run its Playwright tests |
 | `bun run test:perf` | Build the web app and run its frame-time checks |
 | `bun run --cwd packages/core bench` | Time puzzle verification on 10×10 to 100×100 boards (not part of the check) |
@@ -80,17 +103,19 @@ All of these credentials are for local development only. `docker compose down` s
 ## Repository layout
 
 ```
-packages/core      Puzzle engine shared by server and web
-apps/web           Player web app (SvelteKit, single-page)
-apps/              The server comes in a later phase
-infra/garage/      Garage config for local development
-scripts/           Dev helper scripts
-docs/PRD.md        Product requirements
-docs/FORMAT.md     Puzzle and board-state wire format
-docs/design/       Design kit; open docs/design/index.html
-docs/plans/        Implementation plan for each phase
-docs/TESTING.md    How tests are organized
-docs/DECISIONS.md  Log of decisions made during the build
+packages/core        Puzzle engine shared by server and web
+packages/api-client  Typed API client generated from openapi.yaml
+apps/server          HTTP API and job worker
+apps/web             Player web app (SvelteKit, single-page)
+openapi.yaml         The API contract, generated from the server's routes
+infra/garage/        Garage config for local development
+scripts/             Dev helper scripts
+docs/PRD.md          Product requirements
+docs/FORMAT.md       Puzzle and board-state wire format
+docs/design/         Design kit; open docs/design/index.html
+docs/plans/          Implementation plan for each phase
+docs/TESTING.md      How tests are organized
+docs/DECISIONS.md    Log of decisions made during the build
 ```
 
 ## Docs

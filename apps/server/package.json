@@ -1,0 +1,19 @@
+{
+  "name": "@loophole/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@hono/zod-openapi": "1.6.3",
+    "@loophole/core": "workspace:*",
+    "hono": "4.13.13",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "yaml": "2.9.1"
+  }
+}

@@ -5,7 +5,7 @@ import type { Rng } from "../rng.ts";
 /**
  * A random single loop on `grid`: the boundary of a random 4-connected region of cells grown
  * from one cell until it covers about `coverage` of the board. A test and benchmark helper only;
- * the real loop generator is WT3's.
+ * puzzles use `generateLoop` (loop.ts).
  *
  * A cell joins the region only when its 8 neighbours (off-board counts as outside), read around
  * the ring, hold exactly one run of inside cells and that run includes a side neighbour. That

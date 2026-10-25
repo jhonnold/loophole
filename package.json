@@ -12,10 +12,14 @@
     "format": "biome check --write .",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun test",
-    "check": "bun run lint && bun run typecheck && bun run test",
+    "check": "bun run lint && bun run typecheck && bun run check:api && bun run test",
     "dev:web": "bun run --cwd apps/web dev",
     "test:e2e": "bun run --cwd apps/web test:e2e",
-    "test:perf": "bun run --cwd apps/web test:perf"
+    "test:perf": "bun run --cwd apps/web test:perf",
+    "dev:api": "bun --watch apps/server/src/api/main.ts",
+    "dev:worker": "bun --watch apps/server/src/worker/main.ts",
+    "gen:api": "bun apps/server/scripts/gen-api.ts",
+    "check:api": "bun apps/server/scripts/gen-api.ts --check"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.3",
