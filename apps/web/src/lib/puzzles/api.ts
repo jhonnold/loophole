@@ -1,5 +1,5 @@
 import type { ApiClient, Schemas } from "@loophole/api-client";
-import { parsePuzzle } from "@loophole/core";
+import { EdgeState, encodeEdges, type Hint, parsePuzzle } from "@loophole/core";
 import type { PuzzleSource, PuzzleSummary } from "./source.ts";
 
 /** How many recent server puzzles the list shows. */
@@ -15,7 +15,29 @@ function summary(p: Schemas["PuzzleSummary"]): PuzzleSummary {
   };
 }
 
-/** Puzzles from the server's API: recent published puzzles, clues only. */
+function toHint(h: Schemas["Hint"]): Hint {
+  switch (h.kind) {
+    case "solved":
+    case "mistake":
+    case "reveal":
+      return h;
+    case "step":
+      return {
+        kind: "step",
+        step: {
+          rule: h.rule,
+          changes: h.changes.map((c) => ({
+            edge: c.edge,
+            state: c.state === "line" ? EdgeState.Line : EdgeState.Cross,
+          })),
+          cells: h.cells,
+          dots: h.dots,
+        },
+      };
+  }
+}
+
+/** Puzzles from the server's API: recent published puzzles, clues only, and hints. */
 export function apiSource(client: ApiClient): PuzzleSource {
   return {
     async list() {
@@ -35,6 +57,14 @@ export function apiSource(client: ApiClient): PuzzleSource {
         throw new Error(`Could not load puzzle ${id} (HTTP ${response.status})`);
       const { width, height } = data.puzzle;
       return { ...summary({ ...data, width, height }), puzzle: parsePuzzle(data.puzzle) };
+    },
+    async hint(id, _puzzle, edges) {
+      const { data, response } = await client.POST("/api/puzzles/{id}/hint", {
+        params: { path: { id } },
+        body: { edges: encodeEdges(edges) },
+      });
+      if (data === undefined) throw new Error(`Could not get a hint (HTTP ${response.status})`);
+      return toHint(data);
     },
   };
 }

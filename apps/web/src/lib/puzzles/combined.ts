@@ -17,5 +17,9 @@ export function withServer(local: PuzzleSource, server: PuzzleSource): PuzzleSou
     async get(id) {
       return (await local.get(id)) ?? (await server.get(id));
     },
+    async hint(id, puzzle, edges) {
+      const source = (await local.get(id)) !== null ? local : server;
+      return source.hint(id, puzzle, edges);
+    },
   };
 }

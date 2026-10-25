@@ -101,6 +101,13 @@ describe("screenCommand", () => {
     expect(screenCommand(key("y", { ctrlKey: true }))).toEqual({ type: "redo" });
   });
 
+  test("maps H to a hint and Escape to closing it", () => {
+    expect(screenCommand(key("h"))).toEqual({ type: "hint" });
+    expect(screenCommand(key("H", { shiftKey: true }))).toEqual({ type: "hint" });
+    expect(screenCommand(key("Escape"))).toEqual({ type: "close" });
+    expect(screenCommand(key("h", { ctrlKey: true }))).toBeNull();
+  });
+
   test("ignores other keys and Alt combinations", () => {
     expect(screenCommand(key("p", { ctrlKey: true }))).toBeNull();
     expect(screenCommand(key("z", { altKey: true }))).toBeNull();

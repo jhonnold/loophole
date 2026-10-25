@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { analyzeBoard, decodeEdges, verify } from "@loophole/core";
+import { analyzeBoard, decodeEdges, EdgeState, verify } from "@loophole/core";
 import { FIXTURE_SOLUTIONS } from "../test-support/solutions.ts";
 import { FIXTURES, fixtureSource } from "./fixtures.ts";
 
@@ -30,5 +30,26 @@ describe("fixture puzzles", () => {
   test("list matches the fixtures and get returns null for unknown ids", async () => {
     expect((await fixtureSource.list()).map((s) => s.id)).toEqual(FIXTURES.map((f) => f.id));
     expect(await fixtureSource.get("nope")).toBeNull();
+  });
+
+  test("hint works from the puzzle's own solution", async () => {
+    const entry = await fixtureSource.get("small-7");
+    if (entry === null) throw new Error("missing small-7");
+    const { puzzle } = entry;
+    const solution = decodeEdges(puzzle.grid, FIXTURE_SOLUTIONS["small-7"]);
+    const empty = new Uint8Array(puzzle.grid.edgeCount);
+    const first = await fixtureSource.hint("small-7", puzzle, empty);
+    expect(first.kind).toBe("step");
+    if (first.kind === "step") {
+      for (const { edge, state } of first.step.changes) expect(solution[edge]).toBe(state);
+    }
+    const wrong = empty.slice();
+    const e = solution.indexOf(EdgeState.Cross);
+    wrong[e] = EdgeState.Line;
+    expect(await fixtureSource.hint("small-7", puzzle, wrong)).toEqual({
+      kind: "mistake",
+      edge: e,
+      count: 1,
+    });
   });
 });
