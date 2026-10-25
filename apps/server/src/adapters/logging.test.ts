@@ -158,13 +158,21 @@ test("an uncaught error or unhandled rejection is logged as JSON, then the proce
 });
 
 test("a fatal line longer than a pipe's buffer arrives whole before the process exits", async () => {
+  // Writing to stdout first makes the shared pipe non-blocking, as Bun's own logging does.
   const script = `import { installJsonLogging } from ${JSON.stringify(`${import.meta.dir}/logging.ts`)};
+process.stdout.write("info\\n");
+process.stderr.write("warm\\n");
 installJsonLogging({ process: "api" });
 setTimeout(() => {
   throw new Error("x+".repeat(150_000));
 });`;
-  const proc = Bun.spawn([process.execPath, "-e", script], { stdout: "ignore", stderr: "pipe" });
-  const stderr = await new Response(proc.stderr).text();
+  const proc = Bun.spawn([process.execPath, "-e", script], { stdout: "pipe", stderr: "pipe" });
+  // Read late, so the pipe is full while the process writes the line.
+  await Bun.sleep(300);
+  const [, stderr] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
   expect(await proc.exited).toBe(1);
   const line = JSON.parse(stderr.trim().split("\n").at(-1) ?? "");
   expect(line).toMatchObject({ level: "error", msg: "Uncaught exception:" });

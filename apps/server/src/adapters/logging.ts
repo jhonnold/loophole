@@ -98,6 +98,27 @@ export function formatLine(
   });
 }
 
+const PAUSE = new Int32Array(new SharedArrayBuffer(4));
+
+/**
+ * Writes a line to standard error and returns once all of it is written, so `exit` can't cut it
+ * off. A pipe takes part of a long line, and once it is full a non-blocking one refuses (EAGAIN):
+ * then this waits a moment and goes on. An async write would not finish before `exit`.
+ */
+function writeStderr(line: string): void {
+  const bytes = Buffer.from(`${line}\n`);
+  let offset = 0;
+  while (offset < bytes.length) {
+    try {
+      offset += writeSync(2, bytes, offset, bytes.length - offset);
+    } catch (err) {
+      // The reader has gone: there is nowhere left to write.
+      if ((err as NodeJS.ErrnoException).code !== "EAGAIN") return;
+      Atomics.wait(PAUSE, 0, 0, 2);
+    }
+  }
+}
+
 /**
  * Replaces `console.debug/log/info/warn/error` with JSON line writers, and logs an uncaught error or
  * an unhandled rejection through them before exiting with status 1 (Bun would print it as plain
@@ -107,8 +128,7 @@ export function installJsonLogging(options: JsonLoggingOptions): void {
   const write =
     options.write ??
     ((level: Level, line: string) => {
-      // Synchronous, so a fatal line is whole before `exit` ends the process (a pipe takes 64 KB at once).
-      if (level === "warn" || level === "error") writeSync(2, `${line}\n`);
+      if (level === "warn" || level === "error") writeStderr(line);
       else process.stdout.write(`${line}\n`);
     });
   const log =
