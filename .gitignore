@@ -10,3 +10,4 @@ coverage/
 build/
 test-results/
 playwright-report/
+/data/

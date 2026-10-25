@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!docs/design", "!**/*.md"]
+    "includes": ["**", "!docs/design", "!**/*.md", "!packages/api-client/src/schema.ts"]
   },
   "formatter": {
     "indentStyle": "space",
@@ -15,5 +15,88 @@
   },
   "html": {
     "experimentalFullSupportEnabled": true
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["apps/server/src/managers/**", "!**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "bun:sqlite": "Managers reach the database through the interfaces in ports.ts.",
+                  "bun": "Managers reach I/O through the interfaces in ports.ts.",
+                  "hono": "Managers know nothing of HTTP; routes in api/ translate for them.",
+                  "@hono/zod-openapi": "Managers know nothing of HTTP; routes in api/ translate for them.",
+                  "zod": "Input is validated at the entrypoints, before it reaches a manager."
+                },
+                "patterns": [
+                  {
+                    "group": ["**/adapters/**", "**/api/**", "**/worker/**"],
+                    "message": "Managers depend only on ports.ts, domain.ts, the core package and other managers."
+                  },
+                  {
+                    "group": ["hono/**", "@hono/**", "zod/**", "node:*"],
+                    "message": "Managers know nothing of HTTP, validation libraries or I/O; use ports.ts."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/server/src/api/**",
+        "apps/server/src/worker/**",
+        "!apps/server/src/api/main.ts",
+        "!apps/server/src/api/spec.ts",
+        "!apps/server/src/worker/main.ts",
+        "!**/*.test.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "bun:sqlite": "Entrypoints call managers; only the composition roots build adapters."
+                },
+                "patterns": [
+                  {
+                    "group": ["**/adapters/**"],
+                    "message": "Entrypoints call managers; only the composition roots (main.ts, spec.ts) build adapters."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/server/src/adapters/**", "!**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/managers/**", "**/api/**", "**/worker/**"],
+                    "message": "Adapters implement ports.ts and convert data; they never call managers or entrypoints."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }
