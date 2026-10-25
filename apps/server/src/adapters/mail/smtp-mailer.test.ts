@@ -1,5 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import { SmtpMailer } from "./smtp-mailer.ts";
+import { SmtpMailer, smtpOptions } from "./smtp-mailer.ts";
+
+test("STARTTLS is required for a remote SMTP server, not on loopback or with TLS from the start", () => {
+  const settings = {
+    port: 587,
+    secure: false,
+    user: undefined,
+    password: undefined,
+    from: "Loophole <no-reply@loophole.test>",
+  };
+  expect(smtpOptions({ ...settings, host: "smtp.example" }).requireTLS).toBe(true);
+  expect(smtpOptions({ ...settings, host: "localhost" }).requireTLS).toBe(false);
+  expect(smtpOptions({ ...settings, host: "127.0.0.1" }).requireTLS).toBe(false);
+  expect(
+    smtpOptions({ ...settings, host: "smtp.example", port: 465, secure: true }).requireTLS,
+  ).toBe(false);
+});
 
 // Sends through Mailpit from docker-compose.yml and reads the message back from its API. Skipped
 // when Mailpit isn't running, as in CI.

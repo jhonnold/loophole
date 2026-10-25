@@ -13,6 +13,31 @@ export interface SmtpSettings {
   readonly from: string;
 }
 
+/**
+ * The transport options. Off loopback, STARTTLS is required: without it, a server that strips the
+ * STARTTLS offer would get the reset and verification links and the SMTP password in cleartext.
+ * Mailpit on loopback has no TLS.
+ */
+export function smtpOptions(settings: SmtpSettings) {
+  return {
+    host: settings.host,
+    port: settings.port,
+    secure: settings.secure,
+    requireTLS: !settings.secure && !isLoopback(settings.host),
+    auth:
+      settings.user === undefined
+        ? undefined
+        : { user: settings.user, pass: settings.password ?? "" },
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
+  };
+}
+
+function isLoopback(host: string): boolean {
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
 /** Sends mail over SMTP with nodemailer: Mailpit in development, any SMTP server in production. */
 export class SmtpMailer implements Mailer {
   readonly #transport;
@@ -20,18 +45,7 @@ export class SmtpMailer implements Mailer {
 
   constructor(settings: SmtpSettings) {
     this.#from = settings.from;
-    this.#transport = createTransport({
-      host: settings.host,
-      port: settings.port,
-      secure: settings.secure,
-      auth:
-        settings.user === undefined
-          ? undefined
-          : { user: settings.user, pass: settings.password ?? "" },
-      connectionTimeout: 10_000,
-      greetingTimeout: 10_000,
-      socketTimeout: 20_000,
-    });
+    this.#transport = createTransport(smtpOptions(settings));
   }
 
   async send(message: MailMessage): Promise<void> {
