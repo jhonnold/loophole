@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { analyzeBoard, createGrid, createPuzzle, EdgeState, hEdgeIndex } from "@loophole/core";
+import type { HintMarks } from "./hint.ts";
 import { MIN_CLUE_CELL, type Painter, paintBoard, type Scene } from "./paint.ts";
 import { viewLayout } from "./viewport.ts";
 
@@ -34,9 +35,23 @@ function recorder() {
   return { ctx: ctx as unknown as Painter, calls };
 }
 
-const palette = { ink: "#000", pencil: "#888", shu: "#c00", wash: "#fee" };
+const palette = {
+  ink: "#000",
+  pencil: "#888",
+  shu: "#c00",
+  wash: "#fee",
+  ai: "#24a",
+  hintWash: "#24a3",
+};
 
-function scene(width: number, cell: number, x: number, y: number, edges?: Uint8Array): Scene {
+function scene(
+  width: number,
+  cell: number,
+  x: number,
+  y: number,
+  edges?: Uint8Array,
+  hint: HintMarks | null = null,
+): Scene {
   const puzzle = createPuzzle(width, width, new Array(width * width).fill(2));
   const grid = puzzle.grid;
   const e = edges ?? new Uint8Array(grid.edgeCount);
@@ -49,6 +64,7 @@ function scene(width: number, cell: number, x: number, y: number, edges?: Uint8A
     port: { width: 360, height: 400 },
     ratio: 2,
     palette,
+    hint,
   };
 }
 
@@ -90,5 +106,42 @@ describe("paintBoard", () => {
     const rings = v.dots.length + v.overfullCells.length + v.starvedCells.length;
     expect(v.dots.length).toBe(1);
     expect(calls.arc).toBe(36 + rings);
+  });
+
+  test("draws a hint's wash, dot wash and ghost moves", () => {
+    const grid = createGrid(5, 5);
+    const hint: HintMarks = {
+      cells: [0, 1],
+      dots: [7],
+      ghosts: [
+        [hEdgeIndex(grid, 0, 0), EdgeState.Line],
+        [hEdgeIndex(grid, 0, 1), EdgeState.Cross],
+      ],
+    };
+    const plain = recorder();
+    paintBoard(plain.ctx, scene(5, 44, 0, 0));
+    const { ctx, calls } = recorder();
+    paintBoard(ctx, scene(5, 44, 0, 0, undefined, hint));
+    // Two cell washes; one dot wash circle.
+    expect(calls.fillRect).toBe((plain.calls.fillRect ?? 0) + 2);
+    expect(calls.arc).toBe(plain.calls.arc + 1);
+    // One dashed ghost line and one ghost × (two strokes of the × each moveTo + lineTo).
+    expect(calls.lineTo).toBe((plain.calls.lineTo ?? 0) + 1 + 2);
+  });
+
+  test("leaves out ghosts on edges the player has already marked", () => {
+    const grid = createGrid(5, 5);
+    const edges = new Uint8Array(grid.edgeCount);
+    edges[hEdgeIndex(grid, 0, 0)] = EdgeState.Line;
+    const hint: HintMarks = {
+      cells: [],
+      dots: [],
+      ghosts: [[hEdgeIndex(grid, 0, 0), EdgeState.Line]],
+    };
+    const plain = recorder();
+    paintBoard(plain.ctx, scene(5, 44, 0, 0, edges));
+    const { ctx, calls } = recorder();
+    paintBoard(ctx, scene(5, 44, 0, 0, edges, hint));
+    expect(calls.lineTo).toBe(plain.calls.lineTo);
   });
 });

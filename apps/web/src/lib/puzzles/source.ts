@@ -1,4 +1,4 @@
-import type { Puzzle } from "@loophole/core";
+import type { Hint, Puzzle } from "@loophole/core";
 
 export interface PuzzleSummary {
   /** Stable id; also the key for saved progress. */
@@ -28,4 +28,6 @@ export interface PuzzleSource {
   list(): Promise<PuzzleSummary[]>;
   /** Resolves to null when there is no puzzle with this id. */
   get(id: string): Promise<PuzzleEntry | null>;
+  /** The next hint for the player's board `edges` on puzzle `id` (PRD FR-12). */
+  hint(id: string, puzzle: Puzzle, edges: Uint8Array): Promise<Hint>;
 }

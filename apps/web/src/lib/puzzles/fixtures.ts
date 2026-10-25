@@ -1,4 +1,5 @@
-import { type PuzzleWireV1, parsePuzzle } from "@loophole/core";
+import { findHint, type PuzzleWireV1, parsePuzzle } from "@loophole/core";
+import { puzzleSolution } from "../game/hint.ts";
 import { LARGE_FIXTURES } from "./large-fixtures.ts";
 import type { PuzzleEntry, PuzzleSource, PuzzleSummary } from "./source.ts";
 
@@ -52,6 +53,9 @@ function summary(f: FixtureRecord): PuzzleSummary {
   };
 }
 
+// Solutions worked out on the first hint for each built-in puzzle; the app ships none.
+const solutions = new Map<string, Uint8Array>();
+
 export const fixtureSource: PuzzleSource = {
   async list() {
     return FIXTURES.map(summary);
@@ -61,5 +65,13 @@ export const fixtureSource: PuzzleSource = {
     if (f === undefined) return null;
     const entry: PuzzleEntry = { ...summary(f), puzzle: parsePuzzle(f.wire) };
     return entry;
+  },
+  async hint(id, puzzle, edges) {
+    let solution = solutions.get(id);
+    if (solution === undefined) {
+      solution = puzzleSolution(puzzle);
+      solutions.set(id, solution);
+    }
+    return findHint(puzzle, solution, edges);
   },
 };

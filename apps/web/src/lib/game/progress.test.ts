@@ -11,24 +11,25 @@ import {
 const grid = createGrid(2, 2);
 
 describe("progress store", () => {
-  test("round-trips edges, time and solved flag per puzzle", () => {
+  test("round-trips edges, time, solved and assisted flags per puzzle", () => {
     const storage = memoryStorage();
     const store = createProgressStore(storage);
     const edges = new Uint8Array([1, 1, 2, 2, 1, 1, 1, 2, 1, 1, 2, 1]);
-    store.save("a", { edges, elapsedMs: 4200.4, solved: true });
-    expect(store.load("a", grid)).toEqual({ edges, elapsedMs: 4200, solved: true });
+    store.save("a", { edges, elapsedMs: 4200.4, solved: true, assisted: true });
+    expect(store.load("a", grid)).toEqual({ edges, elapsedMs: 4200, solved: true, assisted: true });
     expect(store.load("b", grid)).toBeNull();
     expect(JSON.parse(storage.data.get(progressKey("a")) ?? "")).toEqual({
       v: 1,
       edges: "112211121121",
       elapsedMs: 4200,
       solved: true,
+      assisted: true,
     });
   });
 
   test("clear forgets a puzzle", () => {
     const store = createProgressStore(memoryStorage());
-    store.save("a", { edges: new Uint8Array(12), elapsedMs: 0, solved: false });
+    store.save("a", { edges: new Uint8Array(12), elapsedMs: 0, solved: false, assisted: false });
     store.clear("a");
     expect(store.load("a", grid)).toBeNull();
   });
@@ -46,11 +47,13 @@ describe("progress store", () => {
       storage.data.set(progressKey("a"), text);
       expect(store.load("a", grid)).toBeNull();
     }
+    // A save from before hints has no assisted flag.
     storage.data.set(progressKey("a"), JSON.stringify({ v: 1, edges: "000000000000" }));
     expect(store.load("a", grid)).toEqual({
       edges: new Uint8Array(12),
       elapsedMs: 0,
       solved: false,
+      assisted: false,
     });
   });
 
@@ -93,7 +96,12 @@ describe("progress store", () => {
     };
     for (const store of [createProgressStore(throwing), createProgressStore(null)]) {
       expect(() =>
-        store.save("a", { edges: new Uint8Array(12), elapsedMs: 1, solved: false }),
+        store.save("a", {
+          edges: new Uint8Array(12),
+          elapsedMs: 1,
+          solved: false,
+          assisted: false,
+        }),
       ).not.toThrow();
       expect(store.load("a", grid)).toBeNull();
       expect(() => store.clear("a")).not.toThrow();

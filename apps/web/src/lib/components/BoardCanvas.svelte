@@ -2,6 +2,7 @@
   import type { BoardAnalysis, Puzzle } from "@loophole/core";
   import { onMount } from "svelte";
   import type { Layout } from "../game/geometry.ts";
+  import type { HintMarks } from "../game/hint.ts";
   import { type Palette, paintBoard } from "../game/paint.ts";
   import type { Size, View } from "../game/viewport.ts";
   import { onPixelRatioChange } from "../pixel-ratio.ts";
@@ -15,9 +16,10 @@
     layout: Layout;
     view: View;
     port: Size;
+    hint: HintMarks | null;
   }
 
-  let { puzzle, edges, analysis, layout, view, port }: Props = $props();
+  let { puzzle, edges, analysis, layout, view, port, hint }: Props = $props();
 
   let canvas: HTMLCanvasElement | undefined = $state();
   let ratio = $state(1);
@@ -27,7 +29,14 @@
   function palette(el: Element): Palette {
     const css = getComputedStyle(el);
     const get = (name: string) => css.getPropertyValue(name).trim();
-    return { ink: get("--ink"), pencil: get("--pencil"), shu: get("--shu"), wash: get("--solved-wash") };
+    return {
+      ink: get("--ink"),
+      pencil: get("--pencil"),
+      shu: get("--shu"),
+      wash: get("--solved-wash"),
+      ai: get("--ai"),
+      hintWash: get("--hint-wash"),
+    };
   }
 
   // Paint at most once per frame, with the latest props.
@@ -35,7 +44,7 @@
     const el = canvas;
     if (el === undefined) return;
     void restyle;
-    const scene = { puzzle, edges, analysis, layout, view, port, ratio, palette: palette(el) };
+    const scene = { puzzle, edges, analysis, layout, view, port, ratio, palette: palette(el), hint };
     const frame = requestAnimationFrame(() => {
       const ctx = el.getContext("2d");
       if (ctx !== null) paintBoard(ctx, scene);

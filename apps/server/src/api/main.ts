@@ -16,6 +16,7 @@ import { randomToken } from "../adapters/random-token.ts";
 import { MemoryRateLimiter } from "../adapters/rate-limiter.ts";
 import { loadConfig } from "../config.ts";
 import { AccountManager } from "../managers/account-manager.ts";
+import { HintManager } from "../managers/hint-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { SessionManager } from "../managers/session-manager.ts";
@@ -64,9 +65,11 @@ const accounts = new AccountManager({
   newToken: randomToken,
   publicUrl: config.publicUrl,
 });
+const hints = new HintManager({ puzzles });
 const app = createApp({
   puzzles,
   jobs,
+  hints,
   accounts,
   sessions,
   limiter,

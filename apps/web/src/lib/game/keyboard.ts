@@ -4,7 +4,9 @@ export type Direction = "up" | "down" | "left" | "right";
 
 export type Command =
   | { readonly type: "move"; readonly direction: Direction }
-  | { readonly type: "cycle" | "cross" | "erase" | "undo" | "redo" | "pause" };
+  | {
+      readonly type: "cycle" | "cross" | "erase" | "undo" | "redo" | "pause" | "hint" | "close";
+    };
 
 /**
  * Moves the keyboard edge cursor. Think of the edges as rows that alternate between horizontal and
@@ -65,7 +67,10 @@ export interface KeyInput {
   readonly altKey: boolean;
 }
 
-/** Shortcuts that work anywhere on the play screen: Z undo, Y redo, P pause, plus Ctrl/⌘ forms. */
+/**
+ * Shortcuts that work anywhere on the play screen: Z undo, Y redo, P pause, H hint, Escape to close
+ * the hint card, plus Ctrl/⌘ forms of undo and redo.
+ */
 export function screenCommand(e: KeyInput): Command | null {
   if (e.altKey) return null;
   const key = e.key.toLowerCase();
@@ -77,6 +82,8 @@ export function screenCommand(e: KeyInput): Command | null {
   if (key === "z") return { type: "undo" };
   if (key === "y") return { type: "redo" };
   if (key === "p") return { type: "pause" };
+  if (key === "h") return { type: "hint" };
+  if (key === "escape") return { type: "close" };
   return null;
 }
 

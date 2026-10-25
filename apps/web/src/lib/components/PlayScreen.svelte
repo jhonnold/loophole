@@ -1,6 +1,6 @@
 <script lang="ts">
   import { analyzeBoard } from "@loophole/core";
-  import { onMount, tick } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import {
     applyChanges,
     type Board,
@@ -19,6 +19,7 @@
     POINTER_MIN_CELL,
     TOUCH_MIN_CELL,
   } from "../game/geometry.ts";
+  import { type HintView, hintCurrent, hintView } from "../game/hint.ts";
   import { type Command, screenCommand } from "../game/keyboard.ts";
   import { violationMessages } from "../game/messages.ts";
   import { browserStorage, createProgressStore, type ProgressStore } from "../game/progress.ts";
@@ -32,8 +33,9 @@
     stop,
   } from "../game/timer.ts";
   import { clampView, type View, viewLayout, zoomLimits } from "../game/viewport.ts";
-  import { type PuzzleEntry, puzzleTitle } from "../puzzles/index.ts";
+  import { type PuzzleEntry, puzzleSource, puzzleTitle } from "../puzzles/index.ts";
   import BoardView from "./BoardView.svelte";
+  import HintCard from "./HintCard.svelte";
   import PauseButton from "./PauseButton.svelte";
   import SolvedSeal from "./SolvedSeal.svelte";
   import ToolBar from "./ToolBar.svelte";
@@ -56,6 +58,20 @@
   let ready = $state(false);
   let store: ProgressStore | null = null;
   let boardView: { focus(): void } | undefined = $state();
+
+  // Hints (FR-12). `hint` stays drawn on the board until its move is made or overtaken; `hintOpen`
+  // is whether its card is showing in place of the tool tray. Seeing a hint marks the attempt as
+  // assisted, which is saved with the progress.
+  let hint: HintView | null = $state.raw(null);
+  let hintOpen = $state(false);
+  let hintBusy = $state(false);
+  let hintFailed = $state(false);
+  let assisted = $state(false);
+  // Set when the puzzle screen goes away, so a hint that arrives late cannot save over newer progress.
+  let destroyed = false;
+  onDestroy(() => {
+    destroyed = true;
+  });
 
   const analysis = $derived(analyzeBoard(puzzle, board.edges));
   const solved = $derived(analysis.solved);
@@ -113,12 +129,14 @@
       edges: board.edges,
       elapsedMs: elapsed(watch, performance.now()),
       solved,
+      assisted,
     });
   }
 
   function update(next: Board) {
     if (next === board) return;
     board = next;
+    hintFailed = false;
     save();
   }
 
@@ -140,6 +158,56 @@
     tick().then(() => boardView?.focus());
   }
 
+  async function askHint() {
+    if (locked || hintBusy) return;
+    if (hint !== null) {
+      hintOpen = true;
+      return;
+    }
+    hintBusy = true;
+    hintFailed = false;
+    const edges = board.edges;
+    try {
+      const result = await puzzleSource.hint(entry.id, puzzle, edges);
+      // The screen was left, or the board changed, while the hint was on its way.
+      if (destroyed || board.edges !== edges) return;
+      const view = hintView(grid, result, edges);
+      if (view === null) return;
+      hint = view;
+      hintOpen = true;
+      assisted = true;
+      save();
+    } catch (err) {
+      console.warn("Hint unavailable:", err);
+      hintFailed = true;
+    } finally {
+      hintBusy = false;
+    }
+  }
+
+  function applyHint() {
+    if (hint === null) return;
+    const changes = [...hint.apply];
+    hint = null;
+    hintOpen = false;
+    edit(changes, false);
+    focusBoard();
+  }
+
+  function closeHint() {
+    hintOpen = false;
+    focusBoard();
+  }
+
+  // A hint ends once its move is made, or one of its edges is marked differently.
+  $effect(() => {
+    if (hint !== null && (solved || !hintCurrent(hint, board.edges))) {
+      if (hintOpen) focusBoard();
+      hint = null;
+      hintOpen = false;
+    }
+  });
+
   function setPaused(value: boolean) {
     if (!ready || solved || value === paused) return;
     paused = value;
@@ -155,6 +223,8 @@
     else if (locked) return;
     else if (cmd.type === "undo") update(undo(board));
     else if (cmd.type === "redo") update(redo(board));
+    else if (cmd.type === "hint") askHint();
+    else if (cmd.type === "close" && hintOpen) closeHint();
   }
 
   function onwindowkeydown(e: KeyboardEvent) {
@@ -162,6 +232,8 @@
     if (t?.closest("input, textarea, select, [contenteditable='true']")) return;
     const cmd = screenCommand(e);
     if (cmd === null) return;
+    // Escape closes a hint card; with none open it is left for other UI, such as a dialog.
+    if (cmd.type === "close" && !hintOpen) return;
     e.preventDefault();
     run(cmd);
   }
@@ -176,6 +248,9 @@
     now = performance.now();
     watch = start(createStopwatch(), now);
     paused = false;
+    hint = null;
+    hintOpen = false;
+    assisted = false;
     focusBoard();
   }
 
@@ -200,6 +275,7 @@
     if (saved !== null) {
       board = createBoard(grid.edgeCount, saved.edges);
       watch = createStopwatch(saved.elapsedMs);
+      assisted = saved.assisted;
     }
     now = performance.now();
     if (!analyzeBoard(puzzle, board.edges).solved) watch = start(watch, now);
@@ -251,7 +327,9 @@
 
   <p class="status">
     <span><b>{analysis.satisfiedClues}</b> of {analysis.clueCount} clues satisfied</span>
-    {#if zoomable}<span>Pinch or use +/− to zoom</span>{/if}
+    <!-- One line only: the tag takes the zoom tip's place once a hint is used. -->
+    {#if assisted}<span class="assisted">Hint used</span>
+    {:else if zoomable}<span>Pinch or use +/− to zoom</span>{/if}
   </p>
 
   <main class="play" class:zoom={zoomable}>
@@ -280,6 +358,7 @@
               port={frame.port}
               zoom={frame.zoom}
               {locked}
+              hint={hint?.marks ?? null}
               onedit={edit}
               onview={(v) => (zoomed = v)}
             />
@@ -297,6 +376,7 @@
           <span class="label">Time</span>
           <span class="big-clock">{clock}</span>
           <span class="soft"><b>{analysis.satisfiedClues}</b> of {analysis.clueCount} clues satisfied</span>
+          {#if assisted}<span class="assisted">Hint used</span>{/if}
         </div>
         <button type="button" class="outline" disabled={solved} onclick={() => setPaused(!paused)}>
           {paused ? "Resume" : "Pause"} <kbd>P</kbd>
@@ -308,10 +388,15 @@
           <div class="card solved-card">
             <div class="solved-text">
               <span class="solved-title">Solved in {clock}</span>
+              {#if assisted}<span class="assisted">Hint used</span>{/if}
               <span class="soft">Saved on this device.</span>
             </div>
             <button type="button" class="primary" onclick={startOver}>Start over</button>
           </div>
+        {:else if hint !== null && hintOpen && !paused}
+          <HintCard {grid} view={hint} onapply={applyHint} onlater={closeHint} />
+        {:else if hintFailed}
+          <p class="card hint-failed" role="status">Couldn't get a hint just now. Try again in a moment.</p>
         {:else if messages.length > 0}
           <div class="card errors" role="status">
             {#each messages as m (m.title)}
@@ -328,13 +413,15 @@
 
       <div class="spacer" bind:clientHeight={spacerHeight}></div>
 
-      {#if !solved}
+      {#if !solved && !(hint !== null && hintOpen && !paused)}
         <ToolBar
           canUndo={!locked && board.past.length > 0}
           canRedo={!locked && board.future.length > 0}
+          canHint={!locked && !hintBusy}
           canClear={!locked && hasMarks(board)}
           onundo={() => run({ type: "undo" })}
           onredo={() => run({ type: "redo" })}
+          onhint={() => run({ type: "hint" })}
           onclear={clear}
         />
       {/if}
@@ -347,6 +434,7 @@
           <dt>X</dt><dd>cross the edge</dd>
           <dt>Backspace</dt><dd>clear the edge</dd>
           <dt>Z / Y</dt><dd>undo / redo</dd>
+          <dt>H</dt><dd>hint</dd>
           <dt>P</dt><dd>pause</dd>
           {#if zoomable && !solved}<dt>+ / −</dt><dd>zoom in / out</dd>{/if}
           <dt>Mouse</dt><dd>click to cycle, drag to draw a run</dd>
@@ -582,6 +670,30 @@
     margin-top: 1px;
     border: 2px solid var(--shu);
     border-radius: 50%;
+  }
+
+  /* "Hint used" (Play artboard): an ai tag; the words carry it, not the colour. */
+  .assisted {
+    align-self: flex-start;
+    padding: 3px 10px;
+    border-radius: 6px;
+    background: var(--ai-wash);
+    color: var(--ai);
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  /* In the status line the tag overhangs the line box, so showing it never moves the board. */
+  .status .assisted {
+    margin-block: -3px;
+  }
+
+  .hint-failed {
+    margin: 0;
+    padding: 10px 14px;
+    font-size: 15px;
+    line-height: 1.45;
   }
 
   .solved-card {

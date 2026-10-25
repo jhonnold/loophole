@@ -12,7 +12,7 @@ The code is layered, and Biome's import rules check the direction:
 Conventions:
 
 - SQL runs as prepared statements with named parameters. A schema change is a new numbered migration file; files that have run stay as they are.
-- Solutions and solver traces live in the blob store, and puzzle responses carry clues only (PRD FR-25). Server code that needs a solution reads it through the puzzle manager.
+- Solutions and solver traces live in the blob store, and puzzle responses carry clues only (PRD FR-25). Server code that needs a solution reads it through the puzzle manager; hints are worked out here from the stored solution (the hint manager), so a client never needs it.
 - After changing a route or a request or response schema, run `bun run gen:api` to regenerate `openapi.yaml` and the client package. The gate fails while they are stale.
 - Server commands run from the repo root, so Bun loads the root `.env` and relative paths in the settings resolve from there.
 - Routes that need a logged-in user call `currentUser(c, sessions)` from the session cookie module and answer 401 when it is null; routes for confirmed accounts only also check `emailVerifiedAt`. Every state-changing request under `/api` goes through the CSRF check, so list a 403 response on new POST, PUT and DELETE routes. A route without a request body isn't covered by the JSON-only rule, so it relies on that check and SameSite alone.

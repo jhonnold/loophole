@@ -1,6 +1,6 @@
 import type { Hook } from "@hono/zod-openapi";
 import { createRoute, OpenAPIHono } from "@hono/zod-openapi";
-import { serializePuzzle } from "@loophole/core";
+import { EdgeState, type Hint, serializePuzzle } from "@loophole/core";
 import type { Env } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { serveStatic } from "hono/bun";
@@ -13,6 +13,7 @@ import {
   QueueFullError,
   RateLimitedError,
 } from "../managers/errors.ts";
+import { type HintManager, InvalidBoardError } from "../managers/hint-manager.ts";
 import type { JobManager } from "../managers/job-manager.ts";
 import type { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { type AccountRouteDeps, registerAccountRoutes, tooManyRequests } from "./accounts.ts";
@@ -21,6 +22,8 @@ import { problem, problemResponse } from "./problem.ts";
 import {
   GenerateRequestSchema,
   HealthSchema,
+  HintRequestSchema,
+  HintSchema,
   IdParamSchema,
   JobSchema,
   PuzzleListQuerySchema,
@@ -31,6 +34,7 @@ import {
 export interface AppDeps extends AccountRouteDeps {
   readonly puzzles: PuzzleManager;
   readonly jobs: JobManager;
+  readonly hints: HintManager;
   /** Folder of the built web app to serve at `/`, with `index.html` for unknown paths. */
   readonly webDir?: string;
 }
@@ -70,6 +74,26 @@ const getPuzzleRoute = createRoute({
     200: { description: "The puzzle.", content: { "application/json": { schema: PuzzleSchema } } },
     400: problemResponse("Invalid id."),
     404: problemResponse("No published puzzle with this id."),
+  },
+});
+
+const hintRoute = createRoute({
+  method: "post",
+  path: "/api/puzzles/{id}/hint",
+  summary: "The next hint for a player's board",
+  description:
+    "Works from the player's marks and the stored solution, which is never sent (PRD FR-12, FR-25).",
+  request: {
+    params: IdParamSchema,
+    body: { required: true, content: { "application/json": { schema: HintRequestSchema } } },
+  },
+  responses: {
+    200: { description: "The hint.", content: { "application/json": { schema: HintSchema } } },
+    400: problemResponse("Invalid id, or a board that does not fit the puzzle."),
+    404: problemResponse("No published puzzle with this id."),
+    413: problemResponse("Request body larger than 64 KiB."),
+    403: problemResponse("Sent from another site (CSRF protection)."),
+    415: problemResponse("Request body is not JSON."),
   },
 });
 
@@ -121,7 +145,7 @@ const validationHook: Hook<unknown, Env, string, unknown> = (result, c) => {
 
 /** The HTTP API: routes translate between wire shapes and domain types; managers do the work. */
 export function createApp(deps: AppDeps): OpenAPIHono {
-  const { puzzles, jobs } = deps;
+  const { puzzles, jobs, hints } = deps;
   const app = new OpenAPIHono({ defaultHook: validationHook });
 
   app.use(
@@ -144,6 +168,12 @@ export function createApp(deps: AppDeps): OpenAPIHono {
     const record = puzzles.get(c.req.valid("param").id);
     if (record === null) return problem(c, 404, "Puzzle not found");
     return c.json(toPuzzleDto(record), 200);
+  });
+
+  app.openapi(hintRoute, async (c) => {
+    const hint = await hints.hint(c.req.valid("param").id, c.req.valid("json").edges);
+    if (hint === null) return problem(c, 404, "Puzzle not found");
+    return c.json(toHintDto(hint), 200);
   });
 
   app.openapi(generateRoute, (c) => {
@@ -172,6 +202,8 @@ export function createApp(deps: AppDeps): OpenAPIHono {
   app.onError((err, c) => {
     if (err instanceof QueueFullError)
       return problem(c, 503, "Queue full", { detail: err.message });
+    if (err instanceof InvalidBoardError)
+      return problem(c, 400, "Invalid board", { detail: err.message });
     if (err instanceof InvalidCredentialsError)
       return problem(c, 401, "Wrong email or password", { detail: err.message });
     if (err instanceof CaptchaFailedError)
@@ -208,6 +240,28 @@ function toPuzzleSummary(r: PuzzleRecord) {
     origin: r.origin,
     createdAt: iso(r.createdAt),
   };
+}
+
+function toHintDto(hint: Hint) {
+  switch (hint.kind) {
+    case "solved":
+      return { kind: "solved" as const };
+    case "mistake":
+      return { kind: "mistake" as const, edge: hint.edge, count: hint.count };
+    case "reveal":
+      return { kind: "reveal" as const, edge: hint.edge };
+    case "step":
+      return {
+        kind: "step" as const,
+        rule: hint.step.rule,
+        changes: hint.step.changes.map((ch) => ({
+          edge: ch.edge,
+          state: ch.state === EdgeState.Line ? ("line" as const) : ("cross" as const),
+        })),
+        cells: [...hint.step.cells],
+        dots: [...hint.step.dots],
+      };
+  }
 }
 
 function toJobDto(job: Job) {

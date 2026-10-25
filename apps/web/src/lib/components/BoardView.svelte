@@ -1,8 +1,16 @@
+<script lang="ts" module>
+  // Hints this page has already panned to. A board remounts on resume, and must not pan back to a hint
+  // the player has since moved away from, so this lives outside the component.
+  const panned = new WeakSet<object>();
+</script>
+
 <script lang="ts">
   import { type BoardAnalysis, EdgeState, NONE, type Puzzle } from "@loophole/core";
+  import { untrack } from "svelte";
   import { type EdgeChange, nextState } from "../game/board.ts";
   import { edgeSegment, type Layout, type Point } from "../game/geometry.ts";
   import { PointerGesture } from "../game/gesture.ts";
+  import { type HintMarks, hintRect } from "../game/hint.ts";
   import { boardCommand, edgeLabel, moveCursor } from "../game/keyboard.ts";
   import { BoardPointers } from "../game/pointers.ts";
   import {
@@ -35,13 +43,16 @@
     zoom: ZoomLimits | null;
     /** No drawing: paused or solved. Zoom and pan still work. */
     locked: boolean;
+    /** The hint on show, drawn over the board; null for none. */
+    hint: HintMarks | null;
     /** Applies edits; `merge` joins them to the previous undo step (drag strokes). */
     onedit: (changes: EdgeChange[], merge: boolean) => void;
     /** Moves or zooms the view of a zoomable board. */
     onview: (view: View) => void;
   }
 
-  let { puzzle, edges, analysis, layout, view, port, zoom, locked, onedit, onview }: Props = $props();
+  let { puzzle, edges, analysis, layout, view, port, zoom, locked, hint, onedit, onview }: Props =
+    $props();
 
   const grid = $derived(puzzle.grid);
   const S = $derived(layout.cell);
@@ -147,9 +158,10 @@
       let dx = e.deltaX * unit;
       let dy = e.deltaY * unit;
       if (e.ctrlKey || e.metaKey) {
-        // A mouse-wheel notch is about 100 px of delta; clamp it so one notch is about 1.28×, not e×.
-        const step = Math.max(-50, Math.min(50, dy));
-        onview(zoomAround(grid, view, view.cell * Math.exp(-step * 0.005), local(e), port, zoom));
+        // A mouse-wheel notch is about 100 px of delta; clamp it so one notch is about 1.28×, not
+        // e×. Trackpad pinches send small deltas, which this rate keeps quick.
+        const step = Math.max(-25, Math.min(25, dy));
+        onview(zoomAround(grid, view, view.cell * Math.exp(-step * 0.01), local(e), port, zoom));
         return;
       }
       if (e.shiftKey && dx === 0) [dx, dy] = [dy, 0];
@@ -179,6 +191,19 @@
     };
     onview(revealRect(grid, view, rect, port, zoom));
   }
+
+  // A new hint on a zoomed board pans its marks into view; the view is read without tracking it,
+  // so this runs once per hint, not on every pan.
+  $effect(() => {
+    const marks = hint;
+    if (marks === null || panned.has(marks)) return;
+    untrack(() => {
+      const rect = hintRect(grid, layout, marks);
+      if (zoom === null || rect === null) return;
+      panned.add(marks);
+      onview(revealRect(grid, view, rect, port, zoom));
+    });
+  });
 
   /** Moves keyboard focus to the board; the parent calls this after the board remounts. */
   export function focus(): void {
@@ -246,9 +271,9 @@
     onblur={() => (focused = false)}
   >
     {#if canvas}
-      <BoardCanvas {puzzle} {edges} {analysis} {layout} {view} {port} />
+      <BoardCanvas {puzzle} {edges} {analysis} {layout} {view} {port} {hint} />
     {:else}
-      <BoardSvg {puzzle} {edges} {analysis} {layout} {view} {port} />
+      <BoardSvg {puzzle} {edges} {analysis} {layout} {view} {port} {hint} />
     {/if}
     {#if showCursor}
       <svg class="overlay" width={port.width} height={port.height} aria-hidden="true">

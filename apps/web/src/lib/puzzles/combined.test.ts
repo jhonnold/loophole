@@ -7,10 +7,12 @@ function entry(id: string): PuzzleEntry {
   return { id, name: id, subtitle: "", width: 1, height: 1, puzzle: createPuzzle(1, 1) };
 }
 
+/** A source holding `ids`; every hint it gives is a reveal of edge `ids.length`, to tell sources apart. */
 function sourceOf(...ids: string[]): PuzzleSource {
   return {
     list: async () => ids.map((id) => ({ ...entry(id) })),
     get: async (id) => (ids.includes(id) ? entry(id) : null),
+    hint: async () => ({ kind: "reveal", edge: ids.length }),
   };
 }
 
@@ -19,6 +21,9 @@ const down: PuzzleSource = {
     throw new Error("offline");
   },
   get: async () => {
+    throw new Error("offline");
+  },
+  hint: async () => {
     throw new Error("offline");
   },
 };
@@ -43,5 +48,16 @@ describe("withServer", () => {
     await expect(source.get("z")).rejects.toThrow("offline");
     expect((await withServer(sourceOf("a"), sourceOf("z")).get("z"))?.id).toBe("z");
     expect(await withServer(sourceOf("a"), sourceOf("z")).get("y")).toBeNull();
+  });
+
+  test("hint asks the source that holds the puzzle", async () => {
+    const puzzle = createPuzzle(1, 1);
+    const edges = new Uint8Array(4);
+    const source = withServer(sourceOf("a"), sourceOf("x", "y"));
+    expect(await source.hint("a", puzzle, edges)).toEqual({ kind: "reveal", edge: 1 });
+    expect(await source.hint("x", puzzle, edges)).toEqual({ kind: "reveal", edge: 2 });
+    await expect(withServer(sourceOf("a"), down).hint("z", puzzle, edges)).rejects.toThrow(
+      "offline",
+    );
   });
 });

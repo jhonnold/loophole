@@ -8,6 +8,8 @@ export interface Progress {
   readonly edges: Uint8Array;
   readonly elapsedMs: number;
   readonly solved: boolean;
+  /** A hint was shown during this attempt (PRD FR-12). */
+  readonly assisted: boolean;
 }
 
 interface StoredProgressV1 {
@@ -15,6 +17,8 @@ interface StoredProgressV1 {
   edges: string;
   elapsedMs: number;
   solved: boolean;
+  /** Missing in saves from before hints, which had none. */
+  assisted?: boolean;
 }
 
 const PREFIX = "loophole:progress:";
@@ -59,7 +63,12 @@ export function createProgressStore(storage: KeyValueStorage | null): ProgressSt
           data.elapsedMs > 0
             ? data.elapsedMs
             : 0;
-        return { edges: decodeEdges(grid, data.edges), elapsedMs, solved: data.solved === true };
+        return {
+          edges: decodeEdges(grid, data.edges),
+          elapsedMs,
+          solved: data.solved === true,
+          assisted: data.assisted === true,
+        };
       } catch {
         return null;
       }
@@ -70,6 +79,7 @@ export function createProgressStore(storage: KeyValueStorage | null): ProgressSt
         edges: encodeEdges(progress.edges),
         elapsedMs: Math.round(progress.elapsedMs),
         solved: progress.solved,
+        assisted: progress.assisted,
       };
       try {
         storage?.setItem(progressKey(puzzleId), JSON.stringify(data));

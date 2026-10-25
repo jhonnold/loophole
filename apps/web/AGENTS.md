@@ -6,6 +6,7 @@ The Loophole player app: a SvelteKit single-page app (Svelte 5 runes, static ada
 - One set of board geometry and zoom math serves both renderers and all input: a board point is the viewport point plus the view offset, in pixels at the current cell size. A new kind of mark has to be drawn in both the SVG and the canvas renderer.
 - Rule checks and completion come from the core package (`analyzeBoard`), not from code here.
 - Screens get puzzles through the puzzle source interface. The built-in fixtures come first, so their ids work with no server running; the rest come from the API through the generated client package. In development Vite proxies `/api` to the API server.
+- Hints come through the puzzle source too: built-in puzzles work them out in the browser from their clues (core's `findHint`), server puzzles ask the API. Seeing a hint marks the attempt as assisted in the saved progress.
 - Theme colours come from the CSS custom properties in the app stylesheet, which follow the design kit (`docs/design/README.md`). Book-cover tints are the one exception: they are the same in both themes.
 - App code type-checks without Bun's types; tests and test helpers use a second config that adds them.
 - Who is logged in comes from the auth store, a plain module over the generated client with tests beside it. The root layout refreshes it once; the shared site header shows it. The account pages are plain forms styled by the `.auth` rules in the app stylesheet.

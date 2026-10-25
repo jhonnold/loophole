@@ -142,6 +142,117 @@ components:
         - height
         - clues
       description: A puzzle in wire format version 1 (docs/FORMAT.md).
+    Hint:
+      oneOf:
+        - type: object
+          properties:
+            kind:
+              type: string
+              enum:
+                - solved
+          required:
+            - kind
+        - type: object
+          properties:
+            kind:
+              type: string
+              enum:
+                - mistake
+            edge:
+              type: integer
+              minimum: 0
+              description: The first edge marked differently from the solution.
+            count:
+              type: integer
+              minimum: 1
+              description: How many marks are wrong.
+          required:
+            - kind
+            - edge
+            - count
+        - type: object
+          properties:
+            kind:
+              type: string
+              enum:
+                - step
+            rule:
+              type: string
+              enum:
+                - clue-zero
+                - clue-satisfied
+                - clue-needs-all
+                - dot-full
+                - dot-continue
+                - dot-dead-end
+                - corner-1
+                - corner-3
+                - adjacent-3s
+                - diagonal-3s
+                - premature-loop
+                - loop-complete
+                - parity
+                - lookahead
+            changes:
+              type: array
+              items:
+                type: object
+                properties:
+                  edge:
+                    type: integer
+                    minimum: 0
+                  state:
+                    type: string
+                    enum:
+                      - line
+                      - cross
+                required:
+                  - edge
+                  - state
+            cells:
+              type: array
+              items:
+                type: integer
+                minimum: 0
+            dots:
+              type: array
+              items:
+                type: integer
+                minimum: 0
+          required:
+            - kind
+            - rule
+            - changes
+            - cells
+            - dots
+        - type: object
+          properties:
+            kind:
+              type: string
+              enum:
+                - reveal
+            edge:
+              type: integer
+              minimum: 0
+              description: An open edge that is a line in the solution.
+          required:
+            - kind
+            - edge
+      description: "The next hint: a wrong mark, the next deduction (rule, edges it
+        decides, cells and dots it rests on), a line from the solution when no
+        rule applies, or solved."
+    HintRequest:
+      type: object
+      properties:
+        edges:
+          type: string
+          maxLength: 20200
+          pattern: ^[012]*$
+          description: "The player's board: one character per edge, 0 empty, 1 line, 2
+            cross (docs/FORMAT.md)."
+      required:
+        - edges
+      additionalProperties: false
     Job:
       type: object
       properties:
@@ -420,6 +531,63 @@ paths:
                 $ref: "#/components/schemas/Problem"
         "404":
           description: No published puzzle with this id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/puzzles/{id}/hint:
+    post:
+      summary: The next hint for a player's board
+      description: Works from the player's marks and the stored solution, which is
+        never sent (PRD FR-12, FR-25).
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            example: 0b8e9f5c-6f7e-4c43-9d55-0d5f8e7b3a21
+          required: true
+          name: id
+          in: path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HintRequest"
+      responses:
+        "200":
+          description: The hint.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Hint"
+        "400":
+          description: Invalid id, or a board that does not fit the puzzle.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Sent from another site (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No published puzzle with this id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Request body larger than 64 KiB.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Request body is not JSON.
           content:
             application/problem+json:
               schema:

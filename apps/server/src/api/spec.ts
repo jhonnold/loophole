@@ -18,6 +18,7 @@ import { argon2idHasher } from "../adapters/password-hasher.ts";
 import { randomToken } from "../adapters/random-token.ts";
 import { MemoryRateLimiter } from "../adapters/rate-limiter.ts";
 import { AccountManager } from "../managers/account-manager.ts";
+import { HintManager } from "../managers/hint-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { SessionManager } from "../managers/session-manager.ts";
@@ -34,6 +35,11 @@ export function openApiDocument() {
     ttlMs: 1,
   });
   const limiter = new MemoryRateLimiter(systemClock);
+  const puzzles = new PuzzleManager({
+    puzzles: new SqlitePuzzleRepository(db),
+    blobs: new MemoryBlobStore(),
+    clock: systemClock,
+  });
   const app = createApp({
     accounts: new AccountManager({
       users,
@@ -52,11 +58,8 @@ export function openApiDocument() {
     limiter,
     trustProxy: false,
     turnstileSiteKey: TURNSTILE_TEST_SITE_KEY,
-    puzzles: new PuzzleManager({
-      puzzles: new SqlitePuzzleRepository(db),
-      blobs: new MemoryBlobStore(),
-      clock: systemClock,
-    }),
+    puzzles,
+    hints: new HintManager({ puzzles }),
     jobs: new JobManager({
       jobs: new SqliteJobQueue(db),
       clock: systemClock,

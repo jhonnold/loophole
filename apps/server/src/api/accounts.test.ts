@@ -3,6 +3,7 @@ import { MemoryBlobStore } from "../adapters/blob/memory-blob-store.ts";
 import { openDatabase } from "../adapters/db/database.ts";
 import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
 import { SqlitePuzzleRepository } from "../adapters/db/puzzle-repository.ts";
+import { HintManager } from "../managers/hint-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { accountDeps } from "../test-support/accounts.ts";
@@ -15,12 +16,14 @@ function setup(options: { trustProxy?: boolean } = {}) {
   const db = openDatabase(":memory:");
   const clock = new FakeClock(Date.UTC(2026, 9, 25, 12));
   const deps = accountDeps(db, clock);
+  const puzzles = new PuzzleManager({
+    puzzles: new SqlitePuzzleRepository(db),
+    blobs: new MemoryBlobStore(),
+    clock,
+  });
   const app = createApp({
-    puzzles: new PuzzleManager({
-      puzzles: new SqlitePuzzleRepository(db),
-      blobs: new MemoryBlobStore(),
-      clock,
-    }),
+    puzzles,
+    hints: new HintManager({ puzzles }),
     jobs: new JobManager({
       jobs: new SqliteJobQueue(db),
       clock,

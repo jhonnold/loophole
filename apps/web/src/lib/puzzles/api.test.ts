@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createApiClient, type Schemas } from "@loophole/api-client";
-import { serializePuzzle } from "@loophole/core";
+import { createPuzzle, EdgeState, serializePuzzle } from "@loophole/core";
 import { apiSource } from "./api.ts";
 
 const PUZZLE: Schemas["Puzzle"] = {
@@ -10,19 +10,24 @@ const PUZZLE: Schemas["Puzzle"] = {
   createdAt: "2026-10-25T12:00:00.000Z",
 };
 
-/** A client whose fetch answers from `routes` (path → [status, body]) and records the URLs. */
+/**
+ * A client whose fetch answers from `routes` (path → [status, body]) and records the URLs and the
+ * request bodies.
+ */
 function clientFor(routes: Record<string, [number, unknown]>) {
   const urls: string[] = [];
+  const bodies: unknown[] = [];
   const fetch = (async (input: Request) => {
     const url = new URL(input.url);
     urls.push(url.pathname + url.search);
+    if (input.method === "POST") bodies.push(await input.json());
     const [status, body] = routes[url.pathname] ?? [404, { title: "Not found" }];
     return new Response(JSON.stringify(body), {
       status,
       headers: { "Content-Type": status < 400 ? "application/json" : "application/problem+json" },
     });
   }) as typeof globalThis.fetch;
-  return { client: createApiClient({ baseUrl: "http://api.test", fetch }), urls };
+  return { client: createApiClient({ baseUrl: "http://api.test", fetch }), urls, bodies };
 }
 
 describe("apiSource", () => {
@@ -57,5 +62,50 @@ describe("apiSource", () => {
     const { client } = clientFor({ "/api/puzzles": error, "/api/puzzles/p1": error });
     await expect(apiSource(client).list()).rejects.toThrow("HTTP 500");
     await expect(apiSource(client).get("p1")).rejects.toThrow("HTTP 500");
+  });
+
+  test("hint posts the board and maps a step to core's shape", async () => {
+    const step = {
+      kind: "step",
+      rule: "clue-zero",
+      changes: [
+        { edge: 0, state: "cross" },
+        { edge: 7, state: "line" },
+      ],
+      cells: [0],
+      dots: [],
+    };
+    const { client, bodies } = clientFor({ "/api/puzzles/p1/hint": [200, step] });
+    const puzzle = createPuzzle(2, 2);
+    const edges = new Uint8Array(puzzle.grid.edgeCount);
+    edges[3] = EdgeState.Line;
+    expect(await apiSource(client).hint("p1", puzzle, edges)).toEqual({
+      kind: "step",
+      step: {
+        rule: "clue-zero",
+        changes: [
+          { edge: 0, state: EdgeState.Cross },
+          { edge: 7, state: EdgeState.Line },
+        ],
+        cells: [0],
+        dots: [],
+      },
+    });
+    expect(bodies).toEqual([{ edges: "000100000000" }]);
+  });
+
+  test("hint passes other kinds through and throws on failure", async () => {
+    const { client } = clientFor({
+      "/api/puzzles/p1/hint": [200, { kind: "mistake", edge: 4, count: 2 }],
+      "/api/puzzles/p2/hint": [404, { title: "Puzzle not found" }],
+    });
+    const puzzle = createPuzzle(2, 2);
+    const edges = new Uint8Array(puzzle.grid.edgeCount);
+    expect(await apiSource(client).hint("p1", puzzle, edges)).toEqual({
+      kind: "mistake",
+      edge: 4,
+      count: 2,
+    });
+    await expect(apiSource(client).hint("p2", puzzle, edges)).rejects.toThrow("HTTP 404");
   });
 });
