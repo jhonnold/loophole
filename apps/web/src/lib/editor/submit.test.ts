@@ -93,6 +93,20 @@ describe("submissions client", () => {
     expect(result.ok).toBe(false);
   });
 
+  test("waitFor stops polling once its signal is aborted", async () => {
+    const { client, requests } = clientFor([[200, PENDING]]);
+    const controller = new AbortController();
+    const result = await createSubmissions(client).waitFor("s1", {
+      intervalMs: 500,
+      signal: controller.signal,
+      sleep: async () => {
+        controller.abort();
+      },
+    });
+    expect(result.ok).toBe(false);
+    expect(requests).toHaveLength(0);
+  });
+
   test("list returns the items, or null when they can't be read", async () => {
     const { client } = clientFor([
       [200, { items: [PUBLISHED] }],

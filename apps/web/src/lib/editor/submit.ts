@@ -58,6 +58,8 @@ export interface WaitOptions {
   /** Give up after this long (the server's own limit is 45 s). */
   readonly timeoutMs?: number;
   readonly sleep?: (ms: number) => Promise<void>;
+  /** Stops polling when aborted (the editor was left); the answer is then "still checking". */
+  readonly signal?: AbortSignal;
 }
 
 /** Submitting puzzles and following them (PRD FR-27), over the generated API client. */
@@ -99,6 +101,7 @@ export function createSubmissions(client: ApiClient) {
       const sleep = options.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
       for (let waited = 0; waited < (options.timeoutMs ?? 90_000); waited += interval) {
         await sleep(interval);
+        if (options.signal?.aborted) break;
         const result = await get(id);
         if (!result.ok || result.submission.status !== "pending") return result;
       }

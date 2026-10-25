@@ -40,6 +40,8 @@
   let result = $state.raw<CheckResult | null>(null);
   const status: VerifyStatus | "checking" = $derived(result?.status ?? "checking");
   let checker: LiveChecker | null = null;
+  // Aborted when the editor is left, so a publish still waiting for its verdict stops polling.
+  const leaving = new AbortController();
 
   const answers = $derived(
     result?.status === "multiple" && result.solutions.length === 2 ? result.solutions : null,
@@ -74,7 +76,9 @@
     copied = false;
     const sent = draft;
     let r = await submissions.submit(puzzle);
-    if (r.ok && r.submission.status === "pending") r = await submissions.waitFor(r.submission.id);
+    if (r.ok && r.submission.status === "pending") {
+      r = await submissions.waitFor(r.submission.id, { signal: leaving.signal });
+    }
     // An edit while waiting clears the card; the account page still lists the submission.
     if (draft === sent) outcome = r;
     publishing = false;
@@ -163,7 +167,10 @@
       },
     });
     ready = true;
-    return () => checker?.dispose();
+    return () => {
+      checker?.dispose();
+      leaving.abort();
+    };
   });
 </script>
 
