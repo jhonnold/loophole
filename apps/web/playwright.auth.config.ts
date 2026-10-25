@@ -2,11 +2,13 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineConfig } from "@playwright/test";
+import { E2E_AUTH_PORT } from "./tests/ports.ts";
 
 // End-to-end tests of accounts, publishing and saved progress against the real API, which also
 // serves the built app (as in production), and the job worker. Needs Mailpit and, for publishing
 // and progress, Garage (`docker compose up -d`), and access to Cloudflare's Turnstile check; the
-// tests skip themselves without them. Run with `bun run test:e2e:auth` from this package.
+// tests skip themselves without them. Run with `bun run test:e2e:auth` from this package; set
+// E2E_AUTH_PORT to serve on another port than 4174.
 
 // A fresh database file for every run, shared by the API and the worker. Playwright loads this
 // file in the runner and again in each worker process; the runner makes the folder once and the
@@ -14,7 +16,7 @@ import { defineConfig } from "@playwright/test";
 process.env.LOOPHOLE_E2E_DIR ??= mkdtempSync(join(tmpdir(), "loophole-e2e-"));
 const env = {
   DATABASE_PATH: join(process.env.LOOPHOLE_E2E_DIR, "e2e.sqlite"),
-  PUBLIC_URL: "http://localhost:4174",
+  PUBLIC_URL: `http://localhost:${E2E_AUTH_PORT}`,
   TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
   TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
   SMTP_HOST: "127.0.0.1",
@@ -25,6 +27,8 @@ const env = {
   S3_BUCKET: "loophole-dev",
   S3_ACCESS_KEY_ID: "GK1a2b3c4d5e6f708192a3b4c5",
   S3_SECRET_ACCESS_KEY: "8b339f8231fe89196b07eb8766bf6f079805f64a9be09934697b94e0b1aa0a0b",
+  // Today's and tomorrow's daily puzzles only, so the worker is soon free for the tests' own jobs.
+  DAILY_DAYS_AHEAD: "2",
 };
 
 export default defineConfig({
@@ -33,7 +37,7 @@ export default defineConfig({
   globalTeardown: "./tests/auth-teardown.ts",
   reporter: "list",
   use: {
-    baseURL: "http://localhost:4174",
+    baseURL: `http://localhost:${E2E_AUTH_PORT}`,
     browserName: "chromium",
     trace: "retain-on-failure",
   },
@@ -41,9 +45,9 @@ export default defineConfig({
     {
       // From the repo root, like the other server scripts.
       command: "bun run build && cd ../.. && bun apps/server/src/api/main.ts",
-      url: "http://localhost:4174/api/health",
+      url: `http://localhost:${E2E_AUTH_PORT}/api/health`,
       reuseExistingServer: false,
-      env: { ...env, PORT: "4174", WEB_DIR: "apps/web/build" },
+      env: { ...env, PORT: String(E2E_AUTH_PORT), WEB_DIR: "apps/web/build" },
     },
     {
       command: "cd ../.. && bun apps/server/src/worker/main.ts",

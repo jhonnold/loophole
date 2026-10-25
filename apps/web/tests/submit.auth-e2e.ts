@@ -1,6 +1,7 @@
 import { generate, serializePuzzle } from "@loophole/core";
 import { expect, test } from "@playwright/test";
 import { canSignUp, mailedLink, reachable } from "./mailpit.ts";
+import { E2E_AUTH_PORT } from "./ports.ts";
 
 test.beforeAll(async () => {
   // Publishing also needs the worker (started by the config) and Garage for the solution.
@@ -44,7 +45,7 @@ test("a confirmed player publishes a unique puzzle and opens its share link (FR-
   await expect(page.getByText("Published", { exact: true })).toBeVisible({ timeout: 30_000 });
 
   const link = await page.getByLabel("Link to share").inputValue();
-  expect(link).toMatch(/^http:\/\/localhost:4174\/play\/[0-9a-f-]{36}$/);
+  expect(link).toMatch(new RegExp(`^http://localhost:${E2E_AUTH_PORT}/play/[0-9a-f-]{36}$`));
   await page.goto(link);
   await expect(page.getByRole("heading", { name: "Player-made · 5×5" })).toBeVisible();
   await expect(page.getByRole("application")).toBeVisible();
