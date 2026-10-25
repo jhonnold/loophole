@@ -1,8 +1,9 @@
 import { createGrid } from "@loophole/core";
 import { expect, test } from "@playwright/test";
+import { dayHeading } from "../src/lib/daily/days.ts";
 import { FIXTURE_SOLUTIONS } from "../src/lib/test-support/solutions.ts";
 import { board, edgePoint, lines, scrollsSideways } from "./board.ts";
-import { attempt, DAILY_ID, mockDailyApi, TODAY } from "./daily-mocks.ts";
+import { attempt, DAILY_ID, dayAfter, mockDailyApi, TODAY } from "./daily-mocks.ts";
 
 // Daily puzzles, ranked play and leaderboards against a stand-in for the API (daily-mocks.ts):
 // `bun run test:e2e` runs with no server. The real API is covered by daily.auth-e2e.ts.
@@ -49,6 +50,23 @@ test.describe("home on a phone (Home artboard, FR-22, FR-24)", () => {
     const resume = page.getByRole("link", { name: /Daily · Small · 7×7/ });
     await expect(resume).toHaveAttribute("href", `/daily/${TODAY}/7`);
     await expect(page.locator(`a[href="/play/${DAILY_ID}"]`)).toHaveCount(0);
+  });
+
+  test("the covers and the countdown roll over at 00:00 UTC (FR-22)", async ({ page }) => {
+    const served = { current: TODAY };
+    await mockDailyApi(page, { day: served });
+    await page.clock.install({ time: new Date(`${TODAY}T23:59:50.000Z`) });
+    await page.goto("/");
+    await expect(page.getByRole("timer")).toContainText("New puzzles in 0m");
+    // Midnight passes but the server still has today's set (a device clock ahead of the server's):
+    // the page keeps asking.
+    await page.clock.fastForward(40_000);
+    await expect(page.getByRole("timer")).toContainText("New puzzles in 0m");
+    // The server gets the next day's set, and the next ask shows it.
+    served.current = dayAfter(TODAY);
+    await page.clock.fastForward(40_000);
+    await expect(page.locator(".heading .date")).toHaveText(dayHeading(dayAfter(TODAY)));
+    await expect(page.getByRole("timer")).toContainText("New puzzles in 23h 58m");
   });
 
   test("without the server, practice still works", async ({ page }) => {

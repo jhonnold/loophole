@@ -25,8 +25,11 @@
   let summary: DailySummary | null = $state(null);
   let dailyStatuses: Record<number, CoverStatus> = $state({});
   let now = $state(Date.now());
+  // When the daily set was last asked for (ms), so the rollover retries are spaced out.
+  let fetchedAt = 0;
 
   const day = $derived(today?.day ?? utcDay(now));
+  const msLeft = $derived(today ? Math.max(0, Date.parse(today.nextAt) - now) : msToNextDay(now));
   // Today's dailies by puzzle id: an unfinished one under "Continue" opens on its daily page.
   const dailySizes = $derived(
     new Map((today?.puzzles ?? []).flatMap((p) => (p.puzzleId === null ? [] : [[p.puzzleId, p.size] as const]))),
@@ -37,6 +40,7 @@
   }
 
   async function refreshDaily() {
+    fetchedAt = Date.now();
     today = await daily.day();
     const user = $auth.status === "user" ? $auth.user : null;
     summary = user === null ? null : await daily.summary(user.id);
@@ -57,14 +61,13 @@
 
   onMount(() => {
     refresh();
-    // New puzzles come out at 00:00 UTC; the countdown reaches it and the covers change.
-    let shownDay = utcDay(Date.now());
+    // New puzzles come out at 00:00 UTC (`nextAt`). The device's clock can run ahead of or behind
+    // the server's, so once that time has passed, ask again every 30 s until the server answers
+    // with the new day; with no set at all (server unreachable) it asks every 30 s too.
     const tick = setInterval(() => {
       now = Date.now();
-      if (utcDay(now) !== shownDay) {
-        shownDay = utcDay(now);
-        void refreshDaily();
-      }
+      const due = today === null || (today !== undefined && now >= Date.parse(today.nextAt));
+      if (due && now - fetchedAt >= 30_000) void refreshDaily();
     }, 1000);
     return () => clearInterval(tick);
   });
@@ -96,7 +99,7 @@
   <div class="heading">
     <span class="date">{dayHeading(day)}</span>
     <h1>Today's puzzles</h1>
-    <span class="next" role="timer">New puzzles in {countdown(msToNextDay(now))}</span>
+    <span class="next" role="timer">New puzzles in {countdown(msLeft)}</span>
   </div>
 
   {#if $auth.status === "user" && summary !== null}

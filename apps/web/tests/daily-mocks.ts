@@ -71,6 +71,13 @@ export interface MockOptions {
   readonly finished?: Schemas["Attempt"];
   /** The player has today's 7×7 unfinished, so it is listed under "Continue". */
   readonly inProgress?: boolean;
+  /** The day the daily API serves; a test changes `current` to make the next day's set come out. */
+  readonly day?: { current: string };
+}
+
+/** The UTC day after `day` (`YYYY-MM-DD`). */
+export function dayAfter(day: string): string {
+  return new Date(Date.parse(`${day}T00:00:00.000Z`) + 86_400_000).toISOString().slice(0, 10);
 }
 
 /** Answers the daily API (and the session and progress routes it needs) from fixed data. */
@@ -79,11 +86,13 @@ export async function mockDailyApi(page: Page, options: MockOptions = {}) {
   // The saved board on the daily: PUT replaces it and DELETE (Start over, or a ranked start) drops it.
   let stored = options.progress === undefined ? null : { edges: options.progress, solved: true };
   await page.route("**/api/session", (route) => json(route, { user: options.user ? USER : null }));
+  // The day the set is for; a test moves it on to show the next day's set.
+  const served = options.day ?? { current: TODAY };
   await page.route("**/api/daily*", (route) =>
     json(route, {
-      day: TODAY,
+      day: served.current,
       live: true,
-      nextAt: `${TODAY}T23:59:59.999Z`,
+      nextAt: `${dayAfter(served.current)}T00:00:00.000Z`,
       puzzles: [
         { size: 7, puzzleId: DAILY_ID },
         { size: 10, puzzleId: null },
