@@ -34,6 +34,7 @@
   let ready = $state(false);
   const puzzle = $derived(draftPuzzle(draft));
   const grid = $derived(puzzle.grid);
+  const clues = $derived(clueCount(draft));
 
   // Live feedback (FR-26): "checking" from the edit until the worker answers for that draft.
   let result = $state.raw<CheckResult | null>(null);
@@ -225,7 +226,7 @@
         </span>
       </section>
 
-      <button type="button" class="outline" disabled={clueCount(draft) === 0} onclick={() => update(clearClues(draft))}>
+      <button type="button" class="outline" disabled={clues === 0} onclick={() => update(clearClues(draft))}>
         Clear all clues
       </button>
     </aside>
@@ -251,7 +252,7 @@
         {/if}
       </div>
       <span class="caption">
-        {clueCount(draft)} {clueCount(draft) === 1 ? "clue" : "clues"} · {draft.width}×{draft.height} · draft saved on this device
+        {clues} {clues === 1 ? "clue" : "clues"} · {draft.width}×{draft.height} · draft saved on this device
         {#if frame?.zoom}· pinch or use +/− to zoom{/if}
       </span>
     </section>

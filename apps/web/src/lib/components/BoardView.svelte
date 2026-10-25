@@ -222,7 +222,6 @@
     else if (cmd.type === "cross") onedit([[cursor, EdgeState.Cross]], false);
     else if (cmd.type === "erase") onedit([[cursor, EdgeState.Unknown]], false);
   }
-
 </script>
 
 <div
