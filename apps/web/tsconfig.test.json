@@ -3,6 +3,6 @@
   "compilerOptions": {
     "types": ["bun"]
   },
-  "include": ["src/**/*.ts", "tests", "playwright.config.ts"],
+  "include": ["src/**/*.ts", "tests", "scripts", "playwright.config.ts"],
   "exclude": []
 }
