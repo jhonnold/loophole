@@ -49,6 +49,11 @@ test.describe("@perf time to first interaction (PRD §10)", () => {
       await expect(page.getByRole("heading", { name: "Practice 練習" })).toBeVisible({
         timeout: 15_000,
       });
+      // Settled, not just drawn: the session and today's set have answered and the Latin fonts are
+      // in place, so nothing above the covers moves under a tap (DECISIONS, "Time to first interaction").
+      await expect(page.getByRole("link", { name: "Log in" })).toBeVisible({ timeout: 15_000 });
+      await expect(page.locator("[aria-busy=true]")).toHaveCount(0, { timeout: 15_000 });
+      await page.evaluate(() => document.fonts.ready);
     });
     console.log(`home: ${times.join(", ")} ms; p95 ${p95} ms`);
     expect(p95).toBeLessThan(BUDGET_MS);
