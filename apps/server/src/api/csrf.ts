@@ -8,7 +8,7 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  * Sec-Fetch-Site on every request; older ones send at least Origin on a cross-origin POST.
  * Without either header the request isn't from a browser, so it carries no victim's cookies.
  */
-export function isSameOrigin(request: Request): boolean {
+function isSameOrigin(request: Request): boolean {
   const site = request.headers.get("Sec-Fetch-Site");
   if (site !== null) return site === "same-origin" || site === "none";
   const origin = request.headers.get("Origin");

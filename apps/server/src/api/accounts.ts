@@ -20,6 +20,7 @@ import { problem, problemResponse } from "./problem.ts";
 import {
   clearSessionCookie,
   currentUser,
+  SESSION_COOKIE,
   sessionToken,
   setSessionCookie,
 } from "./session-cookie.ts";
@@ -37,7 +38,7 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 
 /** Limits per client address (NFR-4). The account manager also limits per email. */
-export const ADDRESS_LIMITS = {
+const ADDRESS_LIMITS = {
   signup: { limit: 10, windowMs: HOUR },
   login: { limit: 20, windowMs: 15 * MINUTE },
   mail: { limit: 10, windowMs: HOUR },
@@ -46,8 +47,6 @@ export const ADDRESS_LIMITS = {
 } satisfies Record<string, RateRule>;
 
 const json = <T>(schema: T) => ({ content: { "application/json": { schema } }, required: true });
-
-const noContent = (description: string) => ({ description });
 
 const crossSite = problemResponse("Sent from another site (CSRF protection).");
 const tooMany = problemResponse("Too many attempts; `Retry-After` says when to try again.");
@@ -85,7 +84,7 @@ const signUpRoute = createRoute({
     "Mails a verification link. The answer is the same whether or not the email already has an account; such an account gets a note instead. Does not log in.",
   request: { body: json(SignUpRequestSchema) },
   responses: {
-    204: noContent("Accepted; check your email."),
+    204: { description: "Accepted; check your email." },
     400: problemResponse("Invalid body, or the CAPTCHA check failed."),
     403: crossSite,
     429: tooMany,
@@ -114,7 +113,7 @@ const logOutRoute = createRoute({
   method: "post",
   path: "/api/auth/logout",
   summary: "Log out",
-  responses: { 204: noContent("Logged out (also when no one was)."), 403: crossSite },
+  responses: { 204: { description: "Logged out (also when no one was)." }, 403: crossSite },
 });
 
 const verifyEmailRoute = createRoute({
@@ -123,7 +122,7 @@ const verifyEmailRoute = createRoute({
   summary: "Confirm an email address with the mailed token",
   request: { body: json(VerifyEmailRequestSchema) },
   responses: {
-    204: noContent("Verified."),
+    204: { description: "Verified." },
     400: problemResponse("Invalid body, or the link is invalid, used or expired."),
     403: crossSite,
     429: tooMany,
@@ -136,7 +135,7 @@ const resendRoute = createRoute({
   summary: "Mail a new verification link",
   description: "Same answer whether or not the email has an unverified account.",
   request: { body: json(EmailRequestSchema) },
-  responses: { 204: noContent("Accepted."), 400: invalid, 403: crossSite, 429: tooMany },
+  responses: { 204: { description: "Accepted." }, 400: invalid, 403: crossSite, 429: tooMany },
 });
 
 const forgotRoute = createRoute({
@@ -145,7 +144,7 @@ const forgotRoute = createRoute({
   summary: "Mail a password reset link",
   description: "Same answer whether or not the email has an account.",
   request: { body: json(EmailRequestSchema) },
-  responses: { 204: noContent("Accepted."), 400: invalid, 403: crossSite, 429: tooMany },
+  responses: { 204: { description: "Accepted." }, 400: invalid, 403: crossSite, 429: tooMany },
 });
 
 const resetRoute = createRoute({
@@ -155,7 +154,7 @@ const resetRoute = createRoute({
   description: "Logs the account out everywhere. Does not log in.",
   request: { body: json(ResetPasswordRequestSchema) },
   responses: {
-    204: noContent("Password changed."),
+    204: { description: "Password changed." },
     400: problemResponse("Invalid body, or the link is invalid, used or expired."),
     403: crossSite,
     429: tooMany,
@@ -169,7 +168,7 @@ const deleteAccountRoute = createRoute({
   security: [{ session: [] }],
   request: { body: json(DeleteAccountRequestSchema) },
   responses: {
-    204: noContent("Deleted and logged out."),
+    204: { description: "Deleted and logged out." },
     400: invalid,
     401: problemResponse("Not logged in, or wrong password."),
     403: crossSite,
@@ -184,7 +183,7 @@ export function registerAccountRoutes(app: OpenAPIHono, deps: AccountRouteDeps):
   app.openAPIRegistry.registerComponent("securitySchemes", "session", {
     type: "apiKey",
     in: "cookie",
-    name: "loophole_session",
+    name: SESSION_COOKIE,
   });
 
   const byAddress =

@@ -26,9 +26,9 @@ const HOUR = 60 * MINUTE;
  * password guessing spread over many addresses, at a price: anyone who knows an email can keep
  * that account from logging in by sending 10 bad attempts every 15 minutes (DECISIONS).
  */
-export const LOGIN_PER_EMAIL: RateRule = { limit: 10, windowMs: 15 * MINUTE };
+const LOGIN_PER_EMAIL: RateRule = { limit: 10, windowMs: 15 * MINUTE };
 /** Mails per address; more are dropped silently, so nobody can flood an inbox. */
-export const MAIL_PER_EMAIL: RateRule = { limit: 3, windowMs: HOUR };
+const MAIL_PER_EMAIL: RateRule = { limit: 3, windowMs: HOUR };
 export const VERIFY_TOKEN_TTL_MS = 24 * HOUR;
 export const RESET_TOKEN_TTL_MS = HOUR;
 
