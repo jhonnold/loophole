@@ -31,7 +31,7 @@ export function progressKey(puzzleId: string): string {
  * `localStorage`, or null when the browser refuses it. Reading the global can itself throw (Chromium
  * does so when site data is blocked), so components must go through this rather than touch it.
  */
-export function browserStorage(): KeyValueStorage | null {
+export function browserStorage(): Storage | null {
   try {
     return globalThis.localStorage ?? null;
   } catch {
