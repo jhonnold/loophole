@@ -62,12 +62,8 @@ interface Pattern {
   readonly crosses: readonly number[];
 }
 
-const dotCellsCache = new WeakMap<Grid, Int32Array>();
-
 /** 4 entries per dot: the cells up-left, up-right, down-right, down-left of it, `NONE` off the board. */
 function dotCells(grid: Grid): Int32Array {
-  const cached = dotCellsCache.get(grid);
-  if (cached !== undefined) return cached;
   const W = grid.width;
   const H = grid.height;
   const t = new Int32Array(grid.dotCount * 4).fill(NONE);
@@ -80,7 +76,6 @@ function dotCells(grid: Grid): Int32Array {
       if (r < H && c > 0) t[k + 3] = r * W + c - 1;
     }
   }
-  dotCellsCache.set(grid, t);
   return t;
 }
 
@@ -408,7 +403,7 @@ export class Engine {
       for (const e of p.crosses) if (!this.assign(e, Cross)) return false;
       this.commit();
     }
-    return this.local();
+    return true;
   }
 
   // --- tier 3: inside/outside parity --------------------------------------------------------
