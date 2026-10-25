@@ -5,6 +5,8 @@
  * never holds one (NFR-4, NFR-6).
  */
 
+import { writeSync } from "node:fs";
+
 type Level = "debug" | "info" | "warn" | "error";
 
 export interface JsonLoggingOptions {
@@ -18,13 +20,15 @@ export interface JsonLoggingOptions {
   readonly exit?: (code: number) => void;
 }
 
-const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z][\w-]*[A-Za-z]\b/g;
+// The lookbehind starts a match only at the beginning of a run of these characters, so a long run
+// costs one scan, not one per position (the match is the same).
+const EMAIL = /(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z][\w-]*[A-Za-z]\b/g;
 /**
  * `token=…`, `password: …`, `secret="two words"`, `Authorization: Basic …` and the like, in URLs,
  * fragments and messages. A quoted value is masked up to its closing quote; a scheme word stays.
  */
 const NAMED_SECRET =
-  /\b(token|password|secret|authorization|cookie)\b(["']?\s*[:=]\s*)(?:(["'])((?:(?:Basic|Bearer)\s+)?)(?:(?!\3).)*?\3|(["']?)((?:(?:Basic|Bearer)\s+)?)[^\s"'&,;]+)/gi;
+  /\b(token|password|secret|authorization|cookie)\b(["']?\s*[:=]\s*)(?:(["'])((?:(?:Basic|Bearer)\s+)?)(?:\\.|(?!\3).)*?\3|(["']?)((?:(?:Basic|Bearer)\s+)?)[^\s"'&,;]+)/gi;
 const BEARER = /\bBearer\s+[^\s"']+/gi;
 /**
  * Runs of 40 or more base64url characters: session and mailed tokens (43, and they may hold `-` or
@@ -103,7 +107,8 @@ export function installJsonLogging(options: JsonLoggingOptions): void {
   const write =
     options.write ??
     ((level: Level, line: string) => {
-      if (level === "warn" || level === "error") process.stderr.write(`${line}\n`);
+      // Synchronous, so a fatal line is whole before `exit` ends the process (a pipe takes 64 KB at once).
+      if (level === "warn" || level === "error") writeSync(2, `${line}\n`);
       else process.stdout.write(`${line}\n`);
     });
   const log =
