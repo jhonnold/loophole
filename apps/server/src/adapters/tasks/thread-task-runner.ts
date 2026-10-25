@@ -14,9 +14,16 @@ const THREAD_URL = new URL("./task-thread.ts", import.meta.url).href;
  * interrupted from inside, so the time limit (and any cancel) is `Worker.terminate()`.
  */
 export class ThreadTaskRunner implements TaskRunner {
+  readonly #threadUrl: string;
+
+  /** `threadUrl` is for tests; the default runs the real task thread. */
+  constructor(threadUrl = THREAD_URL) {
+    this.#threadUrl = threadUrl;
+  }
+
   run(task: Task, { timeoutMs, onProgress }: TaskRunOptions): Promise<TaskOutcome> {
     return new Promise((resolve) => {
-      const thread = new Worker(THREAD_URL);
+      const thread = new Worker(this.#threadUrl);
       let settled = false;
       const settle = (outcome: TaskOutcome) => {
         if (settled) return;
@@ -37,6 +44,11 @@ export class ThreadTaskRunner implements TaskRunner {
         }
       };
       thread.onerror = (event) => settle({ status: "failed", error: event.message });
+      // A thread that exits without answering (a crash, process.exit) would otherwise hold the
+      // worker until the time limit.
+      thread.addEventListener("close", () =>
+        settle({ status: "failed", error: "Task thread exited without a result" }),
+      );
       thread.postMessage(task);
     });
   }

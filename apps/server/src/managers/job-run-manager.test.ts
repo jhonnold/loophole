@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { createPuzzle, serializePuzzle } from "@loophole/core";
 import { MemoryBlobStore } from "../adapters/blob/memory-blob-store.ts";
 import type { TaskOutcome } from "../domain.ts";
@@ -164,8 +164,11 @@ describe("JobRunManager.runNext", () => {
     });
     s = setup(runner);
     s.enqueue("j1");
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
     await s.manager.runNext("w");
-    // The late result is stored but cannot finish the job, which is queued again.
+    // The late result is stored but cannot finish the job, which is queued again, and is logged.
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
     expect(s.jobs.get("j1")).toMatchObject({ status: "queued", result: null });
     expect(s.puzzleRepo.records.size).toBe(1);
     await s.manager.runNext("w2");

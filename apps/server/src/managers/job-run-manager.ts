@@ -73,7 +73,9 @@ export class JobRunManager {
     } finally {
       clearInterval(heartbeat);
     }
-    jobs.finish(job.id, workerId, end, clock.now());
+    if (!jobs.finish(job.id, workerId, end, clock.now())) {
+      console.warn(`Job ${job.id} was taken back; result not recorded`);
+    }
     return true;
   }
 

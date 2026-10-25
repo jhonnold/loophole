@@ -14,6 +14,19 @@ describe("ThreadTaskRunner", () => {
     expect(seen.length).toBeGreaterThan(0);
   });
 
+  test("a thread that exits without a result fails the task without waiting for the limit", async () => {
+    const silent = new ThreadTaskRunner(
+      new URL("../../test-support/silent-thread.ts", import.meta.url).href,
+    );
+    const started = performance.now();
+    const outcome = await silent.run(
+      { kind: "generate", input: { width: 5, height: 5, seed: "silent" } },
+      { timeoutMs: 60_000, onProgress: () => {} },
+    );
+    expect(outcome).toEqual({ status: "failed", error: "Task thread exited without a result" });
+    expect(performance.now() - started).toBeLessThan(10_000);
+  });
+
   test("stops a long generation at the time limit", async () => {
     const started = performance.now();
     const outcome = await runner.run(
