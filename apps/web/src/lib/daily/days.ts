@@ -34,6 +34,20 @@ export function msToNextDay(ms: number): number {
   return DAY_MS - (((ms % DAY_MS) + DAY_MS) % DAY_MS);
 }
 
+/**
+ * Whether Home should ask for today's daily set again (at most every 30 s): the server couldn't be
+ * reached (`null`), this device's clock says the next day has started, or a size class isn't ready
+ * yet (a slow or failed generation). `undefined` means the first answer hasn't come back.
+ */
+export function dailyRefreshDue(
+  set: { nextAt: string; puzzles: readonly { puzzleId: string | null }[] } | null | undefined,
+  now: number,
+): boolean {
+  if (set === undefined) return false;
+  if (set === null) return true;
+  return now >= Date.parse(set.nextAt) || set.puzzles.some((p) => p.puzzleId === null);
+}
+
 /** "5h 12m" from an hour up, "12m 05s" below. */
 export function countdown(ms: number): string {
   const total = Math.max(0, Math.ceil(ms / 1000));

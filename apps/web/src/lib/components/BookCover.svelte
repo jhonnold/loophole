@@ -60,10 +60,6 @@
     outline: 2px solid #1e1c19;
   }
 
-  .disabled {
-    opacity: 0.6;
-  }
-
   .badge {
     position: absolute;
     top: 0;
@@ -96,6 +92,11 @@
     background-image: radial-gradient(#1e1c19 1.3px, transparent 1.6px);
     background-size: var(--dots) var(--dots);
     background-position: 4px 4px;
+  }
+
+  /* A puzzle that isn't ready: only the dot paper fades, so the words keep their contrast (NFR-5). */
+  .disabled .paper {
+    opacity: 0.45;
   }
 
   .status {

@@ -3,6 +3,7 @@ import {
   countdown,
   coverTint,
   dailyPath,
+  dailyRefreshDue,
   dailySubtitle,
   dayHeading,
   msToNextDay,
@@ -27,6 +28,19 @@ describe("daily names and dates", () => {
     expect(countdown((5 * 60 + 12) * 60_000 + 30_000)).toBe("5h 12m");
     expect(countdown(12 * 60_000 + 5_000)).toBe("12m 05s");
     expect(countdown(-5)).toBe("0m 00s");
+  });
+
+  test("Home asks again when the server was down, the day is over, or a size isn't ready", () => {
+    const nextAt = "2026-10-26T00:00:00.000Z";
+    const before = Date.UTC(2026, 9, 25, 23);
+    const ready = { nextAt, puzzles: [{ puzzleId: "a" }, { puzzleId: "b" }] };
+    expect(dailyRefreshDue(undefined, before)).toBe(false);
+    expect(dailyRefreshDue(null, before)).toBe(true);
+    expect(dailyRefreshDue(ready, before)).toBe(false);
+    expect(dailyRefreshDue(ready, Date.parse(nextAt))).toBe(true);
+    expect(
+      dailyRefreshDue({ nextAt, puzzles: [{ puzzleId: "a" }, { puzzleId: null }] }, before),
+    ).toBe(true);
   });
 
   test("writes days as the artboards do, in UTC", () => {

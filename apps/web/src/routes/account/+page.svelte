@@ -113,7 +113,7 @@
     <GuestImport />
     <p><button class="primary" type="button" onclick={() => logOut(user.id)}>Log out</button></p>
     {#if logOutError}<p class="error" role="alert">{logOutError}</p>{/if}
-    {#if user.isAdmin}<p><a href="/admin">Reported puzzles</a></p>{/if}
+    {#if user.isAdmin}<p><a href="/admin">Admin: system health and reported puzzles</a></p>{/if}
 
     <h2 id="name">Name on leaderboards</h2>
     <p>

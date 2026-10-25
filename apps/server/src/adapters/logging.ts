@@ -5,6 +5,8 @@
  * never holds one (NFR-4, NFR-6).
  */
 
+import { writeSync } from "node:fs";
+
 type Level = "debug" | "info" | "warn" | "error";
 
 export interface JsonLoggingOptions {
@@ -18,13 +20,15 @@ export interface JsonLoggingOptions {
   readonly exit?: (code: number) => void;
 }
 
-const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z][\w-]*[A-Za-z]\b/g;
+// The lookbehind starts a match only at the beginning of a run of these characters, so a long run
+// costs one scan, not one per position (the match is the same).
+const EMAIL = /(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z][\w-]*[A-Za-z]\b/g;
 /**
  * `token=…`, `password: …`, `secret="two words"`, `Authorization: Basic …` and the like, in URLs,
  * fragments and messages. A quoted value is masked up to its closing quote; a scheme word stays.
  */
 const NAMED_SECRET =
-  /\b(token|password|secret|authorization|cookie)\b(["']?\s*[:=]\s*)(?:(["'])((?:(?:Basic|Bearer)\s+)?)(?:(?!\3).)*?\3|(["']?)((?:(?:Basic|Bearer)\s+)?)[^\s"'&,;]+)/gi;
+  /\b(token|password|secret|authorization|cookie)\b(["']?\s*[:=]\s*)(?:(["'])((?:(?:Basic|Bearer)\s+)?)(?:\\.|(?!\3).)*?\3|(["']?)((?:(?:Basic|Bearer)\s+)?)[^\s"'&,;]+)/gi;
 const BEARER = /\bBearer\s+[^\s"']+/gi;
 /**
  * Runs of 40 or more base64url characters: session and mailed tokens (43, and they may hold `-` or
@@ -94,6 +98,27 @@ export function formatLine(
   });
 }
 
+const PAUSE = new Int32Array(new SharedArrayBuffer(4));
+
+/**
+ * Writes a line to standard error and returns once all of it is written, so `exit` can't cut it
+ * off. A pipe takes part of a long line, and once it is full a non-blocking one refuses (EAGAIN):
+ * then this waits a moment and goes on. An async write would not finish before `exit`.
+ */
+function writeStderr(line: string): void {
+  const bytes = Buffer.from(`${line}\n`);
+  let offset = 0;
+  while (offset < bytes.length) {
+    try {
+      offset += writeSync(2, bytes, offset, bytes.length - offset);
+    } catch (err) {
+      // The reader has gone: there is nowhere left to write.
+      if ((err as NodeJS.ErrnoException).code !== "EAGAIN") return;
+      Atomics.wait(PAUSE, 0, 0, 2);
+    }
+  }
+}
+
 /**
  * Replaces `console.debug/log/info/warn/error` with JSON line writers, and logs an uncaught error or
  * an unhandled rejection through them before exiting with status 1 (Bun would print it as plain
@@ -103,7 +128,7 @@ export function installJsonLogging(options: JsonLoggingOptions): void {
   const write =
     options.write ??
     ((level: Level, line: string) => {
-      if (level === "warn" || level === "error") process.stderr.write(`${line}\n`);
+      if (level === "warn" || level === "error") writeStderr(line);
       else process.stdout.write(`${line}\n`);
     });
   const log =

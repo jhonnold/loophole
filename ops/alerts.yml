@@ -41,6 +41,12 @@ groups:
         annotations:
           summary: "More than 5 jobs hit their time limit in the last hour."
 
+      - alert: JobsLost
+        expr: increase(loophole_jobs_lost_total[1h]) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "Jobs failed because their worker stopped on every attempt; check worker restarts and memory."
+
       - alert: JobQueueBacklog
         expr: loophole_jobs{status="queued"} > 50
         for: 10m

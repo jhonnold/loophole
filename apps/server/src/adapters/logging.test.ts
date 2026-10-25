@@ -43,6 +43,20 @@ describe("redact", () => {
     const frame = "at node_modules/.bun/@hono+zod-openapi@1.1.0+0123/src/app.js";
     expect(redact(frame)).toBe(frame);
   });
+
+  test("masks a quoted value with an escaped quote in it, up to its closing quote", () => {
+    expect(redact('{"password":"a\\"b c"}')).toBe('{"password":"[redacted]"}');
+  });
+
+  test("scans a long run of email-like characters in linear time", () => {
+    // Runs broken by `+` or `.` are not tokens, so they are left for the email pattern to scan.
+    const started = performance.now();
+    const plus = "x+".repeat(50_000);
+    expect(redact(plus)).toBe(plus);
+    const dotted = "a.".repeat(50_000);
+    expect(redact(dotted)).toBe(dotted);
+    expect(performance.now() - started).toBeLessThan(200);
+  });
 });
 
 describe("formatLine", () => {
@@ -142,3 +156,25 @@ test("an uncaught error or unhandled rejection is logged as JSON, then the proce
   expect(lines[1]).not.toContain("abc");
   expect(JSON.parse(lines[1].slice(6)).msg).toBe("Uncaught exception:");
 });
+
+test("a fatal line longer than a pipe's buffer arrives whole before the process exits", async () => {
+  // A write through process.stderr makes Bun set its pipe non-blocking, as in a running server.
+  const script = `import { installJsonLogging } from ${JSON.stringify(`${import.meta.dir}/logging.ts`)};
+process.stdout.write("info\\n");
+process.stderr.write("warm\\n");
+installJsonLogging({ process: "api" });
+setTimeout(() => {
+  throw new Error("x+".repeat(150_000));
+});`;
+  const proc = Bun.spawn([process.execPath, "-e", script], { stdout: "pipe", stderr: "pipe" });
+  // Read late, so the pipe is full while the process writes the line.
+  await Bun.sleep(300);
+  const [, stderr] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+  expect(await proc.exited).toBe(1);
+  const line = JSON.parse(stderr.trim().split("\n").at(-1) ?? "");
+  expect(line).toMatchObject({ level: "error", msg: "Uncaught exception:" });
+  expect(line.err.message).toHaveLength(300_000);
+}, 30_000);

@@ -6,9 +6,14 @@ export function board(page: Page): Locator {
   return page.locator("[role=application]");
 }
 
-/** Page coordinates of every dot of an SVG board, from where the dots render (index order). */
+/**
+ * Page coordinates of every dot of an SVG board, from where the dots render (index order). Waits
+ * for the board to render first, so a call right after `page.goto` doesn't read an empty board.
+ */
 export async function dotPoints(page: Page): Promise<{ x: number; y: number }[]> {
-  return page.locator("[role=application] circle.dot").evaluateAll((els) =>
+  const dots = page.locator("[role=application] circle.dot");
+  await dots.first().waitFor();
+  return dots.evaluateAll((els) =>
     els.map((el) => {
       const r = el.getBoundingClientRect();
       return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
