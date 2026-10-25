@@ -23,11 +23,16 @@ describe("runTask", () => {
     const unique = serializePuzzle(createPuzzle(2, 2, [2, 2, 2, 2]));
     expect(runTask({ kind: "verify", input: { puzzle: unique } }, () => {})).toEqual({
       kind: "verify",
-      verified: { status: "unique", solutions: ["112211121121"] },
+      verified: {
+        status: "unique",
+        solutions: ["112211121121"],
+        steps: expect.arrayContaining([expect.objectContaining({ rule: expect.any(String) })]),
+      },
     });
     const open = serializePuzzle(createPuzzle(2, 2));
     const out = runTask({ kind: "verify", input: { puzzle: open } }, () => {});
     expect(out.kind === "verify" && out.verified.status).toBe("multiple");
+    expect(out.kind === "verify" && out.verified.steps).toEqual([]);
   });
 
   test("bad input throws the core's error", () => {

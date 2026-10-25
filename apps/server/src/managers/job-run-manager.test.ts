@@ -1,15 +1,20 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { createPuzzle, serializePuzzle } from "@loophole/core";
 import { MemoryBlobStore } from "../adapters/blob/memory-blob-store.ts";
+import { MemoryRateLimiter } from "../adapters/rate-limiter.ts";
 import type { TaskOutcome } from "../domain.ts";
 import {
   FakeClock,
   FakeJobQueue,
   FakePuzzleRepository,
+  FakeSubmissionRepository,
   FakeTaskRunner,
+  sequentialIds,
 } from "../test-support/fakes.ts";
+import { JobManager } from "./job-manager.ts";
 import { JobRunManager, type JobRunSettings } from "./job-run-manager.ts";
 import { PuzzleManager } from "./puzzle-manager.ts";
+import { SubmissionManager } from "./submission-manager.ts";
 
 const SETTINGS: JobRunSettings = {
   generateTimeoutMs: 60_000,
@@ -44,7 +49,15 @@ function setup(runner: FakeTaskRunner, settings = SETTINGS) {
     blobs,
     clock,
   });
-  const manager = new JobRunManager({ jobs, tasks: runner, puzzles, clock, settings });
+  const submissions = new SubmissionManager({
+    submissions: new FakeSubmissionRepository(),
+    puzzles,
+    jobs: new JobManager({ jobs, clock, newId: sequentialIds("j"), maxQueued: 10 }),
+    limiter: new MemoryRateLimiter(clock),
+    clock,
+    newId: sequentialIds("s"),
+  });
+  const manager = new JobRunManager({ jobs, tasks: runner, puzzles, submissions, clock, settings });
   const enqueue = (id: string) =>
     jobs.enqueue({
       id,
@@ -83,7 +96,10 @@ describe("JobRunManager.runNext", () => {
   test("a verification uses the verify time limit and records the status", async () => {
     const runner = new FakeTaskRunner(async () => ({
       status: "done",
-      output: { kind: "verify", verified: { status: "multiple", solutions: ["1", "2"] } },
+      output: {
+        kind: "verify",
+        verified: { status: "multiple", solutions: ["1", "2"], steps: [] },
+      },
     }));
     const { jobs, manager } = setup(runner);
     const puzzle = serializePuzzle(createPuzzle(2, 2));

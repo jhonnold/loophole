@@ -88,6 +88,8 @@ export interface VerifyOutcome {
   readonly status: VerifyStatus;
   /** Solutions found, in edge-state encoding. */
   readonly solutions: readonly string[];
+  /** For a `unique` puzzle, the rule solver's steps from an empty board (for hints); else empty. */
+  readonly steps: readonly Step[];
 }
 
 export type TaskOutput =
