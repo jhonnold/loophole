@@ -16,6 +16,7 @@ import {
   type Layout,
   markSizes,
 } from "./geometry.ts";
+import type { HintMarks } from "./hint.ts";
 import { insideCells } from "./inside.ts";
 import { type Size, type View, visibleCells } from "./viewport.ts";
 
@@ -25,6 +26,8 @@ export interface Palette {
   readonly pencil: string;
   readonly shu: string;
   readonly wash: string;
+  readonly ai: string;
+  readonly hintWash: string;
 }
 
 /** The part of the canvas 2D context the painter uses, so tests can pass a recorder. */
@@ -61,18 +64,21 @@ export interface Scene {
   readonly port: Size;
   readonly ratio: number;
   readonly palette: Palette;
+  /** The hint on show, or null. */
+  readonly hint: HintMarks | null;
 }
 
 /** Clues are not drawn below this cell size; they would be under 5px tall. */
 export const MIN_CLUE_CELL = 8;
 
 /**
- * Draws the board on a canvas with the SVG board's look (design kit, Board): solved wash, lines
- * (dashed shu for a premature loop), crosses, dots, clues and error rings. Only the cells in the
- * viewport, plus a one-cell border, are drawn (viewport culling).
+ * Draws the board on a canvas with the SVG board's look (design kit, Board): solved wash, hint wash,
+ * lines (dashed shu for a premature loop), the hint's ghost moves, crosses, dots, clues and error
+ * rings. Only the cells in the viewport, plus a one-cell border, are drawn (viewport culling); a
+ * hint's few marks are drawn wherever they are.
  */
 export function paintBoard(ctx: Painter, scene: Scene): void {
-  const { puzzle, edges, analysis, layout, view, port, ratio, palette } = scene;
+  const { puzzle, edges, analysis, layout, view, port, ratio, palette, hint } = scene;
   const grid = puzzle.grid;
   const S = layout.cell;
   const size = markSizes(S);
@@ -113,6 +119,23 @@ export function paintBoard(ctx: Painter, scene: Scene): void {
     }
   }
 
+  const hinted = new Uint8Array(hint === null ? 0 : grid.cellCount);
+  if (hint !== null) {
+    ctx.fillStyle = palette.hintWash;
+    for (const i of hint.cells) {
+      hinted[i] = 1;
+      const p = cellPoint(grid, layout, i);
+      ctx.fillRect(p.x - S / 2 + 2, p.y - S / 2 + 2, S - 4, S - 4);
+    }
+    ctx.beginPath();
+    for (const d of hint.dots) {
+      const p = dotPoint(grid, layout, d);
+      ctx.moveTo(p.x + S * 0.3, p.y);
+      ctx.arc(p.x, p.y, S * 0.3, 0, 2 * Math.PI);
+    }
+    ctx.fill();
+  }
+
   const strokeLines = (dashed: boolean) => {
     ctx.beginPath();
     for (const e of visible) {
@@ -130,6 +153,36 @@ export function paintBoard(ctx: Painter, scene: Scene): void {
   strokeLines(false);
   if (v.loopEdges.length > 0) strokeLines(true);
   ctx.setLineDash([]);
+
+  if (hint !== null && hint.ghosts.length > 0) {
+    // The forced move on edges still empty: a dashed ai line, or a bolder ai ×.
+    ctx.beginPath();
+    for (const [e, state] of hint.ghosts) {
+      if (state !== EdgeState.Line || edges[e] !== EdgeState.Unknown) continue;
+      const s = edgeSegment(grid, layout, e);
+      ctx.moveTo(s.x1, s.y1);
+      ctx.lineTo(s.x2, s.y2);
+    }
+    ctx.lineWidth = size.line;
+    ctx.lineCap = "butt";
+    ctx.strokeStyle = palette.ai;
+    ctx.setLineDash([6, 5]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    for (const [e, state] of hint.ghosts) {
+      if (state !== EdgeState.Cross || edges[e] !== EdgeState.Unknown) continue;
+      const { x, y } = edgeMidpoint(grid, layout, e);
+      const a = size.crossArm;
+      ctx.moveTo(x - a, y - a);
+      ctx.lineTo(x + a, y + a);
+      ctx.moveTo(x + a, y - a);
+      ctx.lineTo(x - a, y + a);
+    }
+    ctx.lineWidth = size.crossWidth * 1.6;
+    ctx.lineCap = "round";
+    ctx.stroke();
+  }
 
   ctx.beginPath();
   const arm = size.crossArm;
@@ -158,8 +211,10 @@ export function paintBoard(ctx: Painter, scene: Scene): void {
   ctx.fill();
 
   ctx.beginPath();
+  const clueFont = (weight: number) =>
+    `${weight} ${size.clue}px "Zen Kaku Gothic New", system-ui, sans-serif`;
   if (S >= MIN_CLUE_CELL) {
-    ctx.font = `500 ${size.clue}px "Zen Kaku Gothic New", system-ui, sans-serif`;
+    ctx.font = clueFont(500);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
   }
@@ -170,8 +225,12 @@ export function paintBoard(ctx: Painter, scene: Scene): void {
       if (clue === NO_CLUE) continue;
       const p = cellPoint(grid, layout, i);
       if (S >= MIN_CLUE_CELL) {
-        ctx.fillStyle = bad[i] === 1 ? palette.shu : palette.ink;
+        // A clue the hint rests on is bold and ai, as on the Hint artboard.
+        const strong = hint !== null && hinted[i] === 1 && bad[i] === 0;
+        if (strong) ctx.font = clueFont(700);
+        ctx.fillStyle = bad[i] === 1 ? palette.shu : strong ? palette.ai : palette.ink;
         ctx.fillText(String(clue), p.x, p.y);
+        if (strong) ctx.font = clueFont(500);
       }
       if (bad[i] === 1) {
         ctx.moveTo(p.x + size.clueRing, p.y);

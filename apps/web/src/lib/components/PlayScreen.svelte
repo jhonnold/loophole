@@ -280,6 +280,7 @@
               port={frame.port}
               zoom={frame.zoom}
               {locked}
+              hint={null}
               onedit={edit}
               onview={(v) => (zoomed = v)}
             />

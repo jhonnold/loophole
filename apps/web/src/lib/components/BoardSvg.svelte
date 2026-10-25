@@ -1,6 +1,7 @@
 <script lang="ts">
   import { type BoardAnalysis, EdgeState, NO_CLUE, type Puzzle } from "@loophole/core";
   import { cellPoint, dotPoint, edgeMidpoint, edgeSegment, type Layout, markSizes } from "../game/geometry.ts";
+  import type { HintMarks } from "../game/hint.ts";
   import { insideCells } from "../game/inside.ts";
   import type { Size, View } from "../game/viewport.ts";
 
@@ -12,9 +13,11 @@
     layout: Layout;
     view: View;
     port: Size;
+    /** The hint on show: an ai wash on its cells and dots, and its move as a dashed ghost. */
+    hint: HintMarks | null;
   }
 
-  let { puzzle, edges, analysis, layout, view, port }: Props = $props();
+  let { puzzle, edges, analysis, layout, view, port, hint }: Props = $props();
 
   const grid = $derived(puzzle.grid);
 
@@ -62,6 +65,9 @@
   const lines = $derived(Array.from(edges.keys()).filter((e) => edges[e] === EdgeState.Line));
   const crosses = $derived(Array.from(edges.keys()).filter((e) => edges[e] === EdgeState.Cross));
   const inside = $derived(analysis.solved ? insideCells(grid, edges) : null);
+  const hintCells = $derived(new Set(hint?.cells ?? []));
+  // Ghosts only on edges that are still empty, as on the Hint artboard.
+  const ghosts = $derived((hint?.ghosts ?? []).filter(([e]) => edges[e] === EdgeState.Unknown));
 </script>
 
 <svg class="board-svg" width={port.width} height={port.height} aria-hidden="true">
@@ -72,6 +78,17 @@
           {@const p = cellPoint(grid, geo, i)}
           <rect class="wash" x={p.x - S / 2} y={p.y - S / 2} width={S} height={S} />
         {/if}
+      {/each}
+    {/if}
+
+    {#if hint}
+      {#each hint.cells as i (i)}
+        {@const p = cellPoint(grid, geo, i)}
+        <rect class="hint-wash" x={p.x - S / 2 + 2} y={p.y - S / 2 + 2} width={S - 4} height={S - 4} rx="3" />
+      {/each}
+      {#each hint.dots as d (d)}
+        {@const p = dotPoint(grid, geo, d)}
+        <circle class="hint-wash" cx={p.x} cy={p.y} r={S * 0.3} />
       {/each}
     {/if}
 
@@ -86,6 +103,21 @@
         y2={s.y2}
         stroke-width={size.line}
       />
+    {/each}
+
+    {#each ghosts as [e, state] (e)}
+      {#if state === EdgeState.Line}
+        {@const s = edgeSegment(grid, geo, e)}
+        <line class="ghost" x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke-width={size.line} />
+      {:else}
+        {@const { x, y } = edgeMidpoint(grid, geo, e)}
+        {@const a = size.crossArm}
+        <path
+          class="ghost-cross"
+          d="M{x - a} {y - a}L{x + a} {y + a}M{x + a} {y - a}L{x - a} {y + a}"
+          stroke-width={size.crossWidth * 1.6}
+        />
+      {/if}
     {/each}
 
     {#each crosses as e (e)}
@@ -106,6 +138,7 @@
       <text
         class="clue"
         class:bad={badCells.has(q.cell)}
+        class:hinted={hintCells.has(q.cell)}
         x={q.x}
         y={q.y}
         font-size={size.clue}>{q.text}</text
@@ -129,6 +162,22 @@
 
   .wash {
     fill: var(--solved-wash);
+  }
+
+  .hint-wash {
+    fill: var(--hint-wash);
+  }
+
+  .ghost {
+    stroke: var(--ai);
+    stroke-linecap: butt;
+    stroke-dasharray: 6 5;
+  }
+
+  .ghost-cross {
+    stroke: var(--ai);
+    stroke-linecap: round;
+    fill: none;
   }
 
   .line {
@@ -158,6 +207,11 @@
     font-weight: 500;
     text-anchor: middle;
     dominant-baseline: central;
+  }
+
+  .clue.hinted {
+    fill: var(--ai);
+    font-weight: 700;
   }
 
   .clue.bad {

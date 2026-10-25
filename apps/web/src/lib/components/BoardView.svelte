@@ -1,8 +1,10 @@
 <script lang="ts">
   import { type BoardAnalysis, EdgeState, NONE, type Puzzle } from "@loophole/core";
+  import { untrack } from "svelte";
   import { type EdgeChange, nextState } from "../game/board.ts";
   import { edgeSegment, type Layout, type Point } from "../game/geometry.ts";
   import { PointerGesture } from "../game/gesture.ts";
+  import { type HintMarks, hintRect } from "../game/hint.ts";
   import { boardCommand, edgeLabel, moveCursor } from "../game/keyboard.ts";
   import { BoardPointers } from "../game/pointers.ts";
   import {
@@ -35,13 +37,16 @@
     zoom: ZoomLimits | null;
     /** No drawing: paused or solved. Zoom and pan still work. */
     locked: boolean;
+    /** The hint on show, drawn over the board; null for none. */
+    hint: HintMarks | null;
     /** Applies edits; `merge` joins them to the previous undo step (drag strokes). */
     onedit: (changes: EdgeChange[], merge: boolean) => void;
     /** Moves or zooms the view of a zoomable board. */
     onview: (view: View) => void;
   }
 
-  let { puzzle, edges, analysis, layout, view, port, zoom, locked, onedit, onview }: Props = $props();
+  let { puzzle, edges, analysis, layout, view, port, zoom, locked, hint, onedit, onview }: Props =
+    $props();
 
   const grid = $derived(puzzle.grid);
   const S = $derived(layout.cell);
@@ -181,6 +186,17 @@
     onview(revealRect(grid, view, rect, port, zoom));
   }
 
+  // A new hint on a zoomed board pans its marks into view; the view is read without tracking it,
+  // so this runs once per hint, not on every pan.
+  $effect(() => {
+    const marks = hint;
+    if (marks === null) return;
+    untrack(() => {
+      const rect = hintRect(grid, layout, marks);
+      if (zoom !== null && rect !== null) onview(revealRect(grid, view, rect, port, zoom));
+    });
+  });
+
   /** Moves keyboard focus to the board; the parent calls this after the board remounts. */
   export function focus(): void {
     surface?.focus();
@@ -247,9 +263,9 @@
     onblur={() => (focused = false)}
   >
     {#if canvas}
-      <BoardCanvas {puzzle} {edges} {analysis} {layout} {view} {port} />
+      <BoardCanvas {puzzle} {edges} {analysis} {layout} {view} {port} {hint} />
     {:else}
-      <BoardSvg {puzzle} {edges} {analysis} {layout} {view} {port} />
+      <BoardSvg {puzzle} {edges} {analysis} {layout} {view} {port} {hint} />
     {/if}
     {#if showCursor}
       <svg class="overlay" width={port.width} height={port.height} aria-hidden="true">
