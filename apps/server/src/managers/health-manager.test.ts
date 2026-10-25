@@ -10,16 +10,17 @@ const NOW = Date.UTC(2026, 9, 25, 12);
 function setup(blobs: BlobStore = new MemoryBlobStore()) {
   const jobs = new FakeJobQueue();
   const dailies = new FakeDailyRepository();
+  const clock = new FakeClock(NOW);
   const health = new HealthManager({
     jobs,
     dailies,
     blobs,
-    clock: new FakeClock(NOW),
+    clock,
     daysAhead: 3,
     versions: { app: "abc123", runtime: "bun 1.3.13" },
     checkTimeoutMs: 20,
   });
-  return { health, jobs, dailies };
+  return { health, jobs, dailies, clock };
 }
 
 function stock(dailies: FakeDailyRepository, day: string, size: number) {
@@ -68,6 +69,35 @@ describe("HealthManager", () => {
     const r = await health.readiness();
     expect(r.ok).toBe(false);
     expect(r.database).toMatchObject({ ok: false, error: "database is locked" });
+  });
+
+  test("reuses a readiness answer for 5 s, while the admin report checks again", async () => {
+    const store = new MemoryBlobStore();
+    let reads = 0;
+    let failing = false;
+    const counting: BlobStore = {
+      put: (key, body, type) => store.put(key, body, type),
+      get: (key) => {
+        reads++;
+        if (failing) return Promise.reject(new Error("down"));
+        return store.get(key);
+      },
+      delete: (key) => store.delete(key),
+    };
+    const { health, clock } = setup(counting);
+    expect((await health.readiness()).ok).toBe(true);
+    expect((await health.readiness()).ok).toBe(true);
+    expect(reads).toBe(1);
+    clock.advance(4_999);
+    await health.readiness();
+    expect(reads).toBe(1);
+    clock.advance(1);
+    failing = true;
+    expect((await health.readiness()).ok).toBe(false);
+    expect(reads).toBe(2);
+    failing = false;
+    expect((await health.readiness()).ok).toBe(false);
+    expect((await health.report()).readiness.ok).toBe(true);
   });
 
   test("reports the queue, the daily stock, recent failures and versions", async () => {

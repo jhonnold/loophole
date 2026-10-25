@@ -55,19 +55,30 @@ export interface HealthManagerDeps {
 /** A blob key nobody writes: reading it proves the store answers without changing anything. */
 const PROBE_KEY = "health/probe";
 const FAILURES_SHOWN = 10;
+/** How long a readiness answer is reused, so the public check can't hit the stores on every request. */
+const READY_CACHE_MS = 5_000;
 
 /** Health checks for container orchestration and the admins' health page. */
 export class HealthManager {
   readonly #deps: HealthManagerDeps;
   readonly #startedAt: number;
+  #ready: { at: number; answer: Promise<Readiness> } | undefined;
 
   constructor(deps: HealthManagerDeps) {
     this.#deps = deps;
     this.#startedAt = deps.clock.now();
   }
 
-  /** Checks the database and the blob store. */
-  async readiness(): Promise<Readiness> {
+  /** Checks the database and the blob store; an answer from the last 5 s is reused. */
+  readiness(): Promise<Readiness> {
+    const now = this.#deps.clock.now();
+    if (this.#ready === undefined || now - this.#ready.at >= READY_CACHE_MS) {
+      this.#ready = { at: now, answer: this.#probe() };
+    }
+    return this.#ready.answer;
+  }
+
+  async #probe(): Promise<Readiness> {
     const { jobs, blobs } = this.#deps;
     const [database, blobCheck] = await Promise.all([
       this.#check(async () => {
@@ -83,7 +94,7 @@ export class HealthManager {
   /** Readiness plus the queue, the daily stock, recent failures and versions. */
   async report(): Promise<HealthReport> {
     const { jobs, dailies, clock, daysAhead, versions } = this.#deps;
-    const readiness = await this.readiness();
+    const readiness = await this.#probe();
     const safe = <T>(read: () => T, fallback: T): T => {
       try {
         return read();
