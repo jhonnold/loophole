@@ -1,0 +1,61 @@
+import { Budget, Engine, SolverStop } from "./engine.ts";
+import type { Puzzle } from "./puzzle.ts";
+import type { Step } from "./rules.ts";
+
+/**
+ * - `solved`: the rules decided every edge; the result is the puzzle's only solution.
+ * - `stuck`: no rule applies any more and some edges are still open.
+ * - `contradiction`: the clues (with `initial`) break a rule, so there is no solution.
+ * - `incomplete`: stopped early by `maxSteps` or the time limit.
+ */
+export type SolveStatus = "solved" | "stuck" | "contradiction" | "incomplete";
+
+export interface SolveOptions {
+  /** Starting edge states, for example a player's board. Defaults to all unknown. Not modified. */
+  readonly initial?: Uint8Array;
+  /** Use bounded lookahead when the other rules are stuck. Default true. */
+  readonly lookahead?: boolean;
+  /** Stop after recording this many steps. Default no limit. */
+  readonly maxSteps?: number;
+  /** Stop after this many milliseconds, measured with `now`. Default no limit. */
+  readonly timeLimitMs?: number;
+  /** Clock in milliseconds. Default `Date.now`. */
+  readonly now?: () => number;
+}
+
+export interface SolveResult {
+  readonly status: SolveStatus;
+  /** Every deduction applied, in order. */
+  readonly steps: Step[];
+  /** Edge states when the solver stopped. */
+  readonly edges: Uint8Array;
+}
+
+/**
+ * Applies named deductions until the puzzle is solved or no rule applies (PRD FR-3), recording
+ * each one as a step (FR-6). Every deduction is sound: it holds in every solution of the puzzle.
+ * So `solved` proves the solution is unique without any guessing.
+ */
+export function solve(puzzle: Puzzle, options: SolveOptions = {}): SolveResult {
+  const now = options.now ?? Date.now;
+  const budget = new Budget(
+    now,
+    now() + (options.timeLimitMs ?? Number.POSITIVE_INFINITY),
+    Number.POSITIVE_INFINITY,
+  );
+  const engine = new Engine(puzzle, budget);
+  const steps: Step[] = [];
+  engine.steps = steps;
+  engine.maxSteps = options.maxSteps ?? Number.POSITIVE_INFINITY;
+  let status: SolveStatus;
+  try {
+    const ok =
+      (options.initial === undefined || engine.load(options.initial)) &&
+      engine.solveRoot(options.lookahead ?? true);
+    status = !ok ? "contradiction" : engine.closed ? "solved" : "stuck";
+  } catch (err) {
+    if (!(err instanceof SolverStop)) throw err;
+    status = "incomplete";
+  }
+  return { status, steps, edges: engine.edges.slice() };
+}

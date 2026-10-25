@@ -125,3 +125,53 @@ Entry format:
 - **Question:** Which puzzles does the app ship before the server exists, and what goes in the tool tray?
 - **Decision:** Three fixtures in wire format: a 5×5 made for this phase, the 7×7 from the Play artboard and the 10×10 from the Night and Desktop artboards. Each has one solution, checked by a search before they were added. Their solutions live only in the test helpers. The tray has Undo, Redo and Clear; the Hint button arrives with hints.
 - **Reason:** Real unique puzzles at the kit's sizes exercise the same paths as served ones, and a Hint button that does nothing would mislead.
+
+## 2026-10-25 · WT2 `core-solver` · One deduction engine for solve and verify
+- **Question:** How should the rule solver, lookahead and the verifier's search share state?
+- **Decision:** One internal `Engine` (`packages/core/src/engine.ts`, not exported) over a `Uint8Array` of edge states. It tracks path ends (for each end dot, the other end and the path length) so closing a loop is checked in O(1), keeps a trail with mark/undo, and runs local rules from a worklist of cells and dots. Rules come in four tiers (local; 3s patterns; parity plus a connectivity check; lookahead), and after any change it goes back to the local rules.
+- **Reason:** Undo instead of copying makes lookahead probes and search nodes cheap on 100×100 boards, and going back to the cheapest tier keeps steps in rough easiest-first order for hints.
+
+## 2026-10-25 · WT2 `core-solver` · Rule ids and what a step carries
+- **Question:** Which deductions, under which ids, and what does each recorded step hold?
+- **Decision:** 14 ids in `RULE_IDS`, each with one plain sentence in `RULE_TEXT`: `clue-zero`, `clue-satisfied`, `clue-needs-all`, `dot-full`, `dot-continue`, `dot-dead-end`, `corner-1`, `corner-3`, `adjacent-3s`, `diagonal-3s`, `premature-loop`, `loop-complete`, `parity`, `lookahead`. A step is `{rule, changes, cells, dots}`; `cells` and `dots` are what a hint highlights. Parity steps name only the two cells, lookahead steps name the edge's dots and where the contradiction showed, `loop-complete` names nothing.
+- **Reason:** FR-3's list plus the bookkeeping rules a hint needs to explain every move. The text has no placeholders, so the UI can show it as is.
+
+## 2026-10-25 · WT2 `core-solver` · Adjacent 3s leave the shared side alone
+- **Question:** The usual pattern says two 3s side by side always have their shared side as a line. Do we apply it?
+- **Decision:** No. `adjacent-3s` sets only the two outer sides parallel to the shared side (lines) and the edges that continue the shared side (crosses).
+- **Reason:** The usual pattern is wrong when the whole loop is the rectangle around the two cells (2×1 `"33"` has its shared side crossed). The rest follows from dot degree alone; when the shared side is forced, other rules find it.
+
+## 2026-10-25 · WT2 `core-solver` · Corner rule covers any closed-off corner
+- **Question:** Does "a 1 or 3 in a corner" mean board corners only?
+- **Decision:** Any corner of a 1 or 3 whose two outside edges are crossed or off the board: a 1 gets both its sides there crossed, a 3 gets both as lines.
+- **Reason:** The same argument holds (a line on one side there must continue on the other), and it also catches corners closed off while solving.
+
+## 2026-10-25 · WT2 `core-solver` · Lookahead is one level deep
+- **Question:** How is "bounded lookahead" bounded?
+- **Decision:** Depth 1: assume a state for one open edge, run only the worklist rules (no parity, connectivity or nested lookahead), and on a contradiction set the other state. Open edges are tried round-robin; the tier ends when a full scan finds nothing. Every probe checks the time budget.
+- **Reason:** Parity and connectivity cost O(edges) each and would multiply the cost of every probe. With depth 1, a 50×50 puzzle reduced to a minimal rule-solvable clue set solves in about 25 ms.
+
+## 2026-10-25 · WT2 `core-solver` · How the verifier searches
+- **Question:** What does the verifier do when the rules get stuck?
+- **Decision:** Depth-first search with an explicit stack, branching on the first open edge in reading order, cross first. Each node runs the rules without lookahead plus a connectivity check (from a line, every other line and an open side of every clue above 0 must be reachable over edges that are not crossed). It stops at the second solution.
+- **Reason:** Of the variants measured (branching at a path end or in reading order, line or cross first, with or without the connectivity check, lookahead at every node), this one left the fewest under-clued boards `unknown` within 1 s: 0 of 30 at 10×10, 1 of 30 at 15×15, 2 of 30 at 20×20 and 10 of 30 at 30×30, on boards keeping 10–30% of their clues. Heavily under-clued large boards can still end `unknown`, which FR-4 and PRD §9 allow.
+
+## 2026-10-25 · WT2 `core-solver` · Verification budget
+- **Question:** How is the verification time limit enforced and tested?
+- **Decision:** `verify` takes `timeLimitMs` (default `DEFAULT_VERIFY_TIME_LIMIT_MS` = 30 000), an injectable clock `now` (default `Date.now`) and `maxNodes`. The deadline is checked once per lookahead probe and once per search node; running out returns `unknown` with any solution already found. `solve` takes the same time options plus `maxSteps`. The worker's `terminate()` (WT6) stays the outer hard limit.
+- **Reason:** A fake clock makes the budget tests deterministic. `performance.now` is not available to core's typecheck (no DOM or Bun types); `Date.now` is plain ECMAScript.
+
+## 2026-10-25 · WT2 `core-solver` · What "brute force on all small grids" covers
+- **Question:** How far do the FR-5 agreement tests go?
+- **Decision:** Every clue assignment on every grid of at most 6 cells (70,930 puzzles; the whole agreement file runs in about 3 s), plus fast-check: 1000 planted-solution puzzles up to 4×4, 20 up to 5×4 and 1000 random clue grids up to 4×4. Each checks `verify`'s status and solutions, and that every edge `solve` decides matches every brute-force solution. All 937,500 puzzles on 2×4, 4×2, 1×7 and 7×1 also pass, but take 25 s, so they are not in the gate.
+- **Reason:** It keeps `bun run check` at about 3–5 s and catches every seeded rule mutation in the plan's mutation check. A bug fast-check found in the prototype (the connectivity check seeded from a clue before any line existed, on a 2×4 board) is pinned as a unit test.
+
+## 2026-10-25 · WT2 `core-solver` · Hints start from the player's board
+- **Question:** How will hints (WT8) get the next deduction for a player?
+- **Decision:** `solve(puzzle, { initial: board, maxSteps: 1 })`. Deductions are sound for the board they start from, so the caller first drops player edges that disagree with the stored solution. Use `steps[0]` when present (status is then `incomplete`, because `maxSteps` was hit). No step with status `stuck` means no rule applies; `solved` with no steps means the board was already complete.
+- **Reason:** One solver serves both uses, and its step already holds what a hint shows.
+
+## 2026-10-25 · WT2 `core-solver` · Deterministic generation must not depend on wall-clock budgets
+- **Question:** `solve` and `verify` accept `timeLimitMs`. May the generator (WT3) use it to accept or reject candidates?
+- **Decision:** No. Anything that must give the same puzzle for the same seed uses `solve` with no time limit, or `verify` with `maxNodes` and `timeLimitMs: Infinity`. Wall-clock limits belong to the outer job timeout (WT6).
+- **Reason:** A time limit makes the result depend on machine speed and load, so the same seed could produce different puzzles on different hosts. A node count is the same everywhere.

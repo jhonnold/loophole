@@ -7,6 +7,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc -p . && tsc -p tsconfig.test.json"
+    "typecheck": "tsc -p . && tsc -p tsconfig.test.json",
+    "bench": "bun bench/verify.ts"
   }
 }
