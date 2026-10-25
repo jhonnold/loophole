@@ -1,5 +1,9 @@
 import { S3Client } from "bun";
 import type { BlobStore } from "../../ports.ts";
+import { withTimeout } from "./with-timeout.ts";
+
+/** A blob request that takes longer fails, so a stalled connection cannot hold a job forever. */
+const REQUEST_TIMEOUT_MS = 30_000;
 
 export interface S3Settings {
   readonly endpoint: string;
@@ -18,16 +22,24 @@ export class S3BlobStore implements BlobStore {
   }
 
   async put(key: string, body: string, contentType: string): Promise<void> {
-    await this.#client.write(key, body, { type: contentType });
+    await this.#bounded(`Writing ${key}`, this.#client.write(key, body, { type: contentType }));
   }
 
   async get(key: string): Promise<string | null> {
+    return await this.#bounded(`Reading ${key}`, this.#read(key));
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.#bounded(`Deleting ${key}`, this.#client.delete(key));
+  }
+
+  async #read(key: string): Promise<string | null> {
     const file = this.#client.file(key);
     if (!(await file.exists())) return null;
     return await file.text();
   }
 
-  async delete(key: string): Promise<void> {
-    await this.#client.delete(key);
+  #bounded<T>(what: string, work: Promise<T>): Promise<T> {
+    return withTimeout(work, REQUEST_TIMEOUT_MS, what);
   }
 }
