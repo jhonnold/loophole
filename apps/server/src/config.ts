@@ -28,6 +28,7 @@ export interface Config {
   readonly databasePath: string;
   readonly webDir: string | undefined;
   readonly s3: S3Settings;
+  /** Unique per process: the name (WORKER_ID, or the host) plus the pid, so a reclaimed job's old worker can't match the new one. */
   readonly workerId: string;
   /** How long an idle worker waits before looking for jobs again. */
   readonly pollMs: number;
@@ -58,7 +59,7 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
       accessKeyId: e.S3_ACCESS_KEY_ID,
       secretAccessKey: e.S3_SECRET_ACCESS_KEY,
     },
-    workerId: e.WORKER_ID ?? `${hostname()}-${process.pid}`,
+    workerId: `${e.WORKER_ID ?? hostname()}-${process.pid}`,
     pollMs: 500,
     maxQueuedJobs: 100,
     jobs: {

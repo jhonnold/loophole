@@ -42,7 +42,7 @@ describe("loadConfig", () => {
       port: 8080,
       databasePath: "/var/lib/loophole/db.sqlite",
       webDir: "apps/web/build",
-      workerId: "w1",
+      workerId: `w1-${process.pid}`,
       jobs: { generateTimeoutMs: 1000 },
     });
   });
