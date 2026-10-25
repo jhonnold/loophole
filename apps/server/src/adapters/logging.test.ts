@@ -13,7 +13,13 @@ describe("redact", () => {
       '{"password":"[redacted]","secret": "[redacted]"}',
     );
     expect(redact("Authorization: Bearer loophole-dev-metrics-token")).toBe(
-      "Authorization: [redacted] [redacted]",
+      "Authorization: Bearer [redacted]",
+    );
+    expect(redact("Authorization: Basic dXNlcjpwYXNzd29yZA==")).toBe(
+      "Authorization: Basic [redacted]",
+    );
+    expect(redact("password=\"two words\" and secret='a b'")).toBe(
+      "password=\"[redacted]\" and secret='[redacted]'",
     );
     expect(
       redact("cookie __Host-loophole_session=k3Jd9_aZq0vLmN8xYtR2sW4uB6cE1fG7hI5jK0lM9nO"),

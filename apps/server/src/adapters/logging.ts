@@ -19,9 +19,12 @@ export interface JsonLoggingOptions {
 }
 
 const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z][\w-]*[A-Za-z]\b/g;
-/** `token=…`, `password: …`, `secret=…` and the like, in URLs, fragments and messages. */
+/**
+ * `token=…`, `password: …`, `secret="two words"`, `Authorization: Basic …` and the like, in URLs,
+ * fragments and messages. A quoted value is masked up to its closing quote; a scheme word stays.
+ */
 const NAMED_SECRET =
-  /\b(token|password|secret|authorization|cookie)\b(["']?\s*[:=]\s*["']?)[^\s"'&,;]+/gi;
+  /\b(token|password|secret|authorization|cookie)\b(["']?\s*[:=]\s*)(?:(["'])((?:(?:Basic|Bearer)\s+)?)(?:(?!\3).)*?\3|(["']?)((?:(?:Basic|Bearer)\s+)?)[^\s"'&,;]+)/gi;
 const BEARER = /\bBearer\s+[^\s"']+/gi;
 /**
  * Runs of 40 or more base64url characters: session and mailed tokens (43, and they may hold `-` or
@@ -36,7 +39,19 @@ export function redact(text: string): string {
   return text
     .replace(EMAIL, "[email]")
     .replace(BEARER, "Bearer [redacted]")
-    .replace(NAMED_SECRET, "$1$2[redacted]")
+    .replace(
+      NAMED_SECRET,
+      (
+        _match,
+        name: string,
+        sep: string,
+        quote1?: string,
+        scheme1?: string,
+        quote2?: string,
+        scheme2?: string,
+      ) =>
+        `${name}${sep}${quote1 ?? quote2 ?? ""}${scheme1 ?? scheme2 ?? ""}[redacted]${quote1 ?? ""}`,
+    )
     .replace(LONG_TOKEN, "[redacted]");
 }
 
