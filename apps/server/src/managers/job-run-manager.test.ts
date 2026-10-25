@@ -141,11 +141,15 @@ describe("JobRunManager.runNext", () => {
   });
 
   test("sends heartbeats while a task runs", async () => {
+    let s: ReturnType<typeof setup> | undefined;
     const runner = new FakeTaskRunner(async () => {
-      await Bun.sleep(60);
+      // Hold the task until two beats have arrived, however late the timer fires (capped).
+      for (let waited = 0; (s?.jobs.heartbeats ?? 0) < 2 && waited < 5_000; waited += 5) {
+        await Bun.sleep(5);
+      }
       return GENERATED;
     });
-    const s = setup(runner, { ...SETTINGS, heartbeatMs: 10 });
+    s = setup(runner, { ...SETTINGS, heartbeatMs: 10 });
     s.enqueue("j1");
     await s.manager.runNext("w");
     expect(s.jobs.heartbeats).toBeGreaterThanOrEqual(2);
