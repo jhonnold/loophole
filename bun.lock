@@ -29,6 +29,7 @@
       "name": "@loophole/web",
       "version": "0.0.0",
       "dependencies": {
+        "@loophole/api-client": "workspace:*",
         "@loophole/core": "workspace:*",
       },
       "devDependencies": {
