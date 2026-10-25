@@ -38,18 +38,24 @@ When a property fails, fast-check prints a `seed` and `path`. To replay that exa
 
 GitHub Actions runs `bun install --frozen-lockfile` and then `bun run check` on every push to `main` and on every pull request.
 
+### Timing-sensitive tests
+
+`./scripts/test-under-load.sh [copies] [rounds] [bun test arguments]` runs `bun test` several times at once (6 copies, 5 rounds by default), which slows each run down the way a busy machine or CI does, and lists every test that failed and how often. Run it after adding a test that waits on threads, timers or other processes, for example `./scripts/test-under-load.sh 16 6 apps/server`. Bun 1.3.13 itself crashes now and then under this load ("panic: Segmentation fault", about 1 run in 50 at 16 copies, while worker threads are torn down); that is a Bun bug, not a failing test (`docs/DECISIONS.md`, "Concurrent-open tests use processes").
+
 ## Server
 
 Server tests follow its layers:
 
 - Managers are tested with the fakes in the server's test support (clock, puzzle repository, job queue, task runner) and the in-memory blob store, so they run without a database or threads.
-- SQLite repositories and the job queue are tested on in-memory databases (`openDatabase(":memory:")`), which run the real migrations. The claim race test uses a database file shared by several threads.
+- SQLite repositories and the job queue are tested on in-memory databases (`openDatabase(":memory:")`), which run the real migrations. The claim race test and the concurrent-open test use a database file shared by several child processes (`Bun.spawn`), as the API and the worker share one; threads would not do (`docs/DECISIONS.md`, "Concurrent-open tests use processes").
 - Routes are tested through Hono's `app.request` over real managers and in-memory adapters, with no server listening.
 - The thread task runner is tested with real Bun worker threads, including a 100×100 generation stopped at its time limit.
 - The S3 blob store test runs against Garage when the `S3_*` settings are set (from `.env`) and Garage answers; otherwise it is skipped, as in CI. Start Garage (README, Local services) to run it.
 - The account and session managers run on fakes too (users, sessions, mailed tokens, password hashing, CAPTCHA) with the in-memory mailer and rate limiter. Route tests build the account side with `accountDeps` from the server's test support and pass a client address as `app.request`'s third argument.
 - The SMTP mailer test sends through Mailpit and reads the message back from Mailpit's API when it answers on 127.0.0.1:8025; otherwise it is skipped. The Turnstile adapter is tested with a fake `fetch`, never against Cloudflare.
 - The daily puzzle, ranked attempt, leaderboard and display name managers run on fakes too. `FakeAttemptRepository` ranks by the same rules as the SQL (time, then who finished first), and the SQLite repository tests check the SQL itself. A fake clock takes tests across 00:00 UTC. Route tests build the daily side with `dailyDeps` and store daily puzzles with `storeDaily`, both from the server's test support.
+- Every route test passes `health: healthManager(db, clock)` (server test support) to `createApp`. Request counts and auth failures are checked with a recording `ApiMetrics` in `api/health.test.ts`; the Prometheus adapter is tested on its own registry, and its metrics server on a free port. The JSON log writer's tests check that emails, tokens and passwords are masked.
+- `bun run bench:jobs` is the server-side performance check (NFR-1): generations up to 30×30 and two 100×100 verifications through the real thread runner, failing when a budget is missed. It is not part of the check, since its timings depend on the machine.
 
 ## Web app
 

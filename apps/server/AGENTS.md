@@ -21,4 +21,6 @@ Conventions:
 - An unpublished puzzle is 404 to players wherever it would show up (a route, a list, a hint); only admins can open it.
 - `PuzzleManager.get` hides a daily puzzle before its release time, so reach puzzles players may see through it. Ranked attempts and leaderboards read the `attempts` table, not saved progress.
 - In a schema, write "this registered schema or null" as `z.union([Schema, z.null()])`. `.nullable()` on a schema registered with `.openapi("Name")` makes the shared component itself nullable.
+- Counts for monitoring go through the `ApiMetrics` and `WorkerMetrics` ports (optional deps, so tests can leave them out); only `adapters/metrics` imports `prom-client`. Label metrics by route template or a small fixed set of values, never by ids or raw paths.
+- Log with `console.*`: the composition roots turn every call into a JSON line with the request id and mask emails, tokens and secrets. Still keep emails, tokens and message bodies out of log calls.
 - Tests: managers with fakes, repositories on in-memory SQLite, routes through `app.request`, the task runner with real threads. The Garage test skips itself when Garage isn't running. `docs/TESTING.md` has the details.
