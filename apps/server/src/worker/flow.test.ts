@@ -10,6 +10,7 @@ import { createApp } from "../api/app.ts";
 import { JobManager } from "../managers/job-manager.ts";
 import { JobRunManager } from "../managers/job-run-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
+import { accountDeps } from "../test-support/accounts.ts";
 
 // The whole path in one process: the API queues a generation, the worker's manager runs it in a
 // real thread, and the API serves the stored puzzle.
@@ -42,7 +43,7 @@ function setup() {
       maxAttempts: 3,
     },
   });
-  return { app: createApp({ puzzles, jobs }), runs, puzzles };
+  return { app: createApp({ puzzles, jobs, ...accountDeps(db, systemClock) }), runs, puzzles };
 }
 
 async function generateViaApi(

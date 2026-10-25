@@ -1,6 +1,11 @@
 import { hostname } from "node:os";
 import { z } from "zod";
 import type { S3Settings } from "./adapters/blob/s3-blob-store.ts";
+import {
+  TURNSTILE_TEST_SECRET_KEY,
+  TURNSTILE_TEST_SITE_KEY,
+} from "./adapters/captcha/turnstile.ts";
+import type { SmtpSettings } from "./adapters/mail/smtp-mailer.ts";
 import type { JobRunSettings } from "./managers/job-run-manager.ts";
 
 const Port = z.coerce.number().int().min(1).max(65535);
@@ -19,6 +24,16 @@ const EnvSchema = z.object({
   WORKER_ID: z.string().min(1).optional(),
   GENERATE_TIMEOUT_MS: Ms.default(60_000),
   VERIFY_TIMEOUT_MS: Ms.default(45_000),
+  PUBLIC_URL: z.url().default("http://localhost:5173"),
+  TRUST_PROXY: z.stringbool().default(false),
+  TURNSTILE_SITE_KEY: z.string().min(1).default(TURNSTILE_TEST_SITE_KEY),
+  TURNSTILE_SECRET_KEY: z.string().min(1).default(TURNSTILE_TEST_SECRET_KEY),
+  SMTP_HOST: z.string().min(1).default("localhost"),
+  SMTP_PORT: Port.default(1025),
+  SMTP_SECURE: z.stringbool().default(false),
+  SMTP_USER: z.string().min(1).optional(),
+  SMTP_PASSWORD: z.string().min(1).optional(),
+  MAIL_FROM: z.string().min(1).default("Loophole <no-reply@loophole.localhost>"),
 });
 
 export interface Config {
@@ -35,6 +50,14 @@ export interface Config {
   /** New jobs are refused while this many are waiting. */
   readonly maxQueuedJobs: number;
   readonly jobs: JobRunSettings;
+  /** Origin of the web app, without a trailing slash; links in mail point here. */
+  readonly publicUrl: string;
+  /** Behind a reverse proxy: take the client's address from the last X-Forwarded-For entry. */
+  readonly trustProxy: boolean;
+  readonly turnstile: { readonly siteKey: string; readonly secretKey: string };
+  readonly smtp: SmtpSettings;
+  /** How long a login session lasts. */
+  readonly sessionTtlMs: number;
 }
 
 /** Reads the server's settings from environment variables (see `.env.example`). Throws on bad values. */
@@ -47,6 +70,17 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     );
   }
   const e = parsed.data;
+  const publicHost = new URL(e.PUBLIC_URL).hostname;
+  if (
+    e.TURNSTILE_SECRET_KEY === TURNSTILE_TEST_SECRET_KEY &&
+    publicHost !== "localhost" &&
+    publicHost !== "127.0.0.1"
+  ) {
+    // Fail closed: the test secret passes every token, so it must never guard a real site.
+    throw new Error(
+      `TURNSTILE_SECRET_KEY is Cloudflare's always-pass test key, but PUBLIC_URL (${e.PUBLIC_URL}) is not localhost. Set TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY to a real Turnstile widget's keys.`,
+    );
+  }
   return {
     host: e.HOST,
     port: e.PORT,
@@ -70,5 +104,17 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
       staleMs: 30_000,
       maxAttempts: 3,
     },
+    publicUrl: e.PUBLIC_URL.replace(/\/+$/, ""),
+    trustProxy: e.TRUST_PROXY,
+    turnstile: { siteKey: e.TURNSTILE_SITE_KEY, secretKey: e.TURNSTILE_SECRET_KEY },
+    smtp: {
+      host: e.SMTP_HOST,
+      port: e.SMTP_PORT,
+      secure: e.SMTP_SECURE,
+      user: e.SMTP_USER,
+      password: e.SMTP_PASSWORD,
+      from: e.MAIL_FROM,
+    },
+    sessionTtlMs: 30 * 24 * 60 * 60 * 1000,
   };
 }

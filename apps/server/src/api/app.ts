@@ -6,22 +6,29 @@ import { bodyLimit } from "hono/body-limit";
 import { serveStatic } from "hono/bun";
 import { HTTPException } from "hono/http-exception";
 import type { Job, PuzzleRecord } from "../domain.ts";
-import { QueueFullError } from "../managers/errors.ts";
+import {
+  CaptchaFailedError,
+  InvalidCredentialsError,
+  InvalidTokenError,
+  QueueFullError,
+  RateLimitedError,
+} from "../managers/errors.ts";
 import type { JobManager } from "../managers/job-manager.ts";
 import type { PuzzleManager } from "../managers/puzzle-manager.ts";
-import { problem } from "./problem.ts";
+import { type AccountRouteDeps, registerAccountRoutes, tooManyRequests } from "./accounts.ts";
+import { sameOriginOnly } from "./csrf.ts";
+import { problem, problemResponse } from "./problem.ts";
 import {
   GenerateRequestSchema,
   HealthSchema,
   IdParamSchema,
   JobSchema,
-  ProblemSchema,
   PuzzleListQuerySchema,
   PuzzleListSchema,
   PuzzleSchema,
 } from "./schemas.ts";
 
-export interface AppDeps {
+export interface AppDeps extends AccountRouteDeps {
   readonly puzzles: PuzzleManager;
   readonly jobs: JobManager;
   /** Folder of the built web app to serve at `/`, with `index.html` for unknown paths. */
@@ -30,11 +37,6 @@ export interface AppDeps {
 
 /** Largest request body the API reads. Leaves room for a 100×100 puzzle (about 10 KB). */
 const MAX_BODY_BYTES = 64 * 1024;
-
-const problemResponse = (description: string) => ({
-  description,
-  content: { "application/problem+json": { schema: ProblemSchema } },
-});
 
 const healthRoute = createRoute({
   method: "get",
@@ -87,6 +89,7 @@ const generateRoute = createRoute({
     400: problemResponse("Invalid request body."),
     413: problemResponse("Request body larger than 64 KiB."),
     415: problemResponse("Request body is not JSON."),
+    403: problemResponse("Sent from another site (CSRF protection)."),
     503: problemResponse("Too many jobs waiting; try again later."),
   },
 });
@@ -128,6 +131,7 @@ export function createApp(deps: AppDeps): OpenAPIHono {
       onError: (c) => problem(c, 413, "Request body too large"),
     }),
   );
+  app.use("/api/*", sameOriginOnly);
 
   app.openapi(healthRoute, (c) => c.json({ status: "ok" as const }, 200));
 
@@ -154,6 +158,8 @@ export function createApp(deps: AppDeps): OpenAPIHono {
     return c.json(toJobDto(job), 200);
   });
 
+  registerAccountRoutes(app, deps);
+
   app.all("/api/*", (c) => problem(c, 404, "Not found"));
 
   if (deps.webDir !== undefined) {
@@ -166,6 +172,13 @@ export function createApp(deps: AppDeps): OpenAPIHono {
   app.onError((err, c) => {
     if (err instanceof QueueFullError)
       return problem(c, 503, "Queue full", { detail: err.message });
+    if (err instanceof InvalidCredentialsError)
+      return problem(c, 401, "Wrong email or password", { detail: err.message });
+    if (err instanceof CaptchaFailedError)
+      return problem(c, 400, "CAPTCHA check failed", { detail: err.message });
+    if (err instanceof InvalidTokenError)
+      return problem(c, 400, "Invalid or expired link", { detail: err.message });
+    if (err instanceof RateLimitedError) return tooManyRequests(c, err.retryAfterMs);
     if (err instanceof HTTPException) return problem(c, err.status, err.message);
     console.error(err);
     return problem(c, 500, "Internal server error");
