@@ -57,7 +57,16 @@ describe("verify", () => {
     let t = 1000;
     const result = verify(createPuzzle(4, 4), { timeLimitMs: 5, now: () => t++ });
     expect(result.status).toBe("unknown");
-    expect(result.stats.elapsedMs).toBe(7);
+    expect(result.stats.elapsedMs).toBeGreaterThanOrEqual(5);
+  });
+
+  test("stops an under-clued 100×100 board near its wall-clock limit", () => {
+    const grid = createGrid(100, 100);
+    const rng = createRng("verify-deadline");
+    const p = puzzleFromLoop(grid, randomLoop(grid, rng), rng, 0.1);
+    const result = verify(p, { timeLimitMs: 200 });
+    expect(result.status).toBe("unknown");
+    expect(result.stats.elapsedMs).toBeLessThan(2000);
   });
 
   test("defaults to a 30 second limit", () => {

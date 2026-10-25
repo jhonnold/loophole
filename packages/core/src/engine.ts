@@ -160,9 +160,13 @@ export class Engine {
     return this.local() && this.applyPatterns() && this.propagate(lookahead);
   }
 
-  /** Tiers 1, 3 and (optionally) 4 until nothing changes. False on a contradiction. */
+  /**
+   * Tiers 1, 3 and (optionally) 4 until nothing changes. False on a contradiction. Checks the time
+   * budget on every pass, since each parity pass costs O(edges).
+   */
   propagate(lookahead: boolean): boolean {
     for (;;) {
+      this.budget.tick();
       if (!this.local()) return false;
       if (this.closed) return true;
       const p = this.parity();

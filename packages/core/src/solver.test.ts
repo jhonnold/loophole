@@ -117,6 +117,16 @@ describe("solve", () => {
     expect(result.status).toBe("incomplete");
   });
 
+  test("honours the time limit without lookahead too", () => {
+    let t = 0;
+    const result = solve(puzzle(3, 3, "........."), {
+      lookahead: false,
+      timeLimitMs: 0,
+      now: () => t++,
+    });
+    expect(result.status).toBe("incomplete");
+  });
+
   test("without lookahead it can get stuck where lookahead solves", () => {
     const p = puzzle(2, 2, "2222");
     expect(solve(p, { lookahead: false }).status).toBe("stuck");
@@ -156,6 +166,7 @@ describe("solve", () => {
           const result = solve(p, { initial });
           expect(result.status).not.toBe("contradiction");
           expect(result.status).not.toBe("incomplete");
+          expect(replay(p.grid.edgeCount, result.steps, initial)).toEqual(result.edges);
           result.edges.forEach((s, e) => {
             if (s !== EdgeState.Unknown) expect(s).toBe(solution[e]);
           });
