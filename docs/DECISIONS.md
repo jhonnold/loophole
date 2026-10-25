@@ -516,3 +516,8 @@ Entry format:
 - **Question:** How are daily puzzles tested in a browser when `bun run test:e2e` has no API?
 - **Decision:** `tests/daily.e2e.ts` stands in for the daily, attempt, leaderboard, session and progress routes with `page.route` (`tests/daily-mocks.ts`), with the small-7 fixture as today's 7×7: the home covers and streak, guest play, a ranked solve from Start to the Solved screen, the Solved screen itself and the leaderboard page. `tests/daily.auth-e2e.ts` runs the real thing with the auth config's API and worker: the worker stocks today's puzzles (`DAILY_DAYS_AHEAD=2` there), a confirmed player solves the 7×7 ranked (the test works out the solution from the clues with core's `verify` and waits out the 5 s minimum) and sees rank #1 and a one-day streak. It skips itself without Mailpit, Garage or Cloudflare.
 - **Reason:** The stand-in keeps the screens covered with no server, and one real run checks the parts a stand-in can't: the worker's schedule, the secret seed, the server's check of the board and its timing.
+
+## 2026-10-25 · WT11b `daily-leaderboards-web` · Earlier days' dailies under Continue
+- **Question:** An unfinished daily from an earlier day shows under Continue as a plain puzzle linking to `/play`, because progress rows don't say which puzzles are dailies. Should the server tag them?
+- **Decision:** No, not for v1. Today's dailies link to their daily page; earlier days' dailies open in `/play`.
+- **Reason:** A daily's ranked window closes at the next 00:00 UTC, so an earlier day's daily can only be played unranked, which is what `/play` does. Only the label is generic. Tagging progress rows would need a server and schema change for a cosmetic gain.
