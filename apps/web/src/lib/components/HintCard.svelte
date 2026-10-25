@@ -155,7 +155,7 @@
       line-height: 1.35;
     }
 
-    figure :global(svg) {
+    figure > :global(svg) {
       width: 56px;
       height: 56px;
     }

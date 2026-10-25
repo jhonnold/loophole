@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { EdgeState, RULE_IDS } from "@loophole/core";
+import { analyzeBoard, EdgeState, hasViolations, RULE_IDS } from "@loophole/core";
 import { RULE_PATTERNS } from "./patterns.ts";
 
 describe("RULE_PATTERNS", () => {
@@ -18,6 +18,8 @@ describe("RULE_PATTERNS", () => {
       }
       for (const c of marks.cells) expect(c).toBeLessThan(grid.cellCount);
       for (const d of marks.dots) expect(d).toBeLessThan(grid.dotCount);
+      // Drawn by the board renderer, so nothing may show as a rule break.
+      expect([id, hasViolations(analyzeBoard(puzzle, edges).violations)]).toEqual([id, false]);
       // Small enough to read at 72px.
       expect(Math.max(grid.width, grid.height)).toBeLessThanOrEqual(3);
     }
