@@ -8,9 +8,12 @@ import { defineConfig } from "@playwright/test";
 // (`docker compose up -d`), and access to Cloudflare's Turnstile check; the tests skip themselves
 // without them. Run with `bun run test:e2e:auth` from this package.
 
-// A fresh database file for every run, shared by the API and the worker.
+// A fresh database file for every run, shared by the API and the worker. Playwright loads this
+// file in the runner and again in each worker process; the runner makes the folder once and the
+// child processes inherit it, and globalTeardown removes it.
+process.env.LOOPHOLE_E2E_DIR ??= mkdtempSync(join(tmpdir(), "loophole-e2e-"));
 const env = {
-  DATABASE_PATH: join(mkdtempSync(join(tmpdir(), "loophole-e2e-")), "e2e.sqlite"),
+  DATABASE_PATH: join(process.env.LOOPHOLE_E2E_DIR, "e2e.sqlite"),
   PUBLIC_URL: "http://localhost:4174",
   TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
   TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
@@ -27,6 +30,7 @@ const env = {
 export default defineConfig({
   testDir: "tests",
   testMatch: "**/*.auth-e2e.ts",
+  globalTeardown: "./tests/auth-teardown.ts",
   reporter: "list",
   use: {
     baseURL: "http://localhost:4174",
