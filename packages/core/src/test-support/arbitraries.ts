@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { bruteForceSolutions } from "../bruteforce.ts";
-import type { PuzzleWireV1 } from "../format.ts";
+import { MAX_META_KEY_LENGTH, MAX_SEED_LENGTH, type PuzzleWireV1 } from "../format.ts";
 import { createPuzzle, deriveClues, NO_CLUE, type Puzzle } from "../puzzle.ts";
 
 /** Valid v1 wire objects, with optional seed and meta. */
@@ -22,9 +22,9 @@ export function arbPuzzleWire(maxWidth = 12, maxHeight = 12): fc.Arbitrary<Puzzl
               maxLength: width * height,
             })
             .map((chars) => chars.join("")),
-          seed: fc.string({ minLength: 1, maxLength: 128 }),
+          seed: fc.string({ minLength: 1, maxLength: MAX_SEED_LENGTH }),
           meta: fc.dictionary(
-            fc.string({ minLength: 1, maxLength: 64 }),
+            fc.string({ minLength: 1, maxLength: MAX_META_KEY_LENGTH }),
             fc.string({ maxLength: 50 }),
             {
               maxKeys: 8,

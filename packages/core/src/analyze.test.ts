@@ -27,6 +27,14 @@ function board(grid: Grid, lines: number[], crosses: number[] = []): Uint8Array 
   return edges;
 }
 
+/** Edge `e` is a line when bit `e` of `mask` is set, otherwise a cross. */
+function fromMask(edgeCount: number, mask: number): Uint8Array {
+  const edges = new Uint8Array(edgeCount);
+  for (let e = 0; e < edgeCount; e++)
+    edges[e] = (mask >>> e) & 1 ? EdgeState.Line : EdgeState.Cross;
+  return edges;
+}
+
 const NO_VIOLATIONS = { dots: [], overfullCells: [], starvedCells: [], loopEdges: [] };
 const OUTER = [0, 1, 8, 11, 5, 4, 9, 6];
 const AROUND_C0 = [0, 7, 2, 6];
@@ -132,33 +140,25 @@ describe("analyzeBoard", () => {
     const p = puzzle(2, 2, "....");
     let solved = 0;
     for (let mask = 0; mask < 2 ** 12; mask++) {
-      const edges = new Uint8Array(12);
-      for (let e = 0; e < 12; e++) edges[e] = (mask >>> e) & 1 ? EdgeState.Line : EdgeState.Cross;
-      if (analyzeBoard(p, edges).solved) solved++;
+      if (analyzeBoard(p, fromMask(12, mask)).solved) solved++;
     }
     expect(solved).toBe(13);
   });
 
   test("solved matches brute force over every line set", () => {
-    const sizes = fc.constantFrom([1, 1], [1, 2], [2, 1], [1, 3], [3, 1], [2, 2]);
+    const sizes = fc.constantFrom<[number, number]>([1, 1], [1, 2], [2, 1], [1, 3], [3, 1], [2, 2]);
     const clue = fc.oneof(
       { arbitrary: fc.constant("."), weight: 3 },
       { arbitrary: fc.constantFrom("0", "1", "2", "3"), weight: 2 },
     );
     fc.assert(
       fc.property(sizes, fc.array(clue, { minLength: 4, maxLength: 4 }), ([w, h], chars) => {
-        const p = puzzle(
-          w as number,
-          h as number,
-          chars.slice(0, (w as number) * (h as number)).join(""),
-        );
+        const p = puzzle(w, h, chars.slice(0, w * h).join(""));
         const expected = bruteForceSolutions(p, Number.POSITIVE_INFINITY).map(encodeEdges);
         const solved: string[] = [];
         const n = p.grid.edgeCount;
         for (let mask = 0; mask < 2 ** n; mask++) {
-          const edges = new Uint8Array(n);
-          for (let e = 0; e < n; e++)
-            edges[e] = (mask >>> e) & 1 ? EdgeState.Line : EdgeState.Cross;
+          const edges = fromMask(n, mask);
           if (analyzeBoard(p, edges).solved) solved.push(encodeEdges(edges));
         }
         expect(solved.sort()).toEqual(expected.sort());
