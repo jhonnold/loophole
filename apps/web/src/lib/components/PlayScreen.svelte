@@ -226,6 +226,8 @@
     if (t?.closest("input, textarea, select, [contenteditable='true']")) return;
     const cmd = screenCommand(e);
     if (cmd === null) return;
+    // Escape closes a hint card; with none open it is left for other UI, such as a dialog.
+    if (cmd.type === "close" && !hintOpen) return;
     e.preventDefault();
     run(cmd);
   }

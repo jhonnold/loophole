@@ -239,4 +239,18 @@ test.describe("desktop", () => {
       )
       .toBeGreaterThan(0);
   });
+  test("Escape with no hint open is left for other UI", async ({ page }) => {
+    await openWith(page, empty);
+    await page.evaluate(() => {
+      window.addEventListener("keydown", (e) => {
+        (window as unknown as { escapePrevented: boolean }).escapePrevented = e.defaultPrevented;
+      });
+    });
+    await page.keyboard.press("Escape");
+    await expect
+      .poll(() =>
+        page.evaluate(() => (window as unknown as { escapePrevented?: boolean }).escapePrevented),
+      )
+      .toBe(false);
+  });
 });
