@@ -25,6 +25,7 @@
     createStopwatch,
     elapsed,
     formatClock,
+    isRunning,
     type Stopwatch,
     start,
     stop,
@@ -137,7 +138,7 @@
 
   // Solving stops the clock and records the result (FR-17, client side).
   $effect(() => {
-    if (solved && watch.since !== null) {
+    if (solved && isRunning(watch)) {
       watch = stop(watch, performance.now());
       save();
     }
@@ -235,7 +236,7 @@
     </div>
 
     <div class="side">
-      <div class="timecard">
+      <div class="card timecard">
         <div class="timecard-text">
           <span class="label">Time</span>
           <span class="big-clock">{clock}</span>
@@ -553,15 +554,6 @@
     cursor: default;
   }
 
-  kbd {
-    font-family: inherit;
-    font-size: 12px;
-    padding: 1px 6px;
-    border: 1.5px solid var(--hairline);
-    border-radius: 4px;
-    color: var(--ink-soft);
-  }
-
   .timecard,
   .keys {
     display: none;
@@ -652,9 +644,6 @@
       justify-content: space-between;
       gap: 12px;
       padding: 18px;
-      background: var(--sheet);
-      border: 2px solid var(--ink);
-      border-radius: 6px;
     }
 
     .timecard-text {

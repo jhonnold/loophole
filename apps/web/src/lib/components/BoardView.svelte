@@ -1,7 +1,7 @@
 <script lang="ts">
   import { type BoardAnalysis, EdgeState, NO_CLUE, NONE, type Puzzle } from "@loophole/core";
   import { type EdgeChange, nextState } from "../game/board.ts";
-  import { cellPoint, dotPoint, edgeSegment, type Layout } from "../game/geometry.ts";
+  import { cellPoint, dotPoint, edgeMidpoint, edgeSegment, type Layout } from "../game/geometry.ts";
   import { PointerGesture } from "../game/gesture.ts";
   import { insideCells } from "../game/inside.ts";
   import { boardCommand, edgeLabel, moveCursor } from "../game/keyboard.ts";
@@ -162,12 +162,10 @@
     {/each}
 
     {#each crosses as e (e)}
-      {@const s = edgeSegment(grid, layout, e)}
-      {@const mx = (s.x1 + s.x2) / 2}
-      {@const my = (s.y1 + s.y2) / 2}
+      {@const { x, y } = edgeMidpoint(grid, layout, e)}
       <path
         class="cross"
-        d="M{mx - crossArm} {my - crossArm}L{mx + crossArm} {my + crossArm}M{mx + crossArm} {my - crossArm}L{mx - crossArm} {my + crossArm}"
+        d="M{x - crossArm} {y - crossArm}L{x + crossArm} {y + crossArm}M{x + crossArm} {y - crossArm}L{x - crossArm} {y + crossArm}"
         stroke-width={Math.max(1.5, S * 0.05)}
       />
     {/each}

@@ -65,12 +65,6 @@
 
   kbd {
     display: none;
-    font-family: inherit;
-    font-size: 12px;
-    padding: 1px 6px;
-    border: 1.5px solid var(--hairline);
-    border-radius: 4px;
-    color: var(--ink-soft);
   }
 
   @media (min-width: 900px) {

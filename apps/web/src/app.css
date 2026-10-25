@@ -93,6 +93,15 @@ button {
   touch-action: manipulation;
 }
 
+kbd {
+  font-family: inherit;
+  font-size: 12px;
+  padding: 1px 6px;
+  border: 1.5px solid var(--hairline);
+  border-radius: 4px;
+  color: var(--ink-soft);
+}
+
 :focus-visible {
   outline: 3px solid var(--ai);
   outline-offset: 2px;
