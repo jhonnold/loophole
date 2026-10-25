@@ -19,6 +19,6 @@ Conventions:
 - Routes for one player's own data name the user in the path (`/api/users/{userId}/…`) and answer 403 when it isn't the logged-in user, as the progress routes do, so a page that still shows an earlier login can't read or write another account's data.
 - A table that holds a user's data references `users(id) ON DELETE CASCADE`, so deleting the account deletes it (PRD NFR-6). Published puzzles are the exception: their `creator_id` is set to null instead.
 - An unpublished puzzle is 404 to players wherever it would show up (a route, a list, a hint); only admins can open it.
-- Daily puzzles are stored without their seed or generator version and with a release time, and `PuzzleManager.get` hides a puzzle before its release time, so reach puzzles players may see through it. Ranked attempts and leaderboards read the `attempts` table, never saved progress.
+- `PuzzleManager.get` hides a daily puzzle before its release time, so reach puzzles players may see through it. Ranked attempts and leaderboards read the `attempts` table, not saved progress.
 - In a schema, write "this registered schema or null" as `z.union([Schema, z.null()])`. `.nullable()` on a schema registered with `.openapi("Name")` makes the shared component itself nullable.
 - Tests: managers with fakes, repositories on in-memory SQLite, routes through `app.request`, the task runner with real threads. The Garage test skips itself when Garage isn't running. `docs/TESTING.md` has the details.
