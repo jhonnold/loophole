@@ -33,6 +33,7 @@ const EnvSchema = z.object({
   SMTP_SECURE: z.stringbool().default(false),
   SMTP_USER: z.string().min(1).optional(),
   SMTP_PASSWORD: z.string().min(1).optional(),
+  SMTP_REQUIRE_TLS: z.stringbool().optional(),
   MAIL_FROM: z.string().min(1).default("Loophole <no-reply@loophole.localhost>"),
 });
 
@@ -114,6 +115,7 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
       user: e.SMTP_USER,
       password: e.SMTP_PASSWORD,
       from: e.MAIL_FROM,
+      requireTls: e.SMTP_REQUIRE_TLS,
     },
     sessionTtlMs: 30 * 24 * 60 * 60 * 1000,
   };

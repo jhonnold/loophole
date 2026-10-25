@@ -85,6 +85,8 @@ The API is described in [`openapi.yaml`](openapi.yaml). To serve the built web a
 
 With the API and `bun run dev:web` running, open http://localhost:5173/signup. The sign-up check is Cloudflare Turnstile with Cloudflare's test keys from `.env.example`, so it always passes and the widget says "For testing only". In production, set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` to a real widget's keys (Turnstile's free plan is enough). The API refuses to start with the test secret unless `PUBLIC_URL` is on `localhost` or `127.0.0.1`, and warns while it is in use there. Verification and password reset mail goes to Mailpit: open http://localhost:8025 and follow the link. Links point at `PUBLIC_URL`.
 
+Mail goes over SMTP (the `SMTP_*` settings). Off loopback the connection must upgrade to TLS with STARTTLS, and a server that doesn't offer it is refused. For a relay on a private network that doesn't offer STARTTLS (such as a Docker service named `mailpit`), set `SMTP_REQUIRE_TLS=false`; set it to `true` to require STARTTLS on loopback too.
+
 The session cookie is always `Secure`. Chromium and curl accept it on `http://localhost`, so development needs no HTTPS. In production, serve the site over HTTPS, and set `TRUST_PROXY=true` when a reverse proxy sits in front of the API, so rate limits see each client's own address. Set it only when the API is reachable solely through that proxy (bind `HOST` to loopback or the internal network): otherwise a client can send its own `X-Forwarded-For` and choose its rate-limit address.
 
 There is no admin UI. To make an account an admin (for unpublishing puzzles and the health view in later phases), run from the repo root:

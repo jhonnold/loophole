@@ -92,6 +92,12 @@ describe("loadConfig", () => {
     });
   });
 
+  test("SMTP_REQUIRE_TLS is optional and reads as a boolean", () => {
+    expect(loadConfig(S3).smtp.requireTls).toBeUndefined();
+    expect(loadConfig({ ...S3, SMTP_REQUIRE_TLS: "false" }).smtp.requireTls).toBe(false);
+    expect(loadConfig({ ...S3, SMTP_REQUIRE_TLS: "true" }).smtp.requireTls).toBe(true);
+  });
+
   test("refuses Turnstile's test secret for a site that isn't on localhost", () => {
     expect(() => loadConfig({ ...S3, PUBLIC_URL: "https://loophole.example" })).toThrow(
       /TURNSTILE_SECRET_KEY is Cloudflare's always-pass test key/,

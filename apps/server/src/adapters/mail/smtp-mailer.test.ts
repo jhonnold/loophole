@@ -12,6 +12,11 @@ test("STARTTLS is required for a remote SMTP server, not on loopback or with TLS
   expect(smtpOptions({ ...settings, host: "smtp.example" }).requireTLS).toBe(true);
   expect(smtpOptions({ ...settings, host: "localhost" }).requireTLS).toBe(false);
   expect(smtpOptions({ ...settings, host: "127.0.0.1" }).requireTLS).toBe(false);
+  expect(smtpOptions({ ...settings, host: "LOCALHOST" }).requireTLS).toBe(false);
+  expect(smtpOptions({ ...settings, host: "127.10.0.2" }).requireTLS).toBe(false);
+  expect(smtpOptions({ ...settings, host: "mailpit" }).requireTLS).toBe(true);
+  expect(smtpOptions({ ...settings, host: "mailpit", requireTls: false }).requireTLS).toBe(false);
+  expect(smtpOptions({ ...settings, host: "localhost", requireTls: true }).requireTLS).toBe(true);
   expect(
     smtpOptions({ ...settings, host: "smtp.example", port: 465, secure: true }).requireTLS,
   ).toBe(false);
