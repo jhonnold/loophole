@@ -1,0 +1,69 @@
+# Example alert rules for ops/prometheus.yml. Tune the thresholds to your traffic.
+groups:
+  - name: loophole
+    rules:
+      - alert: LoopholeDown
+        expr: up{job=~"loophole-api|loophole-worker|garage"} == 0
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.job }} has not answered a scrape for 5 minutes."
+
+      - alert: DailyPuzzleMissing
+        expr: min by (size) (loophole_daily_days_stocked) == 0
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "Today's {{ $labels.size }}×{{ $labels.size }} daily puzzle is not generated."
+
+      - alert: DailyStockLow
+        expr: min by (size) (loophole_daily_days_stocked) < 2
+        for: 2h
+        labels: { severity: warning }
+        annotations:
+          summary: "Only today's {{ $labels.size }}×{{ $labels.size }} daily is generated; tomorrow's is missing."
+
+      - alert: DailyGenerationFailing
+        expr: increase(loophole_daily_generation_failures_total[1h]) > 3
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.size }}×{{ $labels.size }} daily generations keep failing."
+
+      - alert: MailFailing
+        expr: increase(loophole_mail_failures_total[15m]) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "Mail (verification, password reset) is failing to send; check the SMTP settings."
+
+      - alert: JobTimeouts
+        expr: sum(increase(loophole_jobs_finished_total{status="timeout"}[1h])) > 5
+        labels: { severity: warning }
+        annotations:
+          summary: "More than 5 jobs hit their time limit in the last hour."
+
+      - alert: JobQueueBacklog
+        expr: loophole_jobs{status="queued"} > 50
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $value }} jobs waiting for 10 minutes; the worker may be stuck or overloaded."
+
+      - alert: ApiErrors
+        expr: sum(rate(loophole_http_requests_total{status=~"5.."}[5m])) > 0.1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "The API is answering with server errors."
+
+      - alert: RateLimitFlood
+        expr: increase(loophole_rate_limit_evictions_total[10m]) > 0
+        labels: { severity: info }
+        annotations:
+          summary: "The rate limiter is evicting counters: a flood of distinct clients or emails."
+
+      - alert: AuthFailuresHigh
+        expr: sum(rate(loophole_auth_failures_total[5m])) > 1
+        for: 10m
+        labels: { severity: info }
+        annotations:
+          summary: "Many refused logins, links or cross-site requests: possible credential stuffing."
