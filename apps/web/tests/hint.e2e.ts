@@ -198,6 +198,7 @@ test.describe("phone 390×664, zoomed board", () => {
       expect(b.y + b.height).toBeLessThanOrEqual(frame.y + frame.height);
     }
   });
+
   test("resuming after a pause does not pan a zoomed board back to the hint", async ({ page }) => {
     await page.goto("/play/medium-10");
     await expect(board(page)).toBeVisible();
@@ -272,6 +273,7 @@ test.describe("desktop", () => {
       )
       .toBeGreaterThan(0);
   });
+
   test("Escape with no hint open is left for other UI", async ({ page }) => {
     await openWith(page, empty);
     await page.evaluate(() => {
@@ -303,6 +305,33 @@ test.describe("desktop", () => {
     await page.keyboard.press("z");
     await expect(page.getByRole("button", { name: "Erase it" })).toHaveCount(0);
     await expect(board(page)).toBeFocused();
+  });
+
+  test("Clear keeps the assisted flag, and a reload keeps it (FR-12)", async ({ page }) => {
+    await openWith(page, empty);
+    const right = solution.indexOf(EdgeState.Line);
+    const p = await edgePoint(page, grid, right);
+    await page.mouse.click(p.x, p.y);
+    await page.getByRole("button", { name: "Hint" }).click();
+    await page.getByRole("button", { name: "I'll draw it" }).click();
+    await page.getByRole("button", { name: "Clear" }).click();
+    await expect(lines(page)).toHaveCount(0);
+    await expect(page.locator(".timecard").getByText("Hint used")).toBeVisible();
+    await page.reload();
+    await expect(page.locator(".timecard").getByText("Hint used")).toBeVisible();
+  });
+
+  test("Start over clears the assisted flag (FR-12)", async ({ page }) => {
+    await openWith(page, oneLineShort().edges);
+    await page.getByRole("button", { name: "Hint" }).click();
+    await page.getByRole("button", { name: "Apply move" }).click();
+    await expect(page.getByRole("img", { name: "Solved" })).toBeVisible();
+    await expect(page.locator(".solved-card")).toContainText("Hint used");
+    await page.getByRole("button", { name: "Start over" }).click();
+    await expect(page.locator(".solved-card")).toHaveCount(0);
+    await expect(page.getByText("Hint used")).toHaveCount(0);
+    const raw = await page.evaluate(() => localStorage.getItem("loophole:progress:small-7"));
+    expect(raw === null || JSON.parse(raw).assisted !== true).toBe(true);
   });
 
   test("a hint that comes back after the screen was left does not overwrite newer progress", async ({
