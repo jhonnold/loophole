@@ -8,7 +8,15 @@
   import SiteHeader from "$lib/components/SiteHeader.svelte";
   import StreakCard from "$lib/components/StreakCard.svelte";
   import type { DailySet, DailySummary } from "$lib/daily/api.ts";
-  import { countdown, dailyPath, dayHeading, msToNextDay, sizeName, utcDay } from "$lib/daily/days.ts";
+  import {
+    countdown,
+    dailyPath,
+    dailyRefreshDue,
+    dayHeading,
+    msToNextDay,
+    sizeName,
+    utcDay,
+  } from "$lib/daily/days.ts";
   import { daily } from "$lib/daily/index.ts";
   import { type CoverStatus, coverStatus } from "$lib/daily/view.ts";
   import { formatClock } from "$lib/game/timer.ts";
@@ -59,11 +67,11 @@
     refresh();
     // New puzzles come out at 00:00 UTC (`nextAt`). The device's clock can run ahead of or behind
     // the server's, so once that time has passed, ask again every 30 s until the server answers
-    // with the new day; with no set at all (server unreachable) it asks every 30 s too.
+    // with the new day. It also asks every 30 s while the server is unreachable or a size class
+    // isn't ready yet, so a cover doesn't stay "Not ready yet" after the worker catches up.
     const tick = setInterval(() => {
       now = Date.now();
-      const due = today === null || (today !== undefined && now >= Date.parse(today.nextAt));
-      if (due && now - fetchedAt >= 30_000) void refreshDaily();
+      if (dailyRefreshDue(today, now) && now - fetchedAt >= 30_000) void refreshDaily();
     }, 1000);
     return () => clearInterval(tick);
   });
