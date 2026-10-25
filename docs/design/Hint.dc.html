@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Loophole hint card</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;family=Zen+Maru+Gothic:wght@500;700;900&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#1E1C19;text-decoration:none}a:hover{color:#2E4C8A}
+</style>
+</helmet>
+<div style="width: 390px; height: 664px; box-sizing: border-box; overflow: hidden; overscroll-behavior: none; background: #F4EFE3; color: #1E1C19; font-family: 'Zen Kaku Gothic New', system-ui, sans-serif; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
+  <header style="height: 52px; display: flex; align-items: center; gap: 8px; flex: 0 0 auto">
+    <a href="Home.dc.html" aria-label="Back to today" style="width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex: 0 0 auto">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </a>
+    <div style="flex: 1 1 auto; display: flex; flex-direction: column; line-height: 1.2">
+      <span style="font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 20px">Small · 7×7</span>
+      <span style="font-size: 13px; color: #5B554B; font-weight: 500">Daily · 25 Oct · 今日の問題</span>
+    </div>
+    <div style="display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 5px 0 14px; box-sizing: border-box; border-radius: 999px; background: #FFFDF8; border: 2px solid #1E1C19; flex: 0 0 auto">
+      <span style="font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums">05:47</span>
+      <button type="button" aria-label="Pause" style="width: 32px; height: 32px; border-radius: 50%; border: 0; background: #1E1C19; color: #FFFDF8; display: flex; align-items: center; justify-content: center; padding: 0">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M4 2v10M10 2v10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div style="height: 24px; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; font-size: 14px; color: #5B554B">
+    <span><b style="color: #1E1C19">{{b.analysis.satisfied}}</b> of {{b.analysis.clueCount}} clues satisfied</span>
+    <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 6px; background: rgba(46,76,138,0.12); color: #2E4C8A; font-weight: 700; font-size: 13px">Hint used · unranked</span>
+  </div>
+
+  <div style="align-self: center; flex: 0 0 auto; position: relative; background: #FFFDF8; border: 2px solid #1E1C19; box-shadow: 4px 4px 0 #1E1C19; width: 312px; height: 312px">
+    <div style="position: relative; width: 312px; height: 312px">
+      <sc-for list="{{b.washes}}" as="w"><div style="{{w.style}}"></div></sc-for>
+      <sc-for list="{{b.lines}}" as="l"><div style="{{l.style}}"></div></sc-for>
+      <sc-for list="{{b.ghosts}}" as="g"><div style="{{g.style}}">{{g.txt}}</div></sc-for>
+      <sc-for list="{{b.xs}}" as="x"><div style="{{x.style}}">×</div></sc-for>
+      <sc-for list="{{b.dots}}" as="d"><div style="{{d.style}}"></div></sc-for>
+      <sc-for list="{{b.clues}}" as="q"><div style="{{q.style}}">{{q.txt}}</div></sc-for>
+    </div>
+  </div>
+
+  <section aria-labelledby="hint-title" style="flex: 1 1 auto; box-sizing: border-box; background: #FFFDF8; border: 2px solid #2E4C8A; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; gap: 12px; align-items: flex-start">
+      <div style="flex: 1 1 auto; display: flex; flex-direction: column; gap: 4px">
+        <span style="display: flex; align-items: center; gap: 6px; color: #2E4C8A; font-size: 13px; font-weight: 700">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"/></svg>
+          ヒント · next forced move
+        </span>
+        <h2 id="hint-title" style="margin: 0; font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 20px; line-height: 1.2">Clue saturated</h2>
+        <p style="margin: 0; font-size: 15px; line-height: 1.45">Three sides of the highlighted <b>1</b> are crossed, so its last open side must be its line.</p>
+      </div>
+      <figure style="margin: 0; flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 4px">
+        <div style="position: relative; width: 72px; height: 72px; background: #F4EFE3; border-radius: 6px">
+          <sc-for list="{{rule.washes}}" as="w"><div style="{{w.style}}"></div></sc-for>
+          <sc-for list="{{rule.ghosts}}" as="g"><div style="{{g.style}}">{{g.txt}}</div></sc-for>
+          <sc-for list="{{rule.xs}}" as="x"><div style="{{x.style}}">×</div></sc-for>
+          <sc-for list="{{rule.dots}}" as="d"><div style="{{d.style}}"></div></sc-for>
+          <sc-for list="{{rule.clues}}" as="q"><div style="{{q.style}}">{{q.txt}}</div></sc-for>
+        </div>
+        <figcaption style="font-size: 12px; color: #5B554B">the pattern</figcaption>
+      </figure>
+    </div>
+    <div style="display: flex; gap: 10px; margin-top: auto">
+      <button type="button" style="flex: 1 1 0; height: 48px; border-radius: 999px; border: 0; background: #2E4C8A; color: #FFFDF8; font-family: inherit; font-size: 16px; font-weight: 700">Apply move</button>
+      <button type="button" style="flex: 1 1 0; height: 48px; border-radius: 999px; border: 2px solid #1E1C19; background: transparent; color: #1E1C19; font-family: inherit; font-size: 16px; font-weight: 700">I'll draw it</button>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":664}}'>
+function lpParse(W, H, clues) {
+  return { W: W, H: H, clue: clues.split('').map(function (ch) { return ch === '.' ? null : +ch; }) };
+}
+function lpCellEdges(p, r, c) {
+  var W = p.W;
+  return [['h', r * W + c], ['h', (r + 1) * W + c], ['v', r * (W + 1) + c], ['v', r * (W + 1) + c + 1]];
+}
+function lpDotEdges(p, r, c) {
+  var W = p.W, H = p.H, out = [];
+  if (c > 0) out.push(['h', r * W + c - 1]);
+  if (c < W) out.push(['h', r * W + c]);
+  if (r > 0) out.push(['v', (r - 1) * (W + 1) + c]);
+  if (r < H) out.push(['v', r * (W + 1) + c]);
+  return out;
+}
+function lpEdgeDots(p, t, i) {
+  var W = p.W;
+  if (t === 'h') { var r = Math.floor(i / W), c = i % W; return [[r, c], [r, c + 1]]; }
+  var rv = Math.floor(i / (W + 1)), cv = i % (W + 1); return [[rv, cv], [rv + 1, cv]];
+}
+function lpTally(p, s, edges) {
+  var n = { line: 0, x: 0, open: [] };
+  edges.forEach(function (e) { var val = s[e[0]][e[1]]; if (val === 1) n.line++; else if (val === 2) n.x++; else n.open.push(e); });
+  return n;
+}
+function lpAnalyze(p, s) {
+  var W = p.W, H = p.H, r, c;
+  var errCells = {}, errDots = {}, satisfied = 0, clueCount = 0;
+  for (r = 0; r < H; r++) for (c = 0; c < W; c++) {
+    var k = p.clue[r * W + c];
+    if (k === null) continue;
+    clueCount++;
+    var n = lpTally(p, s, lpCellEdges(p, r, c));
+    if (n.line > k || n.x > 4 - k) errCells[r * W + c] = 1;
+    if (n.line === k) satisfied++;
+  }
+  for (r = 0; r <= H; r++) for (c = 0; c <= W; c++) {
+    if (lpTally(p, s, lpDotEdges(p, r, c)).line >= 3) errDots[r * (W + 1) + c] = 1;
+  }
+  return { errCells: errCells, errDots: errDots, satisfied: satisfied, clueCount: clueCount };
+}
+function lpLayout(p, s, o) {
+  var W = p.W, H = p.H, S = o.S, M = o.M, t = o.t, r, c;
+  var a = lpAnalyze(p, s);
+  var hint = o.hint || null;
+  var hintCells = {};
+  if (hint) (hint.cells || []).forEach(function (i) { hintCells[i] = 1; });
+  var out = { dots: [], clues: [], lines: [], xs: [], washes: [], ghosts: [], analysis: a };
+  var px = function (n) { return Math.round(n * 10) / 10 + 'px'; };
+  for (r = 0; r < H; r++) for (c = 0; c < W; c++) {
+    var i = r * W + c, k = p.clue[i];
+    var x = M + c * S, y = M + r * S;
+    if (hintCells[i]) out.washes.push({ style: 'position:absolute;left:' + px(x + 2) + ';top:' + px(y + 2) + ';width:' + px(S - 4) + ';height:' + px(S - 4) + ';background:' + o.c.hintWash + ';border-radius:3px' });
+    if (k === null) continue;
+    out.clues.push({ txt: String(k), style: 'position:absolute;left:' + px(x) + ';top:' + px(y) + ';width:' + px(S) + ';height:' + px(S) + ';display:flex;align-items:center;justify-content:center;font-size:' + px(S * 0.56) + ';font-weight:' + (hintCells[i] ? 700 : 500) + ';line-height:1;color:' + (hintCells[i] ? o.c.hint : o.c.ink) });
+  }
+  var dotSize = Math.max(4, Math.round(S * 0.11));
+  for (r = 0; r <= H; r++) for (c = 0; c <= W; c++) {
+    var dx = M + c * S, dy = M + r * S;
+    out.dots.push({ style: 'position:absolute;left:' + px(dx - dotSize / 2) + ';top:' + px(dy - dotSize / 2) + ';width:' + px(dotSize) + ';height:' + px(dotSize) + ';border-radius:50%;background:' + o.c.dot });
+  }
+  var ghostOf = {};
+  if (hint) hint.edges.forEach(function (e) { ghostOf[e[0] + e[1]] = e[2]; });
+  ['h', 'v'].forEach(function (tt) {
+    var n = tt === 'h' ? (H + 1) * W : H * (W + 1);
+    for (var i = 0; i < n; i++) {
+      var d = lpEdgeDots(p, tt, i), x0 = M + d[0][1] * S, y0 = M + d[0][0] * S;
+      var mx = tt === 'h' ? x0 + S / 2 : x0, my = tt === 'h' ? y0 : y0 + S / 2;
+      var val = s[tt][i], key = tt + i;
+      var lineStyle = function (color, dash) {
+        var base = tt === 'h'
+          ? 'left:' + px(x0 - t / 2) + ';top:' + px(y0 - t / 2) + ';width:' + px(S + t) + ';height:' + px(t)
+          : 'left:' + px(x0 - t / 2) + ';top:' + px(y0 - t / 2) + ';width:' + px(t) + ';height:' + px(S + t);
+        return 'position:absolute;' + base + ';border-radius:' + px(t / 2) + ';' + (dash
+          ? 'background:repeating-linear-gradient(' + (tt === 'h' ? '90deg' : '180deg') + ',' + color + ' 0 6px,transparent 6px 11px)'
+          : 'background:' + color);
+      };
+      var xStyle = function (color) { return 'position:absolute;left:' + px(mx - S * 0.2) + ';top:' + px(my - S * 0.2) + ';width:' + px(S * 0.4) + ';height:' + px(S * 0.4) + ';display:flex;align-items:center;justify-content:center;font-size:' + px(S * 0.36) + ';line-height:1;color:' + color; };
+      if (val === 1) out.lines.push({ style: lineStyle(o.c.line, false) });
+      else if (val === 2) out.xs.push({ style: xStyle(o.c.x) });
+      if (key in ghostOf && val === 0) {
+        if (ghostOf[key] === 1) out.ghosts.push({ style: lineStyle(o.c.hint, true), txt: '' });
+        else out.ghosts.push({ style: xStyle(o.c.hint) + ';font-weight:700', txt: '×' });
+      }
+    }
+  });
+  return out;
+}
+function lpState(h, v) {
+  return { h: h.split('').map(Number), v: v.split('').map(Number) };
+}
+
+var PAPER = { ink: '#1E1C19', dot: '#1E1C19', line: '#1E1C19', x: '#8C8476', err: '#C23B22', hint: '#2E4C8A', hintWash: 'rgba(46,76,138,0.16)' };
+
+class Component extends DCLogic {
+  renderVals() {
+    var p = lpParse(7, 7, '.11..0..23.2......2.21.0....1....01.1..3..0..1..1');
+    var s = lpState('22212221122020121200022220002220022211012222000002200002', '22211222121100002122000021220000212002202220012022000002');
+    var b = lpLayout(p, s, { S: 40, M: 16, t: 4.5, c: PAPER, hint: { cells: [34], edges: [['v', 39, 1]] } });
+    var rule = lpLayout(lpParse(1, 1, '1'), lpState('22', '20'), { S: 44, M: 14, t: 4, c: PAPER, hint: { cells: [0], edges: [['v', 1, 1]] } });
+    return { b: b, rule: rule };
+  }
+}
+</script>
+</body>
+</html>

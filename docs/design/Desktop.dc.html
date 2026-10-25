@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Loophole desktop play</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;family=Zen+Maru+Gothic:wght@500;700;900&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#1E1C19;text-decoration:none}a:hover{color:#2E4C8A}
+</style>
+</helmet>
+<div style="min-height: 900px; background: #F4EFE3; color: #1E1C19; font-family: 'Zen Kaku Gothic New', system-ui, sans-serif">
+  <header style="border-bottom: 2px solid #1E1C19; background: #FFFDF8">
+    <div style="max-width: 1280px; margin: 0 auto; padding: 0 24px; min-height: 68px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px">
+      <a href="Home.dc.html" style="display: flex; align-items: center; gap: 10px">
+        <svg width="24" height="30" viewBox="0 0 196 252" aria-hidden="true">
+          <polyline points="14,14 182,14 182,126 126,126 126,238 70,238 70,126 14,126" fill="none" stroke="#1E1C19" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="14" y1="126" x2="14" y2="14" stroke="#C23B22" stroke-width="24" stroke-linecap="round"/>
+        </svg>
+        <span style="font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 24px">Loophole</span>
+      </a>
+      <nav aria-label="Main" style="display: flex; flex-wrap: wrap; gap: 4px; flex: 1 1 auto">
+        <a href="Home.dc.html" aria-current="page" style="padding: 10px 14px; font-weight: 700; border-bottom: 3px solid #C23B22">Today</a>
+        <a href="Home.dc.html" style="padding: 10px 14px; font-weight: 700; color: #5B554B">Library</a>
+        <a href="Editor.dc.html" style="padding: 10px 14px; font-weight: 700; color: #5B554B">Create</a>
+        <a href="Solved.dc.html" style="padding: 10px 14px; font-weight: 700; color: #5B554B">Ranks</a>
+      </nav>
+      <div role="group" aria-label="Theme" style="display: flex; padding: 3px; border: 2px solid #1E1C19; border-radius: 999px; gap: 2px">
+        <button type="button" aria-pressed="true" style="height: 34px; padding: 0 14px; border-radius: 999px; border: 0; background: #1E1C19; color: #FFFDF8; font-family: inherit; font-size: 14px; font-weight: 700">紙 Paper</button>
+        <button type="button" aria-pressed="false" style="height: 34px; padding: 0 14px; border-radius: 999px; border: 0; background: transparent; color: #1E1C19; font-family: inherit; font-size: 14px; font-weight: 700">夜 Night</button>
+        <button type="button" aria-pressed="false" style="height: 34px; padding: 0 14px; border-radius: 999px; border: 0; background: transparent; color: #1E1C19; font-family: inherit; font-size: 14px; font-weight: 700">System</button>
+      </div>
+      <button type="button" aria-label="Account" style="width: 44px; height: 44px; border-radius: 50%; border: 2px solid #1E1C19; background: #FFFDF8; color: #1E1C19; display: flex; align-items: center; justify-content: center; padding: 0">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main style="max-width: 1280px; margin: 0 auto; padding: 28px 24px 40px; display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start">
+    <section aria-labelledby="pz-title" style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px">
+        <h1 id="pz-title" style="margin: 0; font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 34px">Medium · 10×10</h1>
+        <span style="font-size: 16px; color: #5B554B; font-weight: 500">Daily · Sunday 25 October · 今日の問題</span>
+        <span style="margin-left: auto; display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 6px; background: #E8DFC4; font-size: 14px; font-weight: 700">Ranked</span>
+      </div>
+      <div style="overflow-x: auto; padding: 0 6px 6px 0">
+        <div style="position: relative; width: 620px; height: 620px; background: #FFFDF8; border: 2px solid #1E1C19; box-shadow: 6px 6px 0 #1E1C19">
+          <sc-for list="{{b.lines}}" as="l"><div style="{{l.style}}"></div></sc-for>
+          <sc-for list="{{b.xs}}" as="x"><div style="{{x.style}}">×</div></sc-for>
+          <sc-for list="{{b.dots}}" as="d"><div style="{{d.style}}"></div></sc-for>
+          <sc-for list="{{b.clues}}" as="q"><div style="{{q.style}}">{{q.txt}}</div></sc-for>
+          <div style="position: absolute; left: 188px; top: 413px; width: 70px; height: 26px; box-sizing: border-box; border: 3px solid #2E4C8A; border-radius: 13px"></div>
+          <div style="position: absolute; left: 160px; top: 446px; padding: 6px 10px; border-radius: 6px; background: #2E4C8A; color: #FFFDF8; font-size: 13px; font-weight: 700; white-space: nowrap">Row 8 · between columns 4 and 5 · empty</div>
+        </div>
+      </div>
+    </section>
+
+    <aside style="flex: 1 1 320px; max-width: 400px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+      <div style="background: #FFFDF8; border: 2px solid #1E1C19; border-radius: 6px; padding: 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px">
+        <div style="display: flex; flex-direction: column">
+          <span style="font-size: 13px; font-weight: 700; color: #5B554B">Time</span>
+          <span style="font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 44px; line-height: 1.05; font-variant-numeric: tabular-nums">08:41</span>
+          <span style="font-size: 14px; color: #5B554B"><b style="color: #1E1C19">{{b.analysis.satisfied}}</b> of {{b.analysis.clueCount}} clues satisfied</span>
+        </div>
+        <button type="button" style="height: 48px; padding: 0 20px; border-radius: 999px; border: 2px solid #1E1C19; background: transparent; color: #1E1C19; font-family: inherit; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px">
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M4 2v10M10 2v10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>Pause <kbd style="font-family: inherit; font-size: 12px; padding: 1px 6px; border: 1.5px solid #DDD3C0; border-radius: 4px; color: #5B554B">P</kbd>
+        </button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+        <button type="button" style="height: 52px; border-radius: 8px; border: 2px solid #1E1C19; background: #FFFDF8; color: #1E1C19; font-family: inherit; font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px">Undo <kbd style="font-family: inherit; font-size: 12px; padding: 1px 6px; border: 1.5px solid #DDD3C0; border-radius: 4px; color: #5B554B">Z</kbd></button>
+        <button type="button" style="height: 52px; border-radius: 8px; border: 2px solid #1E1C19; background: #FFFDF8; color: #1E1C19; font-family: inherit; font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px">Redo <kbd style="font-family: inherit; font-size: 12px; padding: 1px 6px; border: 1.5px solid #DDD3C0; border-radius: 4px; color: #5B554B">Y</kbd></button>
+        <button type="button" style="height: 52px; border-radius: 8px; border: 2px solid #2E4C8A; background: #FFFDF8; color: #2E4C8A; font-family: inherit; font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px">Hint <kbd style="font-family: inherit; font-size: 12px; padding: 1px 6px; border: 1.5px solid #DDD3C0; border-radius: 4px; color: #5B554B">H</kbd></button>
+        <button type="button" style="height: 52px; border-radius: 8px; border: 2px solid #1E1C19; background: #FFFDF8; color: #1E1C19; font-family: inherit; font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px">Clear</button>
+      </div>
+
+      <section aria-labelledby="keys-h" style="background: #FFFDF8; border: 2px solid #1E1C19; border-radius: 6px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+        <h2 id="keys-h" style="margin: 0; font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 18px">Keyboard</h2>
+        <dl style="margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; font-size: 14px; align-items: center">
+          <dt style="font-weight: 700">← ↑ → ↓</dt><dd style="margin: 0; color: #5B554B">move the edge cursor</dd>
+          <dt style="font-weight: 700">Space</dt><dd style="margin: 0; color: #5B554B">line → × → empty</dd>
+          <dt style="font-weight: 700">X</dt><dd style="margin: 0; color: #5B554B">cross the edge</dd>
+          <dt style="font-weight: 700">Backspace</dt><dd style="margin: 0; color: #5B554B">clear the edge</dd>
+          <dt style="font-weight: 700">Mouse</dt><dd style="margin: 0; color: #5B554B">click to cycle, drag to draw a run</dd>
+        </dl>
+      </section>
+
+      <section aria-labelledby="top-h" style="background: #FFFDF8; border: 2px solid #1E1C19; border-radius: 6px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: baseline; justify-content: space-between">
+          <h2 id="top-h" style="margin: 0; font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 18px">番付 Today</h2>
+          <span style="font-size: 13px; color: #5B554B">100 cells</span>
+        </div>
+        <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 15px">
+          <li style="display: flex; gap: 10px"><span style="width: 24px; color: #5B554B; font-weight: 700">1</span><span style="flex: 1 1 auto; font-weight: 700">tsuru</span><span style="font-variant-numeric: tabular-nums; font-weight: 700">03:02</span></li>
+          <li style="display: flex; gap: 10px"><span style="width: 24px; color: #5B554B; font-weight: 700">2</span><span style="flex: 1 1 auto; font-weight: 700">kuroneko</span><span style="font-variant-numeric: tabular-nums; font-weight: 700">03:40</span></li>
+          <li style="display: flex; gap: 10px"><span style="width: 24px; color: #5B554B; font-weight: 700">3</span><span style="flex: 1 1 auto; font-weight: 700">inkwell</span><span style="font-variant-numeric: tabular-nums; font-weight: 700">04:05</span></li>
+        </ol>
+        <a href="Solved.dc.html" style="font-size: 14px; font-weight: 700; color: #2E4C8A">Full leaderboard →</a>
+      </section>
+    </aside>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+function lpParse(W, H, clues) {
+  return { W: W, H: H, clue: clues.split('').map(function (ch) { return ch === '.' ? null : +ch; }) };
+}
+function lpCellEdges(p, r, c) {
+  var W = p.W;
+  return [['h', r * W + c], ['h', (r + 1) * W + c], ['v', r * (W + 1) + c], ['v', r * (W + 1) + c + 1]];
+}
+function lpEdgeDots(p, t, i) {
+  var W = p.W;
+  if (t === 'h') { var r = Math.floor(i / W), c = i % W; return [[r, c], [r, c + 1]]; }
+  var rv = Math.floor(i / (W + 1)), cv = i % (W + 1); return [[rv, cv], [rv + 1, cv]];
+}
+function lpLayout(p, s, o) {
+  var W = p.W, H = p.H, S = o.S, M = o.M, t = o.t, r, c;
+  var a = { satisfied: 0, clueCount: 0 };
+  var out = { dots: [], clues: [], lines: [], xs: [], analysis: a };
+  var px = function (n) { return Math.round(n * 10) / 10 + 'px'; };
+  for (r = 0; r < H; r++) for (c = 0; c < W; c++) {
+    var i = r * W + c, k = p.clue[i];
+    var x = M + c * S, y = M + r * S;
+    if (k === null) continue;
+    a.clueCount++;
+    var lines = lpCellEdges(p, r, c).filter(function (e) { return s[e[0]][e[1]] === 1; }).length;
+    if (lines === k) a.satisfied++;
+    out.clues.push({ txt: String(k), style: 'position:absolute;left:' + px(x) + ';top:' + px(y) + ';width:' + px(S) + ';height:' + px(S) + ';display:flex;align-items:center;justify-content:center;font-size:' + px(S * 0.56) + ';font-weight:500;line-height:1;color:' + o.c.ink });
+  }
+  var dotSize = Math.max(4, Math.round(S * 0.11));
+  for (r = 0; r <= H; r++) for (c = 0; c <= W; c++) {
+    var dx = M + c * S, dy = M + r * S;
+    out.dots.push({ style: 'position:absolute;left:' + px(dx - dotSize / 2) + ';top:' + px(dy - dotSize / 2) + ';width:' + px(dotSize) + ';height:' + px(dotSize) + ';border-radius:50%;background:' + o.c.dot });
+  }
+  ['h', 'v'].forEach(function (tt) {
+    s[tt].forEach(function (val, i) {
+      if (!val) return;
+      var d = lpEdgeDots(p, tt, i), x0 = M + d[0][1] * S, y0 = M + d[0][0] * S;
+      var mx = tt === 'h' ? x0 + S / 2 : x0, my = tt === 'h' ? y0 : y0 + S / 2;
+      if (val === 1) {
+        var base = tt === 'h'
+          ? 'left:' + px(x0 - t / 2) + ';top:' + px(y0 - t / 2) + ';width:' + px(S + t) + ';height:' + px(t)
+          : 'left:' + px(x0 - t / 2) + ';top:' + px(y0 - t / 2) + ';width:' + px(t) + ';height:' + px(S + t);
+        out.lines.push({ style: 'position:absolute;' + base + ';border-radius:' + px(t / 2) + ';background:' + o.c.line });
+      } else {
+        out.xs.push({ style: 'position:absolute;left:' + px(mx - S * 0.2) + ';top:' + px(my - S * 0.2) + ';width:' + px(S * 0.4) + ';height:' + px(S * 0.4) + ';display:flex;align-items:center;justify-content:center;font-size:' + px(S * 0.36) + ';line-height:1;color:' + o.c.x });
+      }
+    });
+  });
+  return out;
+}
+
+class Component extends DCLogic {
+  renderVals() {
+    var p = lpParse(10, 10, '.0.0..0.1.....1..2..3.0.21.1.1..0.3....22......3..2.1...01.121.32.....2...013.1...20....3..2....0...');
+    var s = {
+      h: '22222222222212212211112122112212222222222222122111122222211222121122221200200000220220000022020020002100002000'.split('').map(Number),
+      v: '22222222222221121121211222112222121221122221212222212221222222221212100000000211022000002112200000021200022000'.split('').map(Number)
+    };
+    var b = lpLayout(p, s, { S: 58, M: 20, t: 6, c: { ink: '#1E1C19', dot: '#1E1C19', line: '#1E1C19', x: '#8C8476' } });
+    return { b: b };
+  }
+}
+</script>
+</body>
+</html>

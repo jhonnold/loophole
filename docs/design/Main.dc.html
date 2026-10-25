@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Loophole style sheet</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&amp;family=Zen+Maru+Gothic:wght@500;700;900&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#2E4C8A}a:hover{color:#1E1C19}
+</style>
+</helmet>
+<div style="width: 1280px; height: 1680px; box-sizing: border-box; padding: 56px; background: #F4EFE3; color: #1E1C19; font-family: 'Zen Kaku Gothic New', system-ui, sans-serif; display: flex; flex-direction: column; gap: 40px">
+
+  <section style="display: flex; gap: 48px; align-items: stretch">
+    <div style="flex: 1 1 0; display: flex; flex-direction: column; justify-content: center; gap: 18px">
+      <div style="display: flex; align-items: center; gap: 10px">
+        <span style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px; border-radius: 999px; background: #1E1C19; color: #FFFDF8; font-size: 14px; font-weight: 700; letter-spacing: 0.06em">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #FFFDF8"></span>ペンシルパズル · pencil puzzles
+        </span>
+      </div>
+      <h1 style="margin: 0; font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 132px; line-height: 0.95; letter-spacing: -0.02em">Loophole</h1>
+      <p style="margin: 0; font-family: 'Zen Maru Gothic', sans-serif; font-weight: 700; font-size: 26px; color: #5B554B">スリザーリンク · 唯一解保証</p>
+      <p style="margin: 0; max-width: 520px; font-size: 19px; line-height: 1.6; color: #5B554B">Slitherlink on warm paper. Draw one loop through the dots; every puzzle is proven by the server to have exactly one answer.</p>
+    </div>
+    <div style="width: 420px; flex: 0 0 auto; background: #F2C4CE; border-radius: 6px; padding: 28px; box-sizing: border-box; position: relative; display: flex; align-items: center; justify-content: center">
+      <div style="position: absolute; top: 0; right: 0; background: #23355E; color: #FFFDF8; padding: 10px 14px; font-size: 13px; line-height: 1.45; font-weight: 700; border-radius: 0 6px 0 6px">5×5 〜 100×100<br>正方形グリッド</div>
+      <div style="background: #FFFDF8; border: 3px solid #1E1C19; padding: 26px 34px; box-shadow: 6px 6px 0 #1E1C19">
+        <svg width="196" height="252" viewBox="0 0 196 252" role="img" aria-label="Loophole mark: a loop on a dot grid shaped like a keyhole">
+          <g fill="#1E1C19">
+            <circle cx="14" cy="14" r="5"/><circle cx="70" cy="14" r="5"/><circle cx="126" cy="14" r="5"/><circle cx="182" cy="14" r="5"/>
+            <circle cx="14" cy="70" r="5"/><circle cx="70" cy="70" r="5"/><circle cx="126" cy="70" r="5"/><circle cx="182" cy="70" r="5"/>
+            <circle cx="14" cy="126" r="5"/><circle cx="70" cy="126" r="5"/><circle cx="126" cy="126" r="5"/><circle cx="182" cy="126" r="5"/>
+            <circle cx="14" cy="182" r="5"/><circle cx="70" cy="182" r="5"/><circle cx="126" cy="182" r="5"/><circle cx="182" cy="182" r="5"/>
+            <circle cx="14" cy="238" r="5"/><circle cx="70" cy="238" r="5"/><circle cx="126" cy="238" r="5"/><circle cx="182" cy="238" r="5"/>
+          </g>
+          <polyline points="14,14 182,14 182,126 126,126 126,238 70,238 70,126 14,126" fill="none" stroke="#1E1C19" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="14" y1="126" x2="14" y2="14" stroke="#C23B22" stroke-width="12" stroke-linecap="round"/>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <section style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px">
+    <div style="background: #FFFDF8; border: 2px solid #1E1C19; padding: 22px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: baseline; justify-content: space-between"><h2 style="margin: 0; font-family: 'Zen Maru Gothic', sans-serif; font-size: 22px; font-weight: 900">紙 Paper</h2><span style="font-size: 13px; color: #5B554B">light theme</span></div>
+      <sc-for list="{{paper}}" as="sw" hint-placeholder-count="8">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <span style="{{sw.chip}}"></span>
+          <span style="flex: 1 1 auto; font-size: 15px; font-weight: 700">{{sw.name}}</span>
+          <span style="font-size: 13px; color: #5B554B">{{sw.role}}</span>
+          <code style="font-size: 12px; color: #5B554B; width: 64px; text-align: right">{{sw.hex}}</code>
+        </div>
+      </sc-for>
+    </div>
+    <div style="background: #1A2438; border: 2px solid #1E1C19; padding: 22px; display: flex; flex-direction: column; gap: 14px; color: #ECE4D3">
+      <div style="display: flex; align-items: baseline; justify-content: space-between"><h2 style="margin: 0; font-family: 'Zen Maru Gothic', sans-serif; font-size: 22px; font-weight: 900">夜 Night</h2><span style="font-size: 13px; color: #A7AFBF">dark theme</span></div>
+      <sc-for list="{{night}}" as="sw" hint-placeholder-count="8">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <span style="{{sw.chip}}"></span>
+          <span style="flex: 1 1 auto; font-size: 15px; font-weight: 700">{{sw.name}}</span>
+          <span style="font-size: 13px; color: #A7AFBF">{{sw.role}}</span>
+          <code style="font-size: 12px; color: #A7AFBF; width: 64px; text-align: right">{{sw.hex}}</code>
+        </div>
+      </sc-for>
+    </div>
+    <div style="background: #FFFDF8; border: 2px solid #1E1C19; padding: 22px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; align-items: baseline; justify-content: space-between"><h2 style="margin: 0; font-family: 'Zen Maru Gothic', sans-serif; font-size: 22px; font-weight: 900">表紙 Covers</h2><span style="font-size: 13px; color: #5B554B">one per size class</span></div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+        <sc-for list="{{covers}}" as="cv" hint-placeholder-count="4">
+          <div style="{{cv.style}}">
+            <span style="font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 26px">{{cv.size}}</span>
+            <span style="font-size: 13px; font-weight: 700">{{cv.name}} · {{cv.hex}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #5B554B">Pale, like the Nikoli pocket-book covers. Ink text only; the tint is never the sole signal.</p>
+    </div>
+  </section>
+
+  <section style="display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 24px">
+    <div style="border-top: 3px solid #1E1C19; padding-top: 14px; display: flex; flex-direction: column; gap: 6px">
+      <span style="font-size: 13px; color: #5B554B; font-weight: 700">Display · Zen Maru Gothic 900</span>
+      <span style="font-family: 'Zen Maru Gothic', sans-serif; font-weight: 900; font-size: 54px; line-height: 1.05">今日の問題 Today</span>
+      <span style="font-size: 14px; color: #5B554B">Rounded like the book-cover titles. Headlines, size badges, the wordmark.</span>
+    </div>
+    <div style="border-top: 3px solid #1E1C19; padding-top: 14px; display: flex; flex-direction: column; gap: 6px">
+      <span style="font-size: 13px; color: #5B554B; font-weight: 700">Interface · Zen Kaku Gothic New</span>
+      <span style="font-size: 26px; font-weight: 700; line-height: 1.3">Tap an edge to draw.</span>
+      <span style="font-size: 17px; line-height: 1.5">Line, then cross, then empty. Drag to draw a run of lines.</span>
+    </div>
+    <div style="border-top: 3px solid #1E1C19; padding-top: 14px; display: flex; flex-direction: column; gap: 6px">
+      <span style="font-size: 13px; color: #5B554B; font-weight: 700">Clues &amp; timer · 500, tabular</span>
+      <span style="font-size: 54px; font-weight: 500; line-height: 1.05; letter-spacing: 0.18em">0123</span>
+      <span style="font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums">03:18 · 12:04:55</span>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 16px">
+    <div style="display: flex; align-items: baseline; gap: 14px"><h2 style="margin: 0; font-family: 'Zen Maru Gothic', sans-serif; font-size: 26px; font-weight: 900">Board anatomy</h2><span style="font-size: 15px; color: #5B554B">盤面 · every state also differs in shape, not just colour</span></div>
+    <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 16px">
+      <sc-for list="{{specs}}" as="sp" hint-placeholder-count="7">
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <div style="background: #FFFDF8; border: 2px solid #1E1C19; height: 150px; display: flex; align-items: center; justify-content: center">
+            <div style="{{sp.boxStyle}}">
+              <sc-for list="{{sp.b.washes}}" as="w"><div style="{{w.style}}"></div></sc-for>
+              <sc-for list="{{sp.b.lines}}" as="l"><div style="{{l.style}}"></div></sc-for>
+              <sc-for list="{{sp.b.ghosts}}" as="g"><div style="{{g.style}}">{{g.txt}}</div></sc-for>
+              <sc-for list="{{sp.b.xs}}" as="x"><div style="{{x.style}}">×</div></sc-for>
+              <sc-for list="{{sp.b.dots}}" as="d"><div style="{{d.style}}"></div></sc-for>
+              <sc-for list="{{sp.b.clues}}" as="q"><div style="{{q.style}}">{{q.txt}}</div></sc-for>
+              <sc-for list="{{sp.b.rings}}" as="rg"><div style="{{rg.style}}"></div></sc-for>
+              <sc-if value="{{sp.focus}}" hint-placeholder-val="{{ false }}"><div style="{{sp.focusStyle}}"></div></sc-if>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 15px; font-weight: 700">{{sp.title}} <span style="font-weight: 400; color: #5B554B">{{sp.jp}}</span></span>
+            <span style="font-size: 13px; line-height: 1.45; color: #5B554B">{{sp.note}}</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 16px">
+    <h2 style="margin: 0; font-family: 'Zen Maru Gothic', sans-serif; font-size: 26px; font-weight: 900">Pieces</h2>
+    <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 20px">
+      <button type="button" style="height: 52px; padding: 0 26px; border-radius: 999px; border: 0; background: #1E1C19; color: #FFFDF8; font-family: inherit; font-size: 17px; font-weight: 700; cursor: pointer">Start today's puzzle</button>
+      <button type="button" style="height: 52px; padding: 0 24px; border-radius: 999px; border: 2px solid #1E1C19; background: #FFFDF8; color: #1E1C19; font-family: inherit; font-size: 17px; font-weight: 700; cursor: pointer">New 10×10</button>
+      <button type="button" style="height: 52px; padding: 0 24px; border-radius: 999px; border: 0; background: #C23B22; color: #FFFDF8; font-family: inherit; font-size: 17px; font-weight: 700; cursor: pointer">Publish puzzle</button>
+      <div style="display: flex; gap: 8px">
+        <button type="button" aria-pressed="false" style="height: 44px; min-width: 64px; padding: 0 14px; border-radius: 8px; border: 2px solid #DDD3C0; background: #FFFDF8; font-family: inherit; font-size: 15px; font-weight: 700; color: #1E1C19">7×7</button>
+        <button type="button" aria-pressed="true" style="height: 44px; min-width: 64px; padding: 0 14px; border-radius: 8px; border: 2px solid #1E1C19; background: #1E1C19; font-family: inherit; font-size: 15px; font-weight: 700; color: #FFFDF8">10×10</button>
+        <button type="button" aria-pressed="false" style="height: 44px; min-width: 64px; padding: 0 14px; border-radius: 8px; border: 2px solid #DDD3C0; background: #FFFDF8; font-family: inherit; font-size: 15px; font-weight: 700; color: #1E1C19">20×20</button>
+      </div>
+      <div style="display: inline-flex; align-items: center; gap: 10px; height: 44px; padding: 0 6px 0 16px; border-radius: 999px; background: #FFFDF8; border: 2px solid #1E1C19">
+        <span style="font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums">04:12</span>
+        <button type="button" aria-label="Pause" style="width: 34px; height: 34px; border-radius: 50%; border: 0; background: #1E1C19; color: #FFFDF8; display: flex; align-items: center; justify-content: center; padding: 0">
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M4 2v10M10 2v10" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div style="width: 84px; height: 84px; border: 4px solid #C23B22; border-radius: 14px; color: #C23B22; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: rotate(-8deg); font-family: 'Zen Maru Gothic', sans-serif; line-height: 1">
+        <span style="font-size: 40px; font-weight: 900">完</span><span style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; margin-top: 2px">SOLVED</span>
+      </div>
+      <div style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 8px; background: rgba(46,76,138,0.12); color: #2E4C8A; font-size: 15px; font-weight: 700">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"/></svg>
+        Hint used · unranked
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1680}}'>
+function lpParse(W, H, clues) {
+  return { W: W, H: H, clue: clues.split('').map(function (ch) { return ch === '.' ? null : +ch; }) };
+}
+function lpCellEdges(p, r, c) {
+  var W = p.W;
+  return [['h', r * W + c], ['h', (r + 1) * W + c], ['v', r * (W + 1) + c], ['v', r * (W + 1) + c + 1]];
+}
+function lpDotEdges(p, r, c) {
+  var W = p.W, H = p.H, out = [];
+  if (c > 0) out.push(['h', r * W + c - 1]);
+  if (c < W) out.push(['h', r * W + c]);
+  if (r > 0) out.push(['v', (r - 1) * (W + 1) + c]);
+  if (r < H) out.push(['v', r * (W + 1) + c]);
+  return out;
+}
+function lpEdgeDots(p, t, i) {
+  var W = p.W;
+  if (t === 'h') { var r = Math.floor(i / W), c = i % W; return [[r, c], [r, c + 1]]; }
+  var rv = Math.floor(i / (W + 1)), cv = i % (W + 1); return [[rv, cv], [rv + 1, cv]];
+}
+function lpTally(p, s, edges) {
+  var n = { line: 0, x: 0, open: [] };
+  edges.forEach(function (e) { var val = s[e[0]][e[1]]; if (val === 1) n.line++; else if (val === 2) n.x++; else n.open.push(e); });
+  return n;
+}
+function lpAnalyze(p, s) {
+  var W = p.W, H = p.H, r, c;
+  var errCells = {}, errDots = {}, errEdges = {}, satisfied = 0, clueCount = 0;
+  for (r = 0; r < H; r++) for (c = 0; c < W; c++) {
+    var k = p.clue[r * W + c];
+    if (k === null) continue;
+    clueCount++;
+    var n = lpTally(p, s, lpCellEdges(p, r, c));
+    if (n.line > k || n.x > 4 - k) errCells[r * W + c] = 1;
+    if (n.line === k) satisfied++;
+  }
+  for (r = 0; r <= H; r++) for (c = 0; c <= W; c++) {
+    if (lpTally(p, s, lpDotEdges(p, r, c)).line >= 3) errDots[r * (W + 1) + c] = 1;
+  }
+  var parent = {};
+  var find = function (a) { while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; } return a; };
+  var deg = {}, lines = [];
+  ['h', 'v'].forEach(function (t) {
+    s[t].forEach(function (val, i) {
+      if (val !== 1) return;
+      var d = lpEdgeDots(p, t, i), a = d[0].join(','), b = d[1].join(',');
+      [a, b].forEach(function (x) { if (!(x in parent)) parent[x] = x; deg[x] = (deg[x] || 0) + 1; });
+      parent[find(a)] = find(b);
+      lines.push([t, i, a]);
+    });
+  });
+  var comps = {};
+  Object.keys(parent).forEach(function (x) { var root = find(x); comps[root] = comps[root] || { closed: true }; if (deg[x] !== 2) comps[root].closed = false; });
+  var roots = Object.keys(comps);
+  var solved = roots.length === 1 && comps[roots[0]].closed && satisfied === clueCount &&
+    Object.keys(errCells).length === 0 && Object.keys(errDots).length === 0;
+  if (!solved) lines.forEach(function (l) { if (comps[find(l[2])].closed) errEdges[l[0] + l[1]] = 1; });
+  return { errCells: errCells, errDots: errDots, errEdges: errEdges, solved: solved, satisfied: satisfied, clueCount: clueCount, closedLoop: Object.keys(errEdges).length > 0 };
+}
+function lpLayout(p, s, o) {
+  var W = p.W, H = p.H, S = o.S, M = o.M, t = o.t, r, c;
+  var a = lpAnalyze(p, s);
+  var hint = o.hint || null;
+  var hintCells = {}, hintDots = {};
+  if (hint) { (hint.cells || []).forEach(function (i) { hintCells[i] = 1; }); (hint.dots || []).forEach(function (i) { hintDots[i] = 1; }); }
+  var out = { size: W * S + 2 * M, height: H * S + 2 * M, dots: [], clues: [], lines: [], xs: [], washes: [], ghosts: [], rings: [], analysis: a };
+  var px = function (n) { return Math.round(n * 10) / 10 + 'px'; };
+  for (r = 0; r < H; r++) for (c = 0; c < W; c++) {
+    var i = r * W + c, k = p.clue[i];
+    var x = M + c * S, y = M + r * S;
+    var inside = o.inside && +o.inside[r][c];
+    if (hintCells[i]) out.washes.push({ style: 'position:absolute;left:' + px(x + 2) + ';top:' + px(y + 2) + ';width:' + px(S - 4) + ';height:' + px(S - 4) + ';background:' + o.c.hintWash + ';border-radius:3px' });
+    else if (inside && a.solved) out.washes.push({ style: 'position:absolute;left:' + px(x) + ';top:' + px(y) + ';width:' + px(S) + ';height:' + px(S) + ';background:' + o.c.solvedWash });
+    if (k === null) continue;
+    var err = !!a.errCells[i];
+    out.clues.push({ txt: String(k), style: 'position:absolute;left:' + px(x) + ';top:' + px(y) + ';width:' + px(S) + ';height:' + px(S) + ';display:flex;align-items:center;justify-content:center;font-size:' + px(S * 0.56) + ';font-weight:500;line-height:1;color:' + (err ? o.c.err : o.c.ink) });
+    if (err) out.rings.push({ style: 'position:absolute;left:' + px(x + S * 0.16) + ';top:' + px(y + S * 0.16) + ';width:' + px(S * 0.68) + ';height:' + px(S * 0.68) + ';box-sizing:border-box;border:2px solid ' + o.c.err + ';border-radius:50%' });
+  }
+  var dotSize = Math.max(4, Math.round(S * 0.11));
+  for (r = 0; r <= H; r++) for (c = 0; c <= W; c++) {
+    var di = r * (W + 1) + c, dx = M + c * S, dy = M + r * S;
+    if (a.errDots[di]) out.rings.push({ style: 'position:absolute;left:' + px(dx - S * 0.26) + ';top:' + px(dy - S * 0.26) + ';width:' + px(S * 0.52) + ';height:' + px(S * 0.52) + ';box-sizing:border-box;border:2px solid ' + o.c.err + ';border-radius:50%' });
+    if (hintDots[di]) out.washes.push({ style: 'position:absolute;left:' + px(dx - S * 0.3) + ';top:' + px(dy - S * 0.3) + ';width:' + px(S * 0.6) + ';height:' + px(S * 0.6) + ';background:' + o.c.hintWash + ';border-radius:50%' });
+    out.dots.push({ style: 'position:absolute;left:' + px(dx - dotSize / 2) + ';top:' + px(dy - dotSize / 2) + ';width:' + px(dotSize) + ';height:' + px(dotSize) + ';border-radius:50%;background:' + o.c.dot });
+  }
+  var ghostOf = {};
+  if (hint) hint.edges.forEach(function (e) { ghostOf[e[0] + e[1]] = e[2]; });
+  ['h', 'v'].forEach(function (tt) {
+    var n = tt === 'h' ? (H + 1) * W : H * (W + 1);
+    for (var i = 0; i < n; i++) {
+      var d = lpEdgeDots(p, tt, i), x0 = M + d[0][1] * S, y0 = M + d[0][0] * S;
+      var mx = tt === 'h' ? x0 + S / 2 : x0, my = tt === 'h' ? y0 : y0 + S / 2;
+      var val = s[tt][i], key = tt + i;
+      var lineStyle = function (color, dash) {
+        var base = tt === 'h'
+          ? 'left:' + px(x0 - t / 2) + ';top:' + px(y0 - t / 2) + ';width:' + px(S + t) + ';height:' + px(t)
+          : 'left:' + px(x0 - t / 2) + ';top:' + px(y0 - t / 2) + ';width:' + px(t) + ';height:' + px(S + t);
+        return 'position:absolute;' + base + ';border-radius:' + px(t / 2) + ';' + (dash
+          ? 'background:repeating-linear-gradient(' + (tt === 'h' ? '90deg' : '180deg') + ',' + color + ' 0 6px,transparent 6px 11px)'
+          : 'background:' + color);
+      };
+      var xStyle = function (color) { return 'position:absolute;left:' + px(mx - S * 0.2) + ';top:' + px(my - S * 0.2) + ';width:' + px(S * 0.4) + ';height:' + px(S * 0.4) + ';display:flex;align-items:center;justify-content:center;font-size:' + px(S * 0.36) + ';line-height:1;color:' + color; };
+      if (val === 1) out.lines.push({ style: lineStyle(a.errEdges[key] ? o.c.err : (o.accentEdge === key ? o.c.accent : o.c.line), a.errEdges[key]) });
+      else if (val === 2) out.xs.push({ style: xStyle(o.c.x) });
+      if (key in ghostOf && val === 0) {
+        if (ghostOf[key] === 1) out.ghosts.push({ style: lineStyle(o.c.hint, true), txt: '' });
+        else out.ghosts.push({ style: xStyle(o.c.hint) + ';font-weight:700', txt: '×' });
+      }
+    }
+  });
+  return out;
+}
+function lpState(h, v) {
+  return { h: h.split('').map(Number), v: v.split('').map(Number) };
+}
+
+var PAPER = { ink: '#1E1C19', dot: '#1E1C19', line: '#1E1C19', x: '#8C8476', err: '#C23B22', hint: '#2E4C8A', hintWash: 'rgba(46,76,138,0.14)', solvedWash: '#F8E1E6', accent: '#C23B22' };
+
+class Component extends DCLogic {
+  renderVals() {
+    var chip = function (hex, ring) { return 'width:28px;height:28px;border-radius:6px;flex:0 0 auto;background:' + hex + ';box-shadow:inset 0 0 0 1px ' + ring; };
+    var paper = [
+      ['Washi', 'ground', '#F4EFE3'], ['Sheet', 'puzzle paper', '#FFFDF8'], ['Sumi', 'lines · clues · dots', '#1E1C19'],
+      ['Usuzumi', 'secondary text', '#5B554B'], ['Pencil', 'crosses', '#8C8476'], ['Hairline', 'dividers', '#DDD3C0'],
+      ['Shu 朱', 'errors · seals', '#C23B22'], ['Ai 藍', 'hints · focus', '#2E4C8A']
+    ].map(function (x) { return { name: x[0], role: x[1], hex: x[2], chip: chip(x[2], 'rgba(30,28,25,0.25)') }; });
+    var night = [
+      ['Yoru', 'ground', '#111827'], ['Sheet', 'puzzle paper', '#1A2438'], ['Gofun', 'lines · clues · dots', '#ECE4D3'],
+      ['Mist', 'secondary text', '#A7AFBF'], ['Pencil', 'crosses', '#6F7A8F'], ['Hairline', 'dividers', '#2C3850'],
+      ['Shu 朱', 'errors · seals', '#F2785E'], ['Ai 藍', 'hints · focus', '#8FB1F0']
+    ].map(function (x) { return { name: x[0], role: x[1], hex: x[2], chip: chip(x[2], 'rgba(236,228,211,0.3)') }; });
+    var covers = [['7×7', 'Sakura', '#F2C4CE'], ['10×10', 'Kinari', '#E8DFC4'], ['20×20', 'Sora', '#C8DAE6'], ['40×40', 'Wakaba', '#D5E3C2']]
+      .map(function (x) { return { size: x[0], name: x[1], hex: x[2], style: 'background:' + x[2] + ';border-radius:4px;padding:14px;display:flex;flex-direction:column;gap:4px;min-height:74px;box-sizing:border-box;justify-content:flex-end' }; });
+
+    var o = { S: 44, M: 14, t: 5, c: PAPER };
+    var mk = function (clues, h, v, extra) {
+      var p = lpParse(2, 2, clues);
+      var opts = Object.assign({}, o, extra || {});
+      return lpLayout(p, lpState(h, v), opts);
+    };
+    var box = 'position:relative;width:116px;height:116px';
+    var specs = [
+      { title: 'Dots & clues', jp: '点・数字', note: 'Round 5px dots. Clues 0–3 sit centred, weight 500.', b: mk('3..1', '000000', '000000') },
+      { title: 'Line', jp: '線', note: 'Sumi, 5px, rounded ends; it overruns the dot so joins read as one stroke.', b: mk('2...', '110000', '101000') },
+      { title: 'Cross', jp: '×印', note: 'Pencil grey ×, lighter than a line so marks never compete.', b: mk('0...', '202000', '220000') },
+      { title: 'Error', jp: '誤り', note: 'Definite rule breaks only: a shu ring around the clue or dot.', b: mk('1...', '101100', '100010') },
+      { title: 'Hint', jp: 'ヒント', note: 'Ai wash on the cells involved; the forced move is a dashed ghost.', b: mk('3...', '100000', '120000', { hint: { cells: [0], edges: [['h', 2, 1]] } }) },
+      { title: 'Solved', jp: '完成', note: 'The inside of the loop washes sakura, then the seal lands.', b: mk('2222', '110011', '101101', { inside: ['11', '11'] }) },
+      { title: 'Focus', jp: 'キー操作', note: 'Keyboard cursor: an ai capsule around the current edge.', b: mk('.2..', '000000', '000000'), focus: true,
+        focusStyle: 'position:absolute;left:' + (14 + 44 - 6) + 'px;top:' + (14 + 44 - 11) + 'px;width:' + (44 + 12) + 'px;height:22px;box-sizing:border-box;border:2.5px solid #2E4C8A;border-radius:11px' }
+    ].map(function (sp) { sp.boxStyle = box; sp.focus = !!sp.focus; sp.focusStyle = sp.focusStyle || ''; return sp; });
+    return { paper: paper, night: night, covers: covers, specs: specs };
+  }
+}
+</script>
+</body>
+</html>
