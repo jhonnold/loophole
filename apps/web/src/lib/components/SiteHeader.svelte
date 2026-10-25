@@ -50,6 +50,14 @@
     max-width: 1280px;
   }
 
+  /* The editor's page has 24px gutters from 900px up; its header lines up with them. */
+  @media (min-width: 900px) {
+    .top-inner.wide {
+      padding-left: 24px;
+      padding-right: 24px;
+    }
+  }
+
   .brand {
     display: flex;
     align-items: center;
