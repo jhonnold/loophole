@@ -1,0 +1,29 @@
+# Sample Prometheus scrape config for a production host running compose.prod.yml, with Prometheus
+# on the same host (the metrics ports are published on 127.0.0.1 only). Dashboards are left to you.
+# Copy ops/alerts.yml next to this file, and put Garage's GARAGE_METRICS_TOKEN in the file named
+# under credentials_file.
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+rule_files:
+  - alerts.yml
+
+scrape_configs:
+  # HTTP requests by route and status, auth failures, mail failures, rate-limit evictions.
+  - job_name: loophole-api
+    static_configs:
+      - targets: ["127.0.0.1:9470"]
+
+  # Jobs by kind and status, job durations, queue depth, daily puzzles stocked ahead.
+  - job_name: loophole-worker
+    static_configs:
+      - targets: ["127.0.0.1:9471"]
+
+  # Garage's own metrics (S3 requests, errors, disk use).
+  - job_name: garage
+    authorization:
+      type: Bearer
+      credentials_file: garage-metrics-token
+    static_configs:
+      - targets: ["127.0.0.1:3903"]

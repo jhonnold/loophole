@@ -13,6 +13,7 @@ import type {
   ReportRecord,
   SessionRecord,
   SubmissionRecord,
+  SubmissionVerdict,
   Task,
   TaskOutcome,
   UserRecord,
@@ -114,6 +115,14 @@ export class FakeSubmissionRepository implements SubmissionRepository {
     this.records.set(id, { ...record, ...decision });
     return true;
   }
+
+  countByVerdict(): Partial<Record<SubmissionVerdict, number>> {
+    const counts: Partial<Record<SubmissionVerdict, number>> = {};
+    for (const r of this.records.values()) {
+      if (r.verdict !== null) counts[r.verdict] = (counts[r.verdict] ?? 0) + 1;
+    }
+    return counts;
+  }
 }
 
 /** Reports in an array. `published` says which puzzles count as published for the list. */
@@ -175,6 +184,23 @@ export class FakeJobQueue implements JobQueue {
     return [...this.jobs.values()].filter((j) => j.status === "queued").length;
   }
 
+  countActive(): { queued: number; running: number; oldestQueuedAt: number | null } {
+    const all = [...this.jobs.values()];
+    const queued = all.filter((j) => j.status === "queued");
+    return {
+      queued: queued.length,
+      running: all.filter((j) => j.status === "running").length,
+      oldestQueuedAt: queued.length === 0 ? null : Math.min(...queued.map((j) => j.createdAt)),
+    };
+  }
+
+  listFailed(limit: number): Job[] {
+    return [...this.jobs.values()]
+      .filter((j) => j.status === "failed" || j.status === "timeout")
+      .sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0))
+      .slice(0, limit);
+  }
+
   claimNext(workerId: string, now: number): Job | null {
     const next = [...this.jobs.values()].find((j) => j.status === "queued");
     if (next === undefined) return null;
@@ -211,18 +237,23 @@ export class FakeJobQueue implements JobQueue {
     return true;
   }
 
-  recoverStale(staleBefore: number, maxAttempts: number, now: number): number {
-    let changed = 0;
+  recoverStale(
+    staleBefore: number,
+    maxAttempts: number,
+    now: number,
+  ): { requeued: number; lost: number } {
+    const counts = { requeued: 0, lost: 0 };
     for (const job of this.jobs.values()) {
       if (job.status !== "running" || (job.heartbeatAt ?? 0) >= staleBefore) continue;
-      changed++;
       if (job.attempts >= maxAttempts) {
+        counts.lost++;
         this.#update(job.id, { status: "failed", error: "stale", finishedAt: now });
       } else {
+        counts.requeued++;
         this.#update(job.id, { status: "queued", claimedBy: null, progress: 0 });
       }
     }
-    return changed;
+    return counts;
   }
 
   #holds(id: string, workerId: string): boolean {

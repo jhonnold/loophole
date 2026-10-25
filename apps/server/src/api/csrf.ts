@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from "hono";
+import type { ApiMetrics } from "../ports.ts";
 import { problem } from "./problem.ts";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -24,9 +25,12 @@ function isSameOrigin(request: Request): boolean {
  * CSRF protection (NFR-4): refuses state-changing requests made from other sites. It backs up the
  * session cookie's SameSite=Lax and the JSON-only request bodies. See DECISIONS, "CSRF".
  */
-export const sameOriginOnly: MiddlewareHandler = async (c, next) => {
-  if (SAFE_METHODS.has(c.req.method) || isSameOrigin(c.req.raw)) return next();
-  return problem(c, 403, "Cross-site request refused", {
-    detail: "State-changing requests must come from this site's own pages.",
-  });
-};
+export function sameOriginOnly(metrics: Pick<ApiMetrics, "authFailure">): MiddlewareHandler {
+  return async (c, next) => {
+    if (SAFE_METHODS.has(c.req.method) || isSameOrigin(c.req.raw)) return next();
+    metrics.authFailure("csrf");
+    return problem(c, 403, "Cross-site request refused", {
+      detail: "State-changing requests must come from this site's own pages.",
+    });
+  };
+}

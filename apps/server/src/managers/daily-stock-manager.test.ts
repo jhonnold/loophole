@@ -26,6 +26,8 @@ function setup(daysAhead = 2) {
   const puzzles = new PuzzleManager({ puzzles: puzzleRepo, blobs: new MemoryBlobStore(), clock });
   // A tiny queue: the scheduler's jobs must get in even when players have filled it.
   const jobs = new JobManager({ jobs: queue, clock, newId: sequentialIds("x"), maxQueued: 1 });
+  /** Size classes counted as failed generations. */
+  const failures: number[] = [];
   const stock = new DailyStockManager({
     dailies: repo,
     jobs,
@@ -34,9 +36,10 @@ function setup(daysAhead = 2) {
     clock,
     newId: sequentialIds("j"),
     settings: { daysAhead },
+    metrics: { dailyFailure: (size) => failures.push(size) },
   });
   const dailies = new DailyManager({ dailies: repo, puzzles, clock });
-  return { clock, repo, queue, puzzles, puzzleRepo, stock, dailies };
+  return { clock, repo, queue, puzzles, puzzleRepo, stock, dailies, failures };
 }
 
 /** What a generation job for size `size` makes: a puzzle of that width. */
@@ -100,8 +103,27 @@ describe("DailyStockManager.stock (FR-22)", () => {
     expect(puzzles.get("j-5")?.id).toBe("j-5");
   });
 
+  test("stocked counts, per size, the days in a row from today that are generated", async () => {
+    const { stock } = setup(2);
+    stock.stock();
+    expect(stock.stocked()).toEqual([
+      { size: 7, days: 0 },
+      { size: 10, days: 0 },
+      { size: 20, days: 0 },
+      { size: 40, days: 0 },
+    ]);
+    await stock.complete("j-1", "2026-10-25", generated(7));
+    await stock.complete("j-5", "2026-10-26", generated(7));
+    // Tomorrow's 10×10 without today's doesn't count: players can't play today's.
+    await stock.complete("j-6", "2026-10-26", generated(10));
+    expect(stock.stocked().slice(0, 2)).toEqual([
+      { size: 7, days: 2 },
+      { size: 10, days: 0 },
+    ]);
+  });
+
   test("retries a failed, timed-out or lost generation with the next seed", () => {
-    const { repo, queue, stock } = setup(1);
+    const { repo, queue, stock, failures } = setup(1);
     const warn = spyOn(console, "warn").mockImplementation(() => {});
     stock.stock();
     end(queue, "j-1", "failed");
@@ -114,6 +136,7 @@ describe("DailyStockManager.stock (FR-22)", () => {
     expect(repo.get("2026-10-25", 20)).toMatchObject({ attempt: 1, jobId: "j-7" });
     expect(repo.get("2026-10-25", 40)).toMatchObject({ attempt: 0, jobId: "j-4" });
     expect(warn).toHaveBeenCalledTimes(3);
+    expect(failures).toEqual([7, 10, 20]);
     warn.mockRestore();
   });
 

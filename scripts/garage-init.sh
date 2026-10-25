@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
-# Idempotent bootstrap of the dev Garage node: layout, access key, bucket.
-# Usage: docker compose up -d && ./scripts/garage-init.sh
+# Idempotent bootstrap of a single Garage node: layout, access key, bucket.
+# Development: docker compose up -d && ./scripts/garage-init.sh
+# Production (README, "Production"): with COMPOSE_FILE=compose.prod.yml and S3_BUCKET,
+# S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY set to the values in .env.production.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-KEY_ID="GK1a2b3c4d5e6f708192a3b4c5"
-SECRET="8b339f8231fe89196b07eb8766bf6f079805f64a9be09934697b94e0b1aa0a0b"
-BUCKET="loophole-dev"
+# The development values are public (DECISIONS, "Fixed dev credentials for Garage").
+KEY_ID="${S3_ACCESS_KEY_ID:-GK1a2b3c4d5e6f708192a3b4c5}"
+SECRET="${S3_SECRET_ACCESS_KEY:-8b339f8231fe89196b07eb8766bf6f079805f64a9be09934697b94e0b1aa0a0b}"
+BUCKET="${S3_BUCKET:-loophole-dev}"
 
 garage() {
   docker compose exec -T -e RUST_LOG=warn garage /garage "$@"
@@ -45,4 +48,4 @@ else
 fi
 
 garage bucket allow --read --write --owner "$BUCKET" --key "$KEY_ID" >/dev/null
-echo "Garage ready: bucket=$BUCKET key=$KEY_ID endpoint=http://localhost:3900 region=garage"
+echo "Garage ready: bucket=$BUCKET key=$KEY_ID region=garage"

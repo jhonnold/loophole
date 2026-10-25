@@ -1,0 +1,91 @@
+# Production: the API (serving the web app), the worker and Garage, on one host. The API's and the
+# worker's settings come from .env.production, Garage's secrets from .env.garage (copy the two
+# .example files). README, "Production", has the steps.
+#
+# Only the API is published, and only on 127.0.0.1:3000: put a TLS reverse proxy (Caddy, nginx)
+# in front of it and keep TRUST_PROXY=true. If the proxy runs on another machine, publish the API
+# on the private interface the proxy reaches, never on 0.0.0.0. The metrics ports and Garage's
+# admin API are published on 127.0.0.1 only, for a Prometheus on this host (ops/prometheus.yml).
+name: loophole-prod
+
+x-app: &app
+  build:
+    context: .
+    args:
+      APP_VERSION: ${APP_VERSION:-dev}
+  image: loophole:${APP_VERSION:-dev}
+  init: true
+  restart: unless-stopped
+  env_file: .env.production
+  volumes:
+    - loophole-data:/data
+  depends_on:
+    garage:
+      condition: service_healthy
+
+services:
+  api:
+    <<: *app
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3000"
+      TRUST_PROXY: "true"
+      S3_ENDPOINT: http://garage:3900
+      METRICS_HOST: 0.0.0.0
+      API_METRICS_PORT: "9470"
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:9470:9470"
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - "const r = await fetch('http://127.0.0.1:3000/api/health/ready'); process.exit(r.ok ? 0 : 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  worker:
+    <<: *app
+    command: ["bun", "apps/server/src/worker/main.ts"]
+    environment:
+      S3_ENDPOINT: http://garage:3900
+      METRICS_HOST: 0.0.0.0
+      WORKER_METRICS_PORT: "9471"
+    ports:
+      - "127.0.0.1:9471:9471"
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - "const r = await fetch('http://127.0.0.1:9471/health'); process.exit(r.ok ? 0 : 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  garage:
+    image: dxflrs/garage:v2.5.0
+    restart: unless-stopped
+    # Garage's secrets only; the app's settings stay out of this container, and these out of theirs.
+    env_file: .env.garage
+    volumes:
+      - ./infra/garage/garage.prod.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    ports:
+      - "127.0.0.1:3903:3903" # admin API: /health, /metrics (Bearer GARAGE_METRICS_TOKEN)
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  loophole-data:
+  garage-meta:
+  garage-data:

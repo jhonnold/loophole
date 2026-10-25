@@ -6,6 +6,7 @@ import type {
   DailyRecord,
   Job,
   JobInput,
+  JobKind,
   JobResult,
   LeaderboardSlice,
   ProgressRecord,
@@ -65,6 +66,10 @@ export interface JobQueue {
   enqueue(job: NewJob): Job;
   get(id: string): Job | null;
   countQueued(): number;
+  /** Jobs waiting and running now, and when the oldest waiting one was queued (null if none). */
+  countActive(): { queued: number; running: number; oldestQueuedAt: number | null };
+  /** The most recently ended jobs that failed or timed out, newest first. */
+  listFailed(limit: number): Job[];
   /** Atomically takes the oldest queued job for `workerId`, or returns null when there is none. */
   claimNext(workerId: string, now: number): Job | null;
   /** Stores progress (0 to 1); also counts as a heartbeat. */
@@ -74,9 +79,13 @@ export interface JobQueue {
   finish(id: string, workerId: string, end: JobEnd, now: number): boolean;
   /**
    * Running jobs whose last heartbeat is before `staleBefore` go back to the queue, or fail once
-   * they have been claimed `maxAttempts` times. Returns how many jobs it changed.
+   * they have been claimed `maxAttempts` times. Returns how many of each.
    */
-  recoverStale(staleBefore: number, maxAttempts: number, now: number): number;
+  recoverStale(
+    staleBefore: number,
+    maxAttempts: number,
+    now: number,
+  ): { requeued: number; lost: number };
 }
 
 export type JobEnd =
@@ -192,6 +201,8 @@ export interface SubmissionRepository {
   listForUser(userId: string, limit: number): SubmissionRecord[];
   /** Records the decision on a pending submission. Returns false when it was not pending. */
   decide(id: string, decision: SubmissionDecision): boolean;
+  /** How many decided submissions have each verdict (PRD §10: the share rejected as unknown). */
+  countByVerdict(): Partial<Record<SubmissionVerdict, number>>;
 }
 
 export interface ReportRepository {
@@ -285,4 +296,24 @@ export interface DisplayNameRepository {
  */
 export interface DailySeeder {
   seed(day: string, size: number, attempt: number): string;
+}
+
+/** Why an authentication step was refused, for the auth failure count. */
+export type AuthFailure = "login" | "captcha" | "link" | "csrf";
+
+/** What the HTTP API counts for monitoring (Prometheus in production, DECISIONS "Metrics"). */
+export interface ApiMetrics {
+  /** One answered request. `route` is the route's template (`/api/puzzles/:id`), never the raw path. */
+  request(method: string, route: string, status: number, seconds: number): void;
+  authFailure(reason: AuthFailure): void;
+}
+
+/** What the worker counts for monitoring. */
+export interface WorkerMetrics {
+  /** A job ended after running for `seconds`. */
+  jobFinished(kind: JobKind, status: JobEnd["status"], seconds: number): void;
+  /** A daily puzzle's generation failed, timed out or was lost; the next check retries it. */
+  dailyFailure(size: number): void;
+  /** Jobs failed for good: their worker stopped on every attempt. */
+  jobsLost(count: number): void;
 }

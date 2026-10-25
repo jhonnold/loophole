@@ -17,7 +17,7 @@ This is a TypeScript monorepo using Bun workspaces. Use Bun as the package manag
 
 Not all of these exist yet. The README's status section says what's there.
 
-Local dev services (Garage, Mailpit) run with Docker Compose; the README has the commands.
+Local dev services (Garage, Mailpit) run with Docker Compose; the README has the commands, and covers production deployment, monitoring and backups.
 
 ## Commits
 

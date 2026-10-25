@@ -4,9 +4,9 @@ info:
   title: Loophole API
   version: 0.1.0
   description: Puzzles, background jobs, accounts, saved progress, submitted
-    puzzles and reports, daily puzzles, ranked attempts and leaderboards. Errors
-    are RFC 9457 problem details. State-changing requests from other sites are
-    refused (403).
+    puzzles and reports, daily puzzles, ranked attempts, leaderboards and health
+    checks. Errors are RFC 9457 problem details. State-changing requests from
+    other sites are refused (403).
 components:
   securitySchemes:
     session:
@@ -1039,6 +1039,150 @@ components:
       required:
         - displayName
       additionalProperties: false
+    Readiness:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - unavailable
+        database:
+          type: boolean
+        blobs:
+          type: boolean
+      required:
+        - status
+        - database
+        - blobs
+      description: Whether the API's database and blob store answer. No error details.
+    AdminHealth:
+      type: object
+      properties:
+        database:
+          type: object
+          properties:
+            ok:
+              type: boolean
+            ms:
+              type: number
+              minimum: 0
+            error:
+              type:
+                - string
+                - "null"
+          required:
+            - ok
+            - ms
+            - error
+        blobs:
+          type: object
+          properties:
+            ok:
+              type: boolean
+            ms:
+              type: number
+              minimum: 0
+            error:
+              type:
+                - string
+                - "null"
+          required:
+            - ok
+            - ms
+            - error
+        jobs:
+          type: object
+          properties:
+            queued:
+              type: integer
+              minimum: 0
+            running:
+              type: integer
+              minimum: 0
+            oldestQueuedAt:
+              type:
+                - string
+                - "null"
+              format: date-time
+              example: 2026-10-25T12:00:00.000Z
+          required:
+            - queued
+            - running
+            - oldestQueuedAt
+        dailies:
+          type: array
+          items:
+            type: object
+            properties:
+              size:
+                type: integer
+              days:
+                type: integer
+                minimum: 0
+            required:
+              - size
+              - days
+          description: Days in a row, from today on, whose daily puzzle is generated.
+        failures:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              kind:
+                type: string
+                enum:
+                  - generate
+                  - verify
+              status:
+                type: string
+                enum:
+                  - failed
+                  - timeout
+              error:
+                type:
+                  - string
+                  - "null"
+              finishedAt:
+                type:
+                  - string
+                  - "null"
+                format: date-time
+                example: 2026-10-25T12:00:00.000Z
+            required:
+              - id
+              - kind
+              - status
+              - error
+              - finishedAt
+        versions:
+          type: object
+          properties:
+            app:
+              type: string
+            generator:
+              type: string
+            runtime:
+              type: string
+          required:
+            - app
+            - generator
+            - runtime
+        startedAt:
+          type: string
+          format: date-time
+          example: 2026-10-25T12:00:00.000Z
+      required:
+        - database
+        - blobs
+        - jobs
+        - dailies
+        - failures
+        - versions
+        - startedAt
+      description: System health for the admin page (PRD §5).
   parameters: {}
 paths:
   /api/health:
@@ -2541,6 +2685,49 @@ paths:
                 $ref: "#/components/schemas/Problem"
         "429":
           description: Too many requests; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/health/ready:
+    get:
+      summary: "Readiness check: the database and the blob store answer"
+      description: For container health checks and load balancers. `/api/health` only
+        says the process is up.
+      responses:
+        "200":
+          description: Ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Readiness"
+        "503":
+          description: The database or the blob store isn't answering.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Readiness"
+  /api/admin/health:
+    get:
+      summary: "System health: checks, job queue, daily stock, recent failures,
+        versions (admins only)"
+      security:
+        - session: []
+      responses:
+        "200":
+          description: The health report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminHealth"
+        "401":
+          description: Not logged in.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Not an admin.
           content:
             application/problem+json:
               schema:

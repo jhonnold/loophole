@@ -27,6 +27,7 @@ export class SqliteSubmissionRepository implements SubmissionRepository {
   readonly #get;
   readonly #listForUser;
   readonly #decide;
+  readonly #countByVerdict;
 
   constructor(db: Database) {
     this.#insert = db.query<void, SubmissionRow>(
@@ -50,6 +51,9 @@ export class SqliteSubmissionRepository implements SubmissionRepository {
     >(
       `UPDATE submissions SET status = $status, verdict = $verdict, puzzle_id = $puzzle, decided_at = $at
        WHERE id = $id AND status = 'pending'`,
+    );
+    this.#countByVerdict = db.query<{ verdict: SubmissionVerdict; n: number }, []>(
+      "SELECT verdict, count(*) AS n FROM submissions WHERE status <> 'pending' GROUP BY verdict",
     );
   }
 
@@ -75,6 +79,10 @@ export class SqliteSubmissionRepository implements SubmissionRepository {
       at: d.decidedAt,
     });
     return result.changes === 1;
+  }
+
+  countByVerdict(): Partial<Record<SubmissionVerdict, number>> {
+    return Object.fromEntries(this.#countByVerdict.all().map((r) => [r.verdict, r.n]));
   }
 }
 

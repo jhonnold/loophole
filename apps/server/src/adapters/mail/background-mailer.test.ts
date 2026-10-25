@@ -33,8 +33,10 @@ test("a failure is logged without the message and never reaches the caller", asy
       throw new Error("connect ECONNREFUSED 127.0.0.1:1025");
     },
   };
-  await new BackgroundMailer(inner).send(MESSAGE);
+  let failures = 0;
+  await new BackgroundMailer(inner, () => failures++).send(MESSAGE);
   await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(failures).toBe(1);
   expect(log).toHaveBeenCalledTimes(1);
   const line = String(log.mock.calls[0][0]);
   expect(line).toBe("Sending mail failed: connect ECONNREFUSED 127.0.0.1:1025");

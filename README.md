@@ -4,7 +4,7 @@ Loophole is a web app for Slitherlink, the Japanese loop puzzle: draw one closed
 
 ## Status
 
-Early development. The repo has the build tooling, the local dev services, the design kit, the puzzle engine (the grid model, the wire format, rule checks for play, a brute-force solution counter for tests, a seeded random number generator, a rule-based solver that records each deduction for hints, a verifier that says whether a puzzle has one solution, none, several, or could not be decided in time, and a generator that makes a puzzle with exactly one solution from a seed) and a first web app. The web app plays a few built-in puzzles on phones and desktops: tap or drag to draw, keyboard play, undo and redo, a pausable timer, error highlighting, solve detection, light and dark themes, and progress saved in the browser. A Hint button (or H) shows the next forced deduction from the player's board, with the rule's name, a one-line explanation and its pattern drawn small, or points out a mark that doesn't fit; using one marks the attempt as assisted. Boards too big for the screen zoom and pan (pinch, wheel or the zoom buttons) with an overview map, and boards over 30×30 draw on a canvas. The server has its foundation: an HTTP API that serves puzzles, gives hints from each puzzle's stored solution and queues generation jobs, and a worker that generates puzzles in the background with progress and a time limit, keeping each solution in blob storage. The web app lists the server's puzzles after its built-in ones. Players can sign up with an email and password (behind a CAPTCHA, with email confirmation), log in and out, reset a forgotten password and delete their account; guests play exactly as before. Logged-in players' progress on server puzzles syncs to their account, so they can leave a puzzle on one device and carry on on another (a "Continue" list on the home page shows unsolved ones), and they can bring progress they saved as a guest into their account. Anyone can make a puzzle in the editor (Create), which says as they place clues whether it has one answer, none or several, and shows two answers side by side when there are several; players with a confirmed email publish it, the worker proves it has one solution before it goes up, and its link can be shared. Players can report a puzzle, and admins see the reports and can unpublish it. The worker also makes a daily puzzle for each size class (7×7, 10×10, 20×20 and 40×40) a few days ahead, the same for everyone and hidden until 00:00 UTC on its day, and the API checks ranked solves of them against the stored solution and the clock, keeps leaderboards, streaks and personal bests, and lets players choose a name for the leaderboards. The home page shows today's puzzles as book covers with a countdown to the next ones and, for logged-in players, their streak. A confirmed player gets one ranked try at each daily, on a clock that doesn't stop, and the Solved screen shows the time, the rank and the leaderboard of that size; guests play the dailies unranked. The leaderboard page (Ranks) shows each size's board for today and of all time. Each phase's plan is in [`docs/plans/`](docs/plans/).
+Early development. The repo has the build tooling, the local dev services, the design kit, the puzzle engine (the grid model, the wire format, rule checks for play, a brute-force solution counter for tests, a seeded random number generator, a rule-based solver that records each deduction for hints, a verifier that says whether a puzzle has one solution, none, several, or could not be decided in time, and a generator that makes a puzzle with exactly one solution from a seed) and a first web app. The web app plays a few built-in puzzles on phones and desktops: tap or drag to draw, keyboard play, undo and redo, a pausable timer, error highlighting, solve detection, light and dark themes, and progress saved in the browser. A Hint button (or H) shows the next forced deduction from the player's board, with the rule's name, a one-line explanation and its pattern drawn small, or points out a mark that doesn't fit; using one marks the attempt as assisted. Boards too big for the screen zoom and pan (pinch, wheel or the zoom buttons) with an overview map, and boards over 30×30 draw on a canvas. The server has its foundation: an HTTP API that serves puzzles, gives hints from each puzzle's stored solution and queues generation jobs, and a worker that generates puzzles in the background with progress and a time limit, keeping each solution in blob storage. The web app lists the server's puzzles after its built-in ones. Players can sign up with an email and password (behind a CAPTCHA, with email confirmation), log in and out, reset a forgotten password and delete their account; guests play exactly as before. Logged-in players' progress on server puzzles syncs to their account, so they can leave a puzzle on one device and carry on on another (a "Continue" list on the home page shows unsolved ones), and they can bring progress they saved as a guest into their account. Anyone can make a puzzle in the editor (Create), which says as they place clues whether it has one answer, none or several, and shows two answers side by side when there are several; players with a confirmed email publish it, the worker proves it has one solution before it goes up, and its link can be shared. Players can report a puzzle, and admins see the reports and can unpublish it. The worker also makes a daily puzzle for each size class (7×7, 10×10, 20×20 and 40×40) a few days ahead, the same for everyone and hidden until 00:00 UTC on its day, and the API checks ranked solves of them against the stored solution and the clock, keeps leaderboards, streaks and personal bests, and lets players choose a name for the leaderboards. The home page shows today's puzzles as book covers with a countdown to the next ones and, for logged-in players, their streak. A confirmed player gets one ranked try at each daily, on a clock that doesn't stop, and the Solved screen shows the time, the rank and the leaderboard of that size; guests play the dailies unranked. The leaderboard page (Ranks) shows each size's board for today and of all time. For launch, the API and the worker export Prometheus metrics and write JSON logs, the API has a readiness check, and there is a production Docker image with a Compose file and a database backup script. Each phase's plan is in [`docs/plans/`](docs/plans/).
 
 ## Quickstart
 
@@ -122,6 +122,89 @@ curl -s 'localhost:3000/api/leaderboards/areas/49?level=1'
 
 Ranked attempts need a logged-in player with a confirmed email: `POST /api/users/<user id>/attempts/<puzzle id>` starts the clock, and `POST /api/users/<user id>/attempts/<puzzle id>/finish` with `{"edges": …, "elapsedMs": …}` sends the solved board. `docs/DECISIONS.md` has the timing rules.
 
+## Production
+
+Loophole runs as one Docker image with two commands, the API (which also serves the built web app) and the worker, next to Garage, all on one host with `compose.prod.yml`. Hosting is up to you (PRD §14); the host needs Docker with Compose and a TLS reverse proxy such as Caddy or nginx.
+
+1. Copy `.env.production.example` to `.env.production` and `.env.garage.example` to `.env.garage`, and fill in every value: in the first, the https `PUBLIC_URL`, real Turnstile keys, a random `DAILY_SEED_SECRET`, your SMTP server and a Garage key of your own for the app; in the second, Garage's own secrets (each file says how to make its values). Only the API and the worker read `.env.production`, and only Garage reads `.env.garage`. The API and the worker refuse to start with development values (Turnstile's test keys, the development daily secret, Garage's development key, an http `PUBLIC_URL`, no `SMTP_HOST`, the development `MAIL_FROM`). For a mail relay inside the Docker network that doesn't offer STARTTLS (such as a `mailpit` service), set `SMTP_REQUIRE_TLS=false`.
+2. Build the image and start Garage, then create its layout, the app's key and bucket:
+
+   ```sh
+   export COMPOSE_FILE=compose.prod.yml APP_VERSION=$(git rev-parse --short HEAD)
+   docker compose build
+   docker compose up -d garage
+   set -a; . ./.env.production; set +a
+   ./scripts/garage-init.sh
+   ```
+
+3. Start everything and check it:
+
+   ```sh
+   docker compose up -d
+   curl -s localhost:3000/api/health/ready   # {"status":"ok","database":true,"blobs":true}
+   docker compose exec api bun run admin you@example.com
+   ```
+
+4. Point the reverse proxy at `127.0.0.1:3000` with TLS and compression on (for Caddy: `reverse_proxy 127.0.0.1:3000` and `encode zstd gzip`). The API trusts the last `X-Forwarded-For` entry (`TRUST_PROXY=true` in the Compose file), so nothing but the proxy may reach port 3000: Compose publishes it on 127.0.0.1 only. If the proxy runs on another machine, publish it on the private interface the proxy uses, never on 0.0.0.0.
+
+The database lives in the `loophole-data` volume (`/data/loophole.sqlite`), blobs in `garage-data` and `garage-meta`. To update, pull the code, run `docker compose build` and `docker compose up -d`; migrations run when the API and the worker start. `GET /api/health` says the process is up; `GET /api/health/ready` also checks the database and Garage and answers 503 when either fails, which the Compose health checks use. Logs are one JSON object per line (`docker compose logs api`), with a request id that the API also sends back as `X-Request-Id`; they never hold emails, tokens or passwords.
+
+## Monitoring
+
+The API and the worker each serve Prometheus metrics on a port of their own, off the public site: in `compose.prod.yml` the API's on `127.0.0.1:9470/metrics` and the worker's on `127.0.0.1:9471/metrics` (the worker's also answers `/health`). In development they are off; set `API_METRICS_PORT` and `WORKER_METRICS_PORT` in `.env` to turn them on. Garage's own metrics are on its admin port, `127.0.0.1:3903/metrics`, with `Authorization: Bearer <GARAGE_METRICS_TOKEN>`.
+
+| Metric | From | What it counts |
+|---|---|---|
+| `loophole_http_requests_total{method,route,status}` | API | Answered requests by route template (`/api/puzzles/:id`), so 429s show rate limiting |
+| `loophole_http_request_duration_seconds{method,route}` | API | Time to answer |
+| `loophole_auth_failures_total{reason}` | API | Refused logins, CAPTCHA checks, mailed links and cross-site requests |
+| `loophole_mail_failures_total` | API | Mails that could not be sent |
+| `loophole_rate_limit_evictions_total` | API | Rate-limit counters dropped during a flood of new clients |
+| `loophole_jobs_finished_total{kind,status}`, `loophole_job_duration_seconds{kind,status}` | worker | Jobs whose end this worker stored (done, failed, timeout) and how long they ran; a job taken back by recovery is counted when it is run again |
+| `loophole_jobs_lost_total` | worker | Jobs failed for good because their worker stopped on every attempt. Not in `loophole_jobs_finished_total`, which counts only the ends this worker stored |
+| `loophole_jobs{status}` | worker | Jobs queued and running now |
+| `loophole_daily_days_stocked{size}` | worker | Days in a row, from today, whose daily puzzle is generated (0: today's is missing) |
+| `loophole_daily_generation_failures_total{size}` | worker | Daily generations that failed and will be retried |
+| `loophole_submissions{verdict}` | worker | Decided player submissions by verdict (PRD §10: the share rejected as `unknown`) |
+| `loophole_build_info{version,runtime}` | both | Which build is running |
+
+Both also export the standard process metrics (CPU, memory, event loop). `ops/prometheus.yml` is a sample scrape config for a Prometheus on the same host and `ops/alerts.yml` has example alerts (a target down, today's daily missing or the stock low, daily generations failing, mail failing, job timeouts, a queue backlog, server errors, rate-limit floods, many auth failures). Dashboards are left to you. Admins can also read `GET /api/admin/health`: the database and Garage checks with their errors, the job queue, the daily stock, recent failed jobs and the versions.
+
+## Backups
+
+`./scripts/backup-sqlite.sh [folder]` copies the database while the API and the worker keep running (SQLite's `VACUUM INTO`), checks the copy and gzips it into the folder (`backups/` by default), keeping the newest 14 (`KEEP` to change). Run it with `COMPOSE_FILE=compose.prod.yml` in production, for example daily from cron:
+
+```sh
+15 3 * * * cd /srv/loophole && COMPOSE_FILE=compose.prod.yml ./scripts/backup-sqlite.sh /srv/backups/loophole
+```
+
+To restore, stop the API and the worker, put the backup in place and start them again:
+
+```sh
+export COMPOSE_FILE=compose.prod.yml
+docker compose stop api worker
+docker compose run --rm -T --no-deps api \
+  sh -c 'cat >/tmp/restore.sqlite.gz && bun apps/server/scripts/restore-db.ts /tmp/restore.sqlite.gz' \
+  </srv/backups/loophole/loophole-<time>.sqlite.gz
+docker compose start api worker
+```
+
+The backup is streamed into the container, so it needs no read access for the container's user.
+
+In development, `bun apps/server/scripts/restore-db.ts backups/loophole-<time>.sqlite.gz` does the same for `DATABASE_PATH`, with the dev servers stopped.
+
+Garage holds each puzzle's solution and solver steps, which the database points at. Blobs are written before the row that points at them and never change, so back the database up first and the bucket second: every puzzle in that database backup then has its blobs in the bucket backup. Copy the bucket with rclone over the Compose network, with a read-only key made once:
+
+```sh
+docker compose exec garage /garage key create loophole-backup          # note its Key ID and Secret key
+docker compose exec garage /garage bucket allow --read loophole --key <key id>
+docker run --rm --network loophole-prod_default -v /srv/backups/loophole-blobs:/data rclone/rclone:1.75.1 \
+  sync :s3:loophole /data --s3-provider Other --s3-endpoint http://garage:3900 --s3-region garage \
+  --s3-access-key-id <key id> --s3-secret-access-key <secret key>
+```
+
+Or stop Garage and archive the `garage-data` and `garage-meta` volumes. `infra/garage/garage.prod.toml` also has Garage snapshot its metadata every 6 hours under `/var/lib/garage/meta/snapshots`. A puzzle whose blobs are lost still plays, but its hints and ranked checks fail.
+
 ## Scripts
 
 | Command | What it does |
@@ -140,6 +223,9 @@ Ranked attempts need a logged-in player with a confirmed email: `POST /api/users
 | `bun run test:perf` | Build the web app and run its frame-time checks |
 | `bun run test:e2e:auth` | Build the web app, serve it from the API with a worker and run the account, publishing and progress end-to-end tests (needs Mailpit; publishing and progress also Garage) |
 | `bun run admin <email>` | Make an account an admin; `--revoke` takes it away |
+| `bun run bench:jobs` | Time generations and verifications as the worker runs them and fail if NFR-1's budgets are missed (`--quick` for a shorter run; not part of the check) |
+| `./scripts/test-under-load.sh [copies] [rounds]` | Run `bun test` several times at once to shake out timing-sensitive tests |
+| `./scripts/backup-sqlite.sh [folder]` | Back up the SQLite database (see Backups) |
 | `bun run --cwd packages/core bench` | Time puzzle verification on 10×10 to 100×100 boards (not part of the check) |
 | `bun run --cwd packages/core bench:generate` | Time puzzle generation on 7×7 to 100×100 boards and measure loop acceptance (not part of the check) |
 
@@ -151,8 +237,11 @@ packages/api-client  Typed API client generated from openapi.yaml
 apps/server          HTTP API and job worker
 apps/web             Player web app (SvelteKit, single-page)
 openapi.yaml         The API contract, generated from the server's routes
-infra/garage/        Garage config for local development
-scripts/             Dev helper scripts
+Dockerfile           Production image (API and worker)
+compose.prod.yml     Production services: API, worker, Garage
+infra/garage/        Garage config for development and production
+ops/                 Sample Prometheus scrape config and alert rules
+scripts/             Helper scripts (Garage setup, backups, tests under load)
 docs/PRD.md          Product requirements
 docs/FORMAT.md       Puzzle and board-state wire format
 docs/design/         Design kit; open docs/design/index.html

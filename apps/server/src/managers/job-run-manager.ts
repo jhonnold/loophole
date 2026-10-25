@@ -1,5 +1,5 @@
 import type { Job, JobResult, Task, TaskOutput } from "../domain.ts";
-import type { Clock, JobEnd, JobQueue, TaskRunner } from "../ports.ts";
+import type { Clock, JobEnd, JobQueue, TaskRunner, WorkerMetrics } from "../ports.ts";
 import type { DailyStockManager } from "./daily-stock-manager.ts";
 import type { PuzzleManager } from "./puzzle-manager.ts";
 import type { SubmissionManager } from "./submission-manager.ts";
@@ -29,6 +29,8 @@ export interface JobRunManagerDeps {
   readonly dailies: Pick<DailyStockManager, "complete">;
   readonly clock: Clock;
   readonly settings: JobRunSettings;
+  /** Counts each job's end and running time; tests may leave it out. */
+  readonly metrics?: Pick<WorkerMetrics, "jobFinished" | "jobsLost">;
 }
 
 /** Runs queued jobs, one at a time per worker: claim, run off-thread, store the outcome. */
@@ -79,17 +81,27 @@ export class JobRunManager {
     } finally {
       clearInterval(heartbeat);
     }
-    if (!jobs.finish(job.id, workerId, end, clock.now())) {
+    const finishedAt = clock.now();
+    // Counted only when the job really ended here: a job taken back is run again, and counted then.
+    if (jobs.finish(job.id, workerId, end, finishedAt)) {
+      this.#deps.metrics?.jobFinished(
+        job.kind,
+        end.status,
+        (finishedAt - (job.startedAt ?? finishedAt)) / 1000,
+      );
+    } else {
       console.warn(`Job ${job.id} was taken back; result not recorded`);
     }
     return true;
   }
 
   /** Requeues or fails running jobs whose worker stopped sending heartbeats. */
-  recoverStale(): number {
+  recoverStale(): { requeued: number; lost: number } {
     const { jobs, clock, settings } = this.#deps;
     const now = clock.now();
-    return jobs.recoverStale(now - settings.staleMs, settings.maxAttempts, now);
+    const recovery = jobs.recoverStale(now - settings.staleMs, settings.maxAttempts, now);
+    if (recovery.lost > 0) this.#deps.metrics?.jobsLost(recovery.lost);
+    return recovery;
   }
 
   /**

@@ -9,6 +9,7 @@ import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { accountDeps } from "../test-support/accounts.ts";
 import { dailyDeps, SMALL_DAILY, storeDaily } from "../test-support/daily.ts";
 import { FakeClock, sequentialIds } from "../test-support/fakes.ts";
+import { healthManager } from "../test-support/health.ts";
 import { sqliteProgress } from "../test-support/progress.ts";
 import { submissionDeps } from "../test-support/submissions.ts";
 import { createApp } from "./app.ts";
@@ -51,6 +52,7 @@ async function setup() {
     puzzles,
     jobs,
     progress: sqliteProgress(db, puzzles, clock),
+    health: healthManager(db, clock),
     ...submissionDeps(db, clock, puzzles, jobs),
     ...daily,
     ...deps,

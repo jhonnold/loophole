@@ -13,6 +13,7 @@ import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { accountDeps } from "../test-support/accounts.ts";
 import { dailyDeps } from "../test-support/daily.ts";
 import { noDailies } from "../test-support/fakes.ts";
+import { healthManager } from "../test-support/health.ts";
 import { sqliteProgress } from "../test-support/progress.ts";
 import { submissionDeps } from "../test-support/submissions.ts";
 
@@ -65,6 +66,7 @@ function setup(verifyTimeoutMs = 10_000) {
       jobs,
       ...dailyDeps(db, systemClock, puzzles),
       progress: sqliteProgress(db, puzzles, systemClock),
+      health: healthManager(db, systemClock),
       submissions,
       reports,
       ...accounts,

@@ -1,5 +1,5 @@
 import type { DailyRecord, GeneratedPuzzle } from "../domain.ts";
-import type { Clock, DailyRepository, DailySeeder } from "../ports.ts";
+import type { Clock, DailyRepository, DailySeeder, WorkerMetrics } from "../ports.ts";
 import { DAILY_SIZES } from "./daily-manager.ts";
 import { addDays, dayStart, utcDay } from "./days.ts";
 import type { JobManager } from "./job-manager.ts";
@@ -26,6 +26,8 @@ export interface DailyStockManagerDeps {
   readonly clock: Clock;
   readonly newId: () => string;
   readonly settings: DailyStockSettings;
+  /** Counts failed generations; tests may leave it out. */
+  readonly metrics?: Pick<WorkerMetrics, "dailyFailure">;
 }
 
 /**
@@ -58,6 +60,7 @@ export class DailyStockManager {
         if (row !== null) {
           const status = jobs.get(row.jobId)?.status ?? "lost";
           if (status === "queued" || status === "running" || status === "done") continue;
+          this.#deps.metrics?.dailyFailure(size);
           console.warn(
             `Daily ${day} ${size}×${size}: generation attempt ${row.attempt} ${status}; trying the next seed`,
           );
@@ -66,6 +69,12 @@ export class DailyStockManager {
       }
     }
     return { queued, missingToday };
+  }
+
+  /** For each size class, how many days in a row from today on have their puzzle generated. */
+  stocked(): { size: number; days: number }[] {
+    const { dailies, clock, settings } = this.#deps;
+    return stockedDays(dailies, utcDay(clock.now()), settings.daysAhead);
   }
 
   /**
@@ -114,4 +123,20 @@ export class DailyStockManager {
       return true;
     });
   }
+}
+
+/**
+ * For each daily size class, how many days in a row, from `today` up to `daysAhead` days, have
+ * their puzzle generated. 0 means today's is missing: players can't play it.
+ */
+export function stockedDays(
+  dailies: DailyRepository,
+  today: string,
+  daysAhead: number,
+): { size: number; days: number }[] {
+  return DAILY_SIZES.map((size) => {
+    let days = 0;
+    while (days < daysAhead && dailies.get(addDays(today, days), size)?.puzzleId) days++;
+    return { size, days };
+  });
 }
