@@ -18,15 +18,17 @@ describe("openDatabase and migrate", () => {
       "account_tokens",
       "jobs",
       "puzzles",
+      "reports",
       "schema_migrations",
       "sessions",
+      "submissions",
       "users",
     ]);
     migrate(db);
     const versions = db
       .query<{ version: number }, []>("SELECT version FROM schema_migrations")
       .all();
-    expect(versions).toEqual([{ version: 1 }, { version: 2 }]);
+    expect(versions).toEqual([{ version: 1 }, { version: 2 }, { version: 5 }]);
   });
 
   test("applies new numbered files in numeric order and skips applied ones", () => {

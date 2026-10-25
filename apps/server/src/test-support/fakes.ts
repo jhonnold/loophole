@@ -1,9 +1,13 @@
+import type { Puzzle } from "@loophole/core";
 import type {
   AccountTokenPurpose,
   AccountTokenRecord,
   Job,
   PuzzleRecord,
+  PuzzleStatus,
+  ReportRecord,
   SessionRecord,
+  SubmissionRecord,
   Task,
   TaskOutcome,
   UserRecord,
@@ -17,7 +21,10 @@ import type {
   NewJob,
   PasswordHasher,
   PuzzleRepository,
+  ReportRepository,
   SessionRepository,
+  SubmissionDecision,
+  SubmissionRepository,
   TaskRunner,
   TaskRunOptions,
   UserRepository,
@@ -58,6 +65,70 @@ export class FakePuzzleRepository implements PuzzleRepository {
       .filter((r) => r.status === "published")
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, limit);
+  }
+
+  findByClues(puzzle: Puzzle): PuzzleRecord | null {
+    const key = (p: Puzzle) => `${p.grid.width}x${p.grid.height}:${p.clues.join()}`;
+    const same = [...this.records.values()].filter((r) => key(r.puzzle) === key(puzzle));
+    return same.sort((a, b) => a.createdAt - b.createdAt)[0] ?? null;
+  }
+
+  setStatus(id: string, status: PuzzleStatus): boolean {
+    const record = this.records.get(id);
+    if (record === undefined) return false;
+    this.records.set(id, { ...record, status });
+    return true;
+  }
+}
+
+export class FakeSubmissionRepository implements SubmissionRepository {
+  readonly records = new Map<string, SubmissionRecord>();
+
+  insert(record: SubmissionRecord): void {
+    this.records.set(record.id, record);
+  }
+
+  get(id: string): SubmissionRecord | null {
+    return this.records.get(id) ?? null;
+  }
+
+  listForUser(userId: string, limit: number): SubmissionRecord[] {
+    return [...this.records.values()]
+      .filter((r) => r.userId === userId)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit);
+  }
+
+  decide(id: string, decision: SubmissionDecision): boolean {
+    const record = this.records.get(id);
+    if (record?.status !== "pending") return false;
+    this.records.set(id, { ...record, ...decision });
+    return true;
+  }
+}
+
+/** Reports in an array. `published` says which puzzles count as published for the list. */
+export class FakeReportRepository implements ReportRepository {
+  reports: ReportRecord[] = [];
+
+  constructor(private readonly published: (puzzleId: string) => boolean = () => true) {}
+
+  upsert(report: ReportRecord): void {
+    this.reports = this.reports.filter(
+      (r) => r.puzzleId !== report.puzzleId || r.reporterId !== report.reporterId,
+    );
+    this.reports.push(report);
+  }
+
+  listForPublished(limit: number): ReportRecord[] {
+    return this.reports
+      .filter((r) => this.published(r.puzzleId))
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit);
+  }
+
+  deleteForPuzzle(puzzleId: string): void {
+    this.reports = this.reports.filter((r) => r.puzzleId !== puzzleId);
   }
 }
 
