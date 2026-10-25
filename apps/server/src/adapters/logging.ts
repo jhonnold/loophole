@@ -14,6 +14,8 @@ export interface JsonLoggingOptions {
   readonly context?: () => Record<string, string> | undefined;
   /** Where a finished line goes; standard output and standard error by default. */
   readonly write?: (level: Level, line: string) => void;
+  /** Ends the process after an uncaught error; `process.exit` by default. */
+  readonly exit?: (code: number) => void;
 }
 
 const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z][\w-]*[A-Za-z]\b/g;
@@ -77,7 +79,11 @@ export function formatLine(
   });
 }
 
-/** Replaces `console.debug/log/info/warn/error` with JSON line writers. */
+/**
+ * Replaces `console.debug/log/info/warn/error` with JSON line writers, and logs an uncaught error or
+ * an unhandled rejection through them before exiting with status 1 (Bun would print it as plain
+ * text, with the source lines and nothing masked).
+ */
 export function installJsonLogging(options: JsonLoggingOptions): void {
   const write =
     options.write ??
@@ -94,4 +100,13 @@ export function installJsonLogging(options: JsonLoggingOptions): void {
   console.info = log("info");
   console.warn = log("warn");
   console.error = log("error");
+  const exit = options.exit ?? ((code: number) => process.exit(code));
+  process.on("uncaughtException", (err) => {
+    console.error("Uncaught exception:", err);
+    exit(1);
+  });
+  process.on("unhandledRejection", (reason) => {
+    console.error("Unhandled rejection:", reason);
+    exit(1);
+  });
 }

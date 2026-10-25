@@ -70,20 +70,35 @@ describe("formatLine", () => {
   });
 });
 
-test("installJsonLogging sends every console call through the writer", () => {
+/** Runs `fn`, then restores the console and removes the error listeners it installed. */
+function restoringProcess(fn: () => void): void {
   const saved = { ...console };
-  const lines: string[] = [];
+  const events = ["uncaughtException", "unhandledRejection"] as const;
+  const before = events.map((event) => process.listeners(event));
   try {
+    fn();
+  } finally {
+    Object.assign(console, saved);
+    events.forEach((event, i) => {
+      for (const listener of process.listeners(event)) {
+        if (!before[i].includes(listener)) process.removeListener(event, listener);
+      }
+    });
+  }
+}
+
+test("installJsonLogging sends every console call through the writer", () => {
+  const lines: string[] = [];
+  restoringProcess(() => {
     installJsonLogging({
       process: "worker",
       context: () => ({ requestId: "r9" }),
       write: (level, line) => lines.push(`${level} ${line}`),
+      exit: () => {},
     });
     console.log("Queued", 4, "daily puzzle generation(s)");
     console.warn("password=hunter22");
-  } finally {
-    Object.assign(console, saved);
-  }
+  });
   expect(lines).toHaveLength(2);
   expect(lines[0]).toStartWith("info ");
   expect(JSON.parse(lines[0].slice(5))).toMatchObject({
@@ -92,4 +107,32 @@ test("installJsonLogging sends every console call through the writer", () => {
     requestId: "r9",
   });
   expect(JSON.parse(lines[1].slice(5)).msg).toBe("password=[redacted]");
+});
+
+test("an uncaught error or unhandled rejection is logged as JSON, then the process exits 1", () => {
+  const lines: string[] = [];
+  const codes: number[] = [];
+  restoringProcess(() => {
+    installJsonLogging({
+      process: "api",
+      write: (level, line) => lines.push(`${level} ${line}`),
+      exit: (code) => codes.push(code),
+    });
+    process.emit(
+      "unhandledRejection",
+      new Error("SMTP refused ann@example.com"),
+      Promise.resolve(),
+    );
+    process.emit("uncaughtException", new Error("boom token=abc"), "uncaughtException");
+  });
+  expect(codes).toEqual([1, 1]);
+  expect(lines).toHaveLength(2);
+  expect(lines[0]).toStartWith("error ");
+  expect(JSON.parse(lines[0].slice(6))).toMatchObject({
+    msg: "Unhandled rejection:",
+    process: "api",
+    err: { message: "SMTP refused [email]" },
+  });
+  expect(lines[1]).not.toContain("abc");
+  expect(JSON.parse(lines[1].slice(6)).msg).toBe("Uncaught exception:");
 });
