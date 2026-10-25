@@ -1,6 +1,6 @@
 <script lang="ts">
   import { analyzeBoard } from "@loophole/core";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import {
     applyChanges,
     type Board,
@@ -54,6 +54,7 @@
   let paused = $state(false);
   let ready = $state(false);
   let store: ProgressStore | null = null;
+  let boardView: { focus(): void } | undefined = $state();
 
   const analysis = $derived(analyzeBoard(puzzle, board.edges));
   const solved = $derived(analysis.solved);
@@ -108,6 +109,12 @@
     lastEdit = board.past.at(-1);
   }
 
+  // Pausing unmounts the board, so after it remounts (on resume or start over) focus goes back to
+  // it, and keyboard players keep their place.
+  function focusBoard() {
+    tick().then(() => boardView?.focus());
+  }
+
   function setPaused(value: boolean) {
     if (!ready || solved || value === paused) return;
     paused = value;
@@ -115,6 +122,7 @@
     watch = value ? stop(watch, t) : start(watch, t);
     now = t;
     save();
+    if (!value) focusBoard();
   }
 
   function run(cmd: Command) {
@@ -143,6 +151,7 @@
     now = performance.now();
     watch = start(createStopwatch(), now);
     paused = false;
+    focusBoard();
   }
 
   // Solving stops the clock and records the result (FR-17, client side).
@@ -235,7 +244,15 @@
               <button type="button" class="primary" onclick={() => setPaused(false)}>Resume</button>
             </div>
           {:else}
-            <BoardView {puzzle} edges={board.edges} {analysis} {layout} {locked} onedit={edit} />
+            <BoardView
+              bind:this={boardView}
+              {puzzle}
+              edges={board.edges}
+              {analysis}
+              {layout}
+              {locked}
+              onedit={edit}
+            />
           {/if}
           {#if solved}
             <SolvedSeal />

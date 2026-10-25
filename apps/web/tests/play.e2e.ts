@@ -1,9 +1,20 @@
 import { createGrid, dotIndex, hEdgeIndex, vEdgeIndex } from "@loophole/core";
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { FIXTURE_SOLUTIONS } from "../src/lib/test-support/solutions.ts";
 import { crosses, dotPoints, edgePoint, lines, scrollsSideways, touchDrag } from "./board.ts";
 
 const grid7 = createGrid(7, 7);
+
+/** Taps every edge of the 7×7 solution, which solves the puzzle on a phone. */
+async function solveSmall7(page: Page) {
+  const solution = FIXTURE_SOLUTIONS["small-7"];
+  for (let e = 0; e < solution.length; e++) {
+    if (solution[e] !== "1") continue;
+    const p = await edgePoint(page, grid7, e);
+    await page.touchscreen.tap(p.x, p.y);
+  }
+  await expect(page.getByRole("img", { name: "Solved" })).toBeVisible();
+}
 
 // The two phone sizes from the design kit: Small (360×560) and Play (390×664).
 for (const [width, height] of [
@@ -68,17 +79,17 @@ for (const [width, height] of [
     });
 
     test("detects the solve and keeps it after a reload (FR-17, FR-21)", async ({ page }) => {
-      const solution = FIXTURE_SOLUTIONS["small-7"];
-      for (let e = 0; e < solution.length; e++) {
-        if (solution[e] !== "1") continue;
-        const p = await edgePoint(page, grid7, e);
-        await page.touchscreen.tap(p.x, p.y);
-      }
-      await expect(page.getByRole("img", { name: "Solved" })).toBeVisible();
+      await solveSmall7(page);
       await expect(page.getByText(/Solved in \d\d:\d\d/)).toBeVisible();
       expect(await scrollsSideways(page)).toBe(false);
       await page.reload();
       await expect(page.getByRole("img", { name: "Solved" })).toBeVisible();
+    });
+
+    test("start over returns focus to the board (NFR-5)", async ({ page }) => {
+      await solveSmall7(page);
+      await page.getByRole("button", { name: "Start over" }).click();
+      await expect(page.locator("svg[role=application]")).toBeFocused();
     });
   });
 }
@@ -163,6 +174,16 @@ test.describe("desktop keyboard (NFR-5)", () => {
     // The last step of the stroke is its own undo step, so one undo leaves the tapped line.
     await page.keyboard.press("z");
     await expect(lines(page)).toHaveCount(1);
+  });
+
+  test("resuming with P returns focus to the board (NFR-5)", async ({ page }) => {
+    await page.goto("/play/small-7");
+    const board = page.locator("svg[role=application]");
+    await board.focus();
+    await page.keyboard.press("p");
+    await expect(page.getByText("一時停止")).toBeVisible();
+    await page.keyboard.press("p");
+    await expect(board).toBeFocused();
   });
 
   test("tabbing to the board shows the edge cursor (NFR-5)", async ({ page }) => {

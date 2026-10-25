@@ -105,6 +105,11 @@
     gesture = null;
   }
 
+  /** Moves keyboard focus to the board; the parent calls this after the board remounts. */
+  export function focus(): void {
+    svg?.focus();
+  }
+
   function onkeydown(e: KeyboardEvent) {
     if (locked || e.ctrlKey || e.metaKey || e.altKey) return;
     const cmd = boardCommand(e.key);
