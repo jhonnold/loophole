@@ -1,5 +1,5 @@
 import type { PuzzleWireV1 } from "@loophole/core";
-import type { Job, JobInput } from "../domain.ts";
+import type { GenerateInput, Job, JobInput } from "../domain.ts";
 import type { Clock, JobQueue } from "../ports.ts";
 import { QueueFullError } from "./errors.ts";
 
@@ -42,6 +42,15 @@ export class JobManager {
   enqueueVerify(puzzle: PuzzleWireV1, submissionId?: string): Job {
     const input = submissionId === undefined ? { puzzle } : { puzzle, submissionId };
     return this.#enqueue({ kind: "verify", input });
+  }
+
+  /**
+   * Queues the generation of a daily puzzle under job id `id` (PRD FR-22). Never refused for a
+   * full queue: the scheduler's few jobs a day must not wait behind players' jobs.
+   */
+  enqueueDaily(id: string, input: GenerateInput & { readonly day: string }): Job {
+    const { jobs, clock } = this.#deps;
+    return jobs.enqueue({ id, job: { kind: "generate", input }, createdAt: clock.now() });
   }
 
   get(id: string): Job | null {

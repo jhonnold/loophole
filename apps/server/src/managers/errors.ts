@@ -53,3 +53,51 @@ export class PuzzleNotFoundError extends Error {
     this.name = "PuzzleNotFoundError";
   }
 }
+
+/** There is no daily puzzle here: an unknown day or puzzle, a day still to come, or a practice puzzle. */
+export class DailyNotFoundError extends Error {
+  constructor(message = "No daily puzzle here.") {
+    super(message);
+    this.name = "DailyNotFoundError";
+  }
+}
+
+/** A ranked attempt can only be started on the daily's own UTC day. */
+export class DailyEndedError extends Error {
+  constructor() {
+    super("This daily puzzle's day is over; it can still be played, but not ranked.");
+    this.name = "DailyEndedError";
+  }
+}
+
+/** The player has no ranked attempt at this puzzle to finish. */
+export class AttemptNotFoundError extends Error {
+  constructor() {
+    super("Start a ranked attempt before sending a solution.");
+    this.name = "AttemptNotFoundError";
+  }
+}
+
+/** A ranked attempt's board is not the puzzle's solution. */
+export class WrongSolutionError extends Error {
+  constructor() {
+    super("That board is not the solution.");
+    this.name = "WrongSolutionError";
+  }
+}
+
+/** The display name is reserved or not allowed. */
+export class InvalidDisplayNameError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidDisplayNameError";
+  }
+}
+
+/** Another player already shows this display name. */
+export class DisplayNameTakenError extends Error {
+  constructor() {
+    super("Another player already has that name.");
+    this.name = "DisplayNameTakenError";
+  }
+}
