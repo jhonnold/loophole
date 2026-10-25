@@ -21,7 +21,8 @@
     "dev:worker": "bun --watch apps/server/src/worker/main.ts",
     "gen:api": "bun apps/server/scripts/gen-api.ts",
     "check:api": "bun apps/server/scripts/gen-api.ts --check",
-    "admin": "bun apps/server/scripts/set-admin.ts"
+    "admin": "bun apps/server/scripts/set-admin.ts",
+    "bench:jobs": "bun apps/server/scripts/bench-jobs.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.3",
