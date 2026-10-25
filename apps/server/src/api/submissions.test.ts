@@ -233,12 +233,36 @@ describe("reports and unpublishing", () => {
     // Gone for players and from the list; admins can still open it.
     await expectProblem(await send("GET", "/api/puzzles/p1"), 404);
     await expectProblem(await send("GET", "/api/puzzles/p1", undefined, { cookie: ann }), 404);
+    await expectProblem(await send("POST", "/api/puzzles/p1/hint", { edges: "000000000000" }), 404);
     expect((await send("GET", "/api/puzzles/p1", undefined, { cookie: admin })).status).toBe(200);
     expect(await (await send("GET", "/api/puzzles")).json()).toEqual({ items: [] });
     await expectProblem(
       await send("POST", "/api/puzzles/p1/report", { reason: "x" }, { cookie: ann }),
       404,
     );
+  });
+
+  test("a submission whose puzzle is unpublished reads as removed, with no link, to its creator", async () => {
+    const { send, player, savePuzzle } = setup();
+    await savePuzzle("p1");
+    const ann = await player("ann@example.com");
+    const admin = await player("root@example.com", { admin: true });
+    const duplicate = await send("POST", "/api/submissions", UNIQUE, { cookie: ann });
+    expect(await duplicate.json()).toMatchObject({
+      id: "s-1",
+      verdict: "duplicate",
+      puzzleId: "p1",
+    });
+    expect(
+      (await send("POST", "/api/admin/puzzles/p1/unpublish", undefined, { cookie: admin })).status,
+    ).toBe(204);
+    const removed = { status: "rejected", verdict: "removed", puzzleId: null };
+    expect(
+      await (await send("GET", "/api/submissions/s-1", undefined, { cookie: ann })).json(),
+    ).toMatchObject(removed);
+    expect(
+      await (await send("GET", "/api/submissions", undefined, { cookie: ann })).json(),
+    ).toMatchObject({ items: [removed] });
   });
 
   test("reporting needs a login, a reason and an existing puzzle, and is rate-limited", async () => {

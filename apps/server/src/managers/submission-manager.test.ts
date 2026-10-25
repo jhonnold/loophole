@@ -237,4 +237,26 @@ describe("SubmissionManager.complete", () => {
     });
     expect(manager.get("s-1", "u1")?.status).toBe("published");
   });
+
+  test("a retry after a crash between saving the puzzle and deciding publishes it, not a duplicate of itself", async () => {
+    const { puzzles, manager } = setup();
+    manager.submit("u1", UNIQUE);
+    await puzzles.saveSubmitted("s-1", UNIQUE, SOLUTION, UNIQUE_OUTCOME.steps, "u1");
+    await manager.complete("s-1", UNIQUE_OUTCOME);
+    expect(manager.get("s-1", "u1")).toMatchObject({
+      status: "published",
+      verdict: "unique",
+      puzzleId: "s-1",
+    });
+  });
+
+  test("a published submission reads as removed, with no link, once its puzzle is unpublished", async () => {
+    const { puzzles, manager } = setup();
+    manager.submit("u1", UNIQUE);
+    await manager.complete("s-1", UNIQUE_OUTCOME);
+    expect(puzzles.unpublish("s-1")).toBe(true);
+    const removed = { status: "rejected", verdict: "removed", puzzleId: null };
+    expect(manager.get("s-1", "u1")).toMatchObject(removed);
+    expect(manager.listMine("u1", 50)).toEqual([expect.objectContaining(removed)]);
+  });
 });

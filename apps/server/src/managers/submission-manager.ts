@@ -68,12 +68,14 @@ export class SubmissionManager {
   /** The user's own submission, or null when there is none with this id or it is someone else's. */
   get(id: string, userId: string): SubmissionRecord | null {
     const record = this.#deps.submissions.get(id);
-    return record === null || record.userId !== userId ? null : this.#settle(record);
+    return record === null || record.userId !== userId ? null : this.#present(this.#settle(record));
   }
 
   /** The user's submissions, newest first. */
   listMine(userId: string, limit: number): SubmissionRecord[] {
-    return this.#deps.submissions.listForUser(userId, limit).map((r) => this.#settle(r));
+    return this.#deps.submissions
+      .listForUser(userId, limit)
+      .map((r) => this.#present(this.#settle(r)));
   }
 
   /**
@@ -134,6 +136,16 @@ export class SubmissionManager {
     };
     submissions.decide(record.id, decision);
     return submissions.get(record.id) ?? record;
+  }
+
+  /**
+   * A published submission whose puzzle has since been unpublished reads as `removed`, with no
+   * link, so the creator's list never offers a Play link that 404s. Only the answer changes; the
+   * row keeps its puzzle id.
+   */
+  #present(record: SubmissionRecord): SubmissionRecord {
+    if (record.puzzleId === null || this.#deps.puzzles.get(record.puzzleId) !== null) return record;
+    return { ...record, status: "rejected", verdict: "removed", puzzleId: null };
   }
 }
 
