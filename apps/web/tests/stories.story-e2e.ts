@@ -11,7 +11,7 @@ import {
   verify,
 } from "@loophole/core";
 import { type APIRequestContext, type Browser, expect, type Page, test } from "@playwright/test";
-import { board, edgePoint, lines } from "./board.ts";
+import { board, boardView, edgePoint, lines } from "./board.ts";
 import { canSignUp, mailedLink, reachable } from "./mailpit.ts";
 
 // One test per user story in PRD §6, each as a new visitor or a new account, against the real
@@ -232,13 +232,28 @@ test("as a creator, I can enter clues and be told if the puzzle is unique, has n
       JSON.stringify(draft),
     );
     await page.goto("/create");
+    await expect(board(page)).toBeVisible();
+  };
+  // A tap on an empty cell makes it a 0 clue, as a creator would type the clues.
+  const tapCell = async (row: number, col: number) => {
+    await board(page).scrollIntoViewIfNeeded();
+    const v = await boardView(page);
+    await page.mouse.click(
+      v.box.x + v.margin + (col + 0.5) * v.cell - v.x,
+      v.box.y + v.margin + (row + 0.5) * v.cell - v.y,
+    );
   };
   await page.goto("/create");
-  await openDraft({ v: 1, width: 2, height: 2, clues: "...." });
-  await expect(page.getByText("More than one answer")).toBeVisible();
-  await openDraft({ v: 1, width: 1, height: 1, clues: "0" });
+  await openDraft({ v: 1, width: 1, height: 1, clues: "." });
+  await tapCell(0, 0);
   await expect(page.getByText("No answer", { exact: true })).toBeVisible();
-  // A unique puzzle the worker then proves and publishes (FR-27): a 5×5 nobody has published.
+  await openDraft({ v: 1, width: 2, height: 2, clues: "...." });
+  // Two taps make a 1 in the corner, which two loops satisfy.
+  await tapCell(0, 0);
+  await tapCell(0, 0);
+  await expect(page.getByText("More than one answer")).toBeVisible();
+  // A unique puzzle the worker then proves and publishes (FR-27): a 5×5 nobody has published,
+  // seeded as a draft to skip typing 25 cells.
   const { clues } = serializePuzzle(
     generate({ width: 5, height: 5, seed: crypto.randomUUID() }).puzzle,
   );
