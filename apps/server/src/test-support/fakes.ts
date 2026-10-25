@@ -2,6 +2,7 @@ import type {
   AccountTokenPurpose,
   AccountTokenRecord,
   Job,
+  ProgressRecord,
   PuzzleRecord,
   SessionRecord,
   Task,
@@ -16,6 +17,7 @@ import type {
   JobQueue,
   NewJob,
   PasswordHasher,
+  ProgressRepository,
   PuzzleRepository,
   SessionRepository,
   TaskRunner,
@@ -274,5 +276,28 @@ export class FakeAccountTokenRepository implements AccountTokenRepository {
 
   deleteExpired(now: number): void {
     for (const t of this.tokens.values()) if (t.expiresAt <= now) this.tokens.delete(t.tokenHash);
+  }
+}
+
+export class FakeProgressRepository implements ProgressRepository {
+  readonly records = new Map<string, ProgressRecord>();
+
+  get(userId: string, puzzleId: string): ProgressRecord | null {
+    return this.records.get(`${userId}/${puzzleId}`) ?? null;
+  }
+
+  put(record: ProgressRecord): void {
+    this.records.set(`${record.userId}/${record.puzzleId}`, record);
+  }
+
+  delete(userId: string, puzzleId: string): void {
+    this.records.delete(`${userId}/${puzzleId}`);
+  }
+
+  listUnsolved(userId: string, limit: number): ProgressRecord[] {
+    return [...this.records.values()]
+      .filter((r) => r.userId === userId && !r.solved)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, limit);
   }
 }
