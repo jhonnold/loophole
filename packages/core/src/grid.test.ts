@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
 import {
+  cellCoords,
   cellIndex,
   createGrid,
+  dotCoords,
   dotIndex,
   edgeCoords,
   hEdgeIndex,
@@ -130,6 +132,25 @@ describe("index helpers", () => {
           const { horizontal, row, col } = edgeCoords(g, e);
           expect(horizontal ? hEdgeIndex(g, row, col) : vEdgeIndex(g, row, col)).toBe(e);
           expect(horizontal).toBe(e < g.hEdgeCount);
+        }
+      }),
+      { numRuns: 30 },
+    );
+  });
+
+  test("cellCoords and dotCoords invert cellIndex and dotIndex", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 20 }), fc.integer({ min: 1, max: 20 }), (w, h) => {
+        const g = createGrid(w, h);
+        for (let i = 0; i < g.cellCount; i++) {
+          const { row, col } = cellCoords(g, i);
+          expect(row >= 0 && row < h && col >= 0 && col < w).toBe(true);
+          expect(cellIndex(g, row, col)).toBe(i);
+        }
+        for (let d = 0; d < g.dotCount; d++) {
+          const { row, col } = dotCoords(g, d);
+          expect(row >= 0 && row <= h && col >= 0 && col <= w).toBe(true);
+          expect(dotIndex(g, row, col)).toBe(d);
         }
       }),
       { numRuns: 30 },
