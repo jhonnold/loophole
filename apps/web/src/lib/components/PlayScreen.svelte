@@ -31,6 +31,7 @@
     start,
     stop,
   } from "../game/timer.ts";
+  import { clampView, type View, viewLayout, zoomLimits } from "../game/viewport.ts";
   import { type PuzzleEntry, puzzleTitle } from "../puzzles/index.ts";
   import BoardView from "./BoardView.svelte";
   import PauseButton from "./PauseButton.svelte";
@@ -74,7 +75,7 @@
   const minCell = $derived(coarse ? TOUCH_MIN_CELL : POINTER_MIN_CELL);
   const roomWidth = $derived(stageWidth - FRAME);
   const roomHeight = $derived((wide ? stageHeight : stageHeight + spacerHeight) - FRAME);
-  const layout = $derived(
+  const fitted = $derived(
     stageWidth > 0
       ? fitLayout(grid.width, grid.height, roomWidth, roomHeight, minCell, MAX_CELL)
       : null,
@@ -82,6 +83,30 @@
   const stageMinHeight = $derived(
     stageWidth > 0 ? minBoardHeight(grid.width, grid.height, roomWidth, minCell) + FRAME : 0,
   );
+
+  // A board whose cells would come out smaller than the minimum zooms instead (FR-13). Whether it
+  // does depends only on the width (`fitLayout` gives up the minimum only for width). Its stage then
+  // takes the height left over on the screen, at least five cells, and the board's frame fills the
+  // stage without sizing it, so the viewport follows the screen and never feeds its own size. It
+  // opens at the minimum cell size. `zoomed` is the last view the player chose; it survives
+  // pausing, and is clamped again whenever the stage changes size.
+  const zoomable = $derived(fitted !== null && fitted.cell < minCell);
+  let zoomed: View | null = $state.raw(null);
+  const frame = $derived.by(() => {
+    if (fitted === null) return null;
+    if (!zoomable) {
+      return {
+        layout: fitted,
+        view: { cell: fitted.cell, x: 0, y: 0 },
+        port: { width: fitted.width, height: fitted.height },
+        zoom: null,
+      };
+    }
+    const port = { width: roomWidth, height: stageHeight - FRAME };
+    const zoom = zoomLimits(grid, port);
+    const view = clampView(grid, zoomed ?? { cell: minCell, x: 0, y: 0 }, port, zoom);
+    return { layout: viewLayout(grid, view.cell), view, port, zoom };
+  });
 
   function save() {
     store?.save(entry.id, {
@@ -225,18 +250,19 @@
   </header>
 
   <p class="status">
-    <b>{analysis.satisfiedClues}</b> of {analysis.clueCount} clues satisfied
+    <span><b>{analysis.satisfiedClues}</b> of {analysis.clueCount} clues satisfied</span>
+    {#if zoomable}<span>Pinch or use +/− to zoom</span>{/if}
   </p>
 
-  <main class="play">
+  <main class="play" class:zoom={zoomable}>
     <div
       class="stage"
       bind:clientWidth={stageWidth}
       bind:clientHeight={stageHeight}
-      style:min-height="{stageMinHeight}px"
+      style:min-height="{zoomable ? 5 * minCell + FRAME : stageMinHeight}px"
     >
-      {#if layout}
-        <div class="frame" style:width="{layout.width + FRAME}px" style:height="{layout.height + FRAME}px">
+      {#if frame}
+        <div class="frame" style:width="{frame.port.width + FRAME}px" style:height="{frame.port.height + FRAME}px">
           {#if paused}
             <div class="paused">
               <span class="paused-title">一時停止</span>
@@ -249,9 +275,13 @@
               {puzzle}
               edges={board.edges}
               {analysis}
-              {layout}
+              layout={frame.layout}
+              view={frame.view}
+              port={frame.port}
+              zoom={frame.zoom}
               {locked}
               onedit={edit}
+              onview={(v) => (zoomed = v)}
             />
           {/if}
           {#if solved}
@@ -318,6 +348,7 @@
           <dt>Backspace</dt><dd>clear the edge</dd>
           <dt>Z / Y</dt><dd>undo / redo</dd>
           <dt>P</dt><dd>pause</dd>
+          {#if zoomable && !solved}<dt>+ / −</dt><dd>zoom in / out</dd>{/if}
           <dt>Mouse</dt><dd>click to cycle, drag to draw a run</dd>
         </dl>
       </section>
@@ -327,18 +358,23 @@
 
 <style>
   .screen {
+    /* Header metrics, also used to size a zoomable board's stage on wide screens. */
+    --bar-height: 52px;
+    --screen-top: 12px;
+    --screen-bottom: 12px;
+    --screen-gap: 10px;
     min-height: 100dvh;
     max-width: 1280px;
     margin: 0 auto;
-    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    padding: var(--screen-top) 16px calc(var(--screen-bottom) + env(safe-area-inset-bottom));
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--screen-gap);
     overscroll-behavior: none;
   }
 
   .bar {
-    height: 52px;
+    height: var(--bar-height);
     flex: 0 0 auto;
     display: flex;
     align-items: center;
@@ -400,6 +436,9 @@
   .status {
     margin: 0;
     flex: 0 0 auto;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
     font-size: 14px;
     color: var(--ink-soft);
   }
@@ -430,6 +469,30 @@
     background: var(--sheet);
     border: 2px solid var(--ink);
     box-shadow: 4px 4px 0 var(--frame-shadow);
+  }
+
+  /* A zoomable board's stage takes the free height and its frame fills it without sizing it. */
+  .zoom .stage {
+    flex: 1 1 0;
+    position: relative;
+  }
+
+  .zoom .frame {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  .zoom .spacer {
+    display: none;
+  }
+
+  /* On phones, room for a one-message error card, so a zoomable board keeps its height when the
+     first rule error appears or clears. */
+  @media (max-width: 899px) {
+    .zoom .notes {
+      min-height: 88px;
+    }
   }
 
   .paused {
@@ -595,12 +658,10 @@
 
   @media (max-height: 620px) {
     .screen {
-      padding-block: 8px calc(8px + env(safe-area-inset-bottom));
-      gap: 8px;
-    }
-
-    .bar {
-      height: 48px;
+      --bar-height: 48px;
+      --screen-top: 8px;
+      --screen-bottom: 8px;
+      --screen-gap: 8px;
     }
 
     .play {
@@ -625,8 +686,10 @@
   /* Wide screens: board on the left, timer, tools and keyboard help on the right (Desktop artboard). */
   @media (min-width: 900px) {
     .screen {
-      padding: 20px 24px 32px;
-      gap: 14px;
+      --screen-top: 20px;
+      --screen-bottom: 32px;
+      --screen-gap: 14px;
+      padding: var(--screen-top) 24px var(--screen-bottom);
     }
 
     h1 {
@@ -652,6 +715,15 @@
 
     .stage {
       min-height: 0;
+    }
+
+    /* The left column's height comes from the window, not from the side column: everything
+       below the header and above the bottom padding. */
+    .zoom .stage {
+      height: calc(
+        100dvh - var(--screen-top) - var(--bar-height) - var(--screen-gap) - var(--screen-bottom)
+      );
+      align-self: start;
     }
 
     .frame {
