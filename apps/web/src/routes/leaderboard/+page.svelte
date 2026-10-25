@@ -16,21 +16,29 @@
   let board = $state<Leaderboard | null | undefined>(undefined);
   let missing = $state(false);
 
+  // Only the latest choice's answers are shown: a slower answer to an earlier choice is dropped.
+  let loads = 0;
+
   async function load(forSize: number, forScope: string) {
+    const token = ++loads;
+    const latest = () => token === loads;
     board = undefined;
     missing = false;
     if (forScope === "all") {
-      board = await daily.bucketBoard(forSize * forSize);
+      const result = await daily.bucketBoard(forSize * forSize);
+      if (latest()) board = result;
       return;
     }
     const today = await daily.day();
+    if (!latest()) return;
     const puzzleId = today?.puzzles.find((p) => p.size === forSize)?.puzzleId ?? null;
     if (today !== null && puzzleId === null) {
       missing = true;
       board = null;
       return;
     }
-    board = puzzleId === null ? null : await daily.puzzleBoard(puzzleId);
+    const result = puzzleId === null ? null : await daily.puzzleBoard(puzzleId);
+    if (latest()) board = result;
   }
 
   // Reload when the board chosen changes, and when who is logged in is known (their own row).

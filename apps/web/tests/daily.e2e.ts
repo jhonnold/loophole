@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { dayHeading } from "../src/lib/daily/days.ts";
 import { FIXTURE_SOLUTIONS } from "../src/lib/test-support/solutions.ts";
 import { board, edgePoint, lines, scrollsSideways } from "./board.ts";
-import { attempt, DAILY_ID, dayAfter, mockDailyApi, TODAY } from "./daily-mocks.ts";
+import { attempt, BOARD, DAILY_ID, dayAfter, mockDailyApi, TODAY } from "./daily-mocks.ts";
 
 // Daily puzzles, ranked play and leaderboards against a stand-in for the API (daily-mocks.ts):
 // `bun run test:e2e` runs with no server. The real API is covered by daily.auth-e2e.ts.
@@ -220,5 +220,37 @@ test.describe("leaderboard page (FR-23)", () => {
     await expect(page).toHaveURL(/scope=all/);
     await expect(page.getByText("49 cells · all time")).toBeVisible();
     expect(await scrollsSideways(page)).toBe(false);
+  });
+
+  test("an answer to an earlier choice does not replace the board on screen", async ({ page }) => {
+    await mockDailyApi(page);
+    // The all-time answer is held back, then arrives after the player has chosen Today again.
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let answered = false;
+    await page.route("**/api/leaderboards/areas/**", async (route) => {
+      await held;
+      answered = true;
+      await route.fulfill({
+        json: {
+          ...BOARD,
+          total: 1,
+          me: null,
+          entries: [{ rank: 1, name: "slowpoke", timeMs: 60_000, me: false }],
+        },
+      });
+    });
+    await page.goto("/leaderboard");
+    await expect(page.getByRole("listitem").filter({ hasText: "tsuru" })).toBeVisible();
+    await page.getByRole("button", { name: "All time" }).click();
+    await page.getByRole("button", { name: "Today", exact: true }).click();
+    await expect(page.getByRole("listitem").filter({ hasText: "tsuru" })).toBeVisible();
+    release();
+    await expect.poll(() => answered).toBe(true);
+    await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 300)));
+    await expect(page.getByText("49 cells · today")).toBeVisible();
+    await expect(page.getByText("slowpoke")).toHaveCount(0);
   });
 });
