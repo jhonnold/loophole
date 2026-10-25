@@ -1,4 +1,5 @@
 import { decodeEdges, FormatError, findHint, type Hint } from "@loophole/core";
+import type { AttemptManager } from "./attempt-manager.ts";
 import { InvalidBoardError } from "./errors.ts";
 import type { PuzzleManager } from "./puzzle-manager.ts";
 
@@ -11,12 +12,14 @@ export const HINT_TIME_LIMIT_MS = 500;
 
 export interface HintManagerDeps {
   readonly puzzles: PuzzleManager;
+  /** Marks a player's ranked attempt as assisted when they get a hint (PRD FR-12, FR-23). */
+  readonly attempts: Pick<AttemptManager, "recordHint">;
 }
 
 /**
  * Hints for published puzzles (PRD FR-6, FR-12): the next deduction from a player's board, worked
- * out against the stored solution, which never leaves the server (FR-25). Ranked play (WT11) will
- * record here that a player took a hint.
+ * out against the stored solution, which never leaves the server (FR-25). A hint for a logged-in
+ * player marks their ranked attempt at the puzzle as assisted.
  */
 export class HintManager {
   readonly #deps: HintManagerDeps;
@@ -27,9 +30,10 @@ export class HintManager {
 
   /**
    * The hint for `edges` (the edge-state encoding) on puzzle `id`, or null when there is no
-   * published puzzle with that id. Throws `InvalidBoardError` when `edges` does not fit the puzzle.
+   * published puzzle with that id. `userId` is the logged-in player, if any. Throws
+   * `InvalidBoardError` when `edges` does not fit the puzzle.
    */
-  async hint(id: string, edges: string): Promise<Hint | null> {
+  async hint(id: string, edges: string, userId: string | null = null): Promise<Hint | null> {
     const { puzzles } = this.#deps;
     const record = puzzles.get(id);
     if (record === null) return null;
@@ -42,6 +46,12 @@ export class HintManager {
     }
     const solution = await puzzles.getSolution(id);
     if (solution === null) throw new Error(`Puzzle ${id} has no stored solution`);
-    return findHint(record.puzzle, solution, board, { timeLimitMs: HINT_TIME_LIMIT_MS });
+    const hint = findHint(record.puzzle, solution, board, { timeLimitMs: HINT_TIME_LIMIT_MS });
+    if (hint.kind === "solved") return hint;
+    const live = this.#deps.attempts.recordHint(userId, id);
+    // On today's daily a mistake hint doesn't count the wrong marks, so one request can't check a
+    // whole board against the solution (DECISIONS, "Hints on daily puzzles").
+    if (live && hint.kind === "mistake") return { ...hint, count: 1 };
+    return hint;
   }
 }

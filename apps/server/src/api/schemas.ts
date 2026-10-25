@@ -118,7 +118,10 @@ export const HintSchema = z
       edge: EdgeIndex.openapi({
         description: "The first edge marked differently from the solution.",
       }),
-      count: z.int().min(1).openapi({ description: "How many marks are wrong." }),
+      count: z.int().min(1).openapi({
+        description:
+          "How many marks are wrong. Always 1 on today's daily puzzles, so a hint can't be used to check a whole board.",
+      }),
     }),
     z.object({
       kind: z.literal("step"),

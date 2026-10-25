@@ -90,6 +90,27 @@ describe("PuzzleManager", () => {
   });
 });
 
+describe("PuzzleManager for daily puzzles", () => {
+  test("saveDaily keeps the seed and generator version out and hides the puzzle until release", async () => {
+    const { puzzles, clock, manager } = setup();
+    expect(await manager.saveDaily("d-1", GENERATED, 6000)).toBe("d-1");
+    const stored = puzzles.get("d-1");
+    expect(stored?.releaseAt).toBe(6000);
+    expect(stored && serializePuzzle(stored.puzzle)).toEqual({
+      v: 1,
+      width: 2,
+      height: 2,
+      clues: "2222",
+    });
+    expect(manager.get("d-1")).toBeNull();
+    expect(manager.getAny("d-1")?.id).toBe("d-1");
+    clock.time = 6000;
+    expect(manager.get("d-1")?.id).toBe("d-1");
+    expect(manager.listRecent(10)).toEqual([]);
+    expect(await manager.getSolution("d-1")).not.toBeNull();
+  });
+});
+
 describe("PuzzleManager for submitted puzzles", () => {
   test("saveSubmitted stores a published puzzle with its creator", async () => {
     const { puzzles, blobs, manager } = setup();

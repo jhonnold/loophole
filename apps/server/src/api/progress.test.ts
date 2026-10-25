@@ -4,10 +4,10 @@ import { MemoryBlobStore } from "../adapters/blob/memory-blob-store.ts";
 import { openDatabase } from "../adapters/db/database.ts";
 import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
 import { SqlitePuzzleRepository } from "../adapters/db/puzzle-repository.ts";
-import { HintManager } from "../managers/hint-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { accountDeps } from "../test-support/accounts.ts";
+import { dailyDeps } from "../test-support/daily.ts";
 import { FakeClock, sequentialIds } from "../test-support/fakes.ts";
 import { sqliteProgress } from "../test-support/progress.ts";
 import { submissionDeps } from "../test-support/submissions.ts";
@@ -43,7 +43,7 @@ async function setup() {
   });
   const app = createApp({
     puzzles,
-    hints: new HintManager({ puzzles }),
+    ...dailyDeps(db, clock, puzzles),
     progress: sqliteProgress(db, puzzles, clock),
     jobs,
     ...submissionDeps(db, clock, puzzles, jobs),

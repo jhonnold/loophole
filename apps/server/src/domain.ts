@@ -23,6 +23,11 @@ export interface PuzzleRecord {
   readonly createdAt: number;
   /** The player who submitted it; null for generated puzzles and once the account is deleted. */
   readonly creatorId: string | null;
+  /**
+   * Players can't see the puzzle before this time (ms). Set only for daily puzzles: 00:00 UTC on
+   * their day. Null for every other puzzle.
+   */
+  readonly releaseAt: number | null;
 }
 
 export type JobKind = "generate" | "verify";
@@ -33,6 +38,8 @@ export interface GenerateInput {
   readonly width: number;
   readonly height: number;
   readonly seed: string;
+  /** Set when the puzzle is a daily puzzle: its UTC day, `YYYY-MM-DD` (PRD FR-22). */
+  readonly day?: string;
 }
 
 export interface VerifyInput {
@@ -207,4 +214,62 @@ export interface ReportedPuzzle {
   readonly count: number;
   /** The newest reports first, at most a few. */
   readonly reports: readonly ReportRecord[];
+}
+
+/** The daily puzzle of one size class on one UTC day, the same for everyone (PRD FR-22). */
+export interface DailyRecord {
+  /** The UTC day, `YYYY-MM-DD`. */
+  readonly day: string;
+  /** The size class: the puzzle is `size` × `size`. */
+  readonly size: number;
+  /** Goes up by one each time generation fails; the seed is derived from day, size and this. */
+  readonly attempt: number;
+  /** The generation job for the current attempt. */
+  readonly jobId: string;
+  /** Null until the worker has stored the puzzle. */
+  readonly puzzleId: string | null;
+  /** The generator version that made the puzzle, so it can be regenerated (FR-10). */
+  readonly generatorVersion: string | null;
+  readonly createdAt: number;
+}
+
+/**
+ * A player's one ranked attempt at a daily puzzle (PRD FR-17, FR-23, FR-25). The clock runs from
+ * `startedAt` and never stops; the server checks the solution and the time.
+ */
+export interface AttemptRecord {
+  readonly userId: string;
+  readonly puzzleId: string;
+  /** The daily's UTC day. */
+  readonly day: string;
+  /** Leaderboard bucket: width × height, and the puzzle's level (PRD FR-23, FR-29). */
+  readonly area: number;
+  readonly level: number;
+  readonly startedAt: number;
+  /** Null while the attempt is being played. */
+  readonly finishedAt: number | null;
+  /** The ranked time; null while playing. */
+  readonly timeMs: number | null;
+  /** A hint was shown during the attempt (PRD FR-12). */
+  readonly assisted: boolean;
+  /** Set when finished: the solve counts on leaderboards (no hint, a plausible time). */
+  readonly ranked: boolean;
+}
+
+/** One row of a leaderboard. */
+export interface LeaderboardEntry {
+  /** 1 for the fastest. Ties go to whoever finished first. */
+  readonly rank: number;
+  readonly userId: string;
+  /** The player's chosen display name, or null when they haven't picked one. */
+  readonly name: string | null;
+  readonly timeMs: number;
+}
+
+/** A slice of a leaderboard: the top rows, and the viewer's row with its neighbours. */
+export interface LeaderboardSlice {
+  /** How many players are on the board. */
+  readonly total: number;
+  /** The top `limit` rows, then the viewer's row and the rows either side of it; by rank. */
+  readonly entries: readonly LeaderboardEntry[];
 }

@@ -51,4 +51,16 @@ describe("JobManager", () => {
       QueueFullError,
     );
   });
+
+  test("enqueueDaily queues a daily's generation under its id, even when the queue is full", () => {
+    const { manager } = setup(1);
+    manager.enqueueGenerate({ width: 5, height: 5, seed: "a" });
+    const input = { width: 7, height: 7, seed: "s", day: "2026-10-25" };
+    expect(manager.enqueueDaily("d-1", input)).toMatchObject({
+      id: "d-1",
+      kind: "generate",
+      status: "queued",
+      input,
+    });
+  });
 });

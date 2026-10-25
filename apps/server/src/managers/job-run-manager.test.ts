@@ -57,14 +57,28 @@ function setup(runner: FakeTaskRunner, settings = SETTINGS) {
     clock,
     newId: sequentialIds("s"),
   });
-  const manager = new JobRunManager({ jobs, tasks: runner, puzzles, submissions, clock, settings });
+  /** Daily generations handed to the scheduler, as `job:day`. */
+  const dailies: string[] = [];
+  const manager = new JobRunManager({
+    jobs,
+    tasks: runner,
+    puzzles,
+    submissions,
+    dailies: {
+      async complete(jobId, day) {
+        dailies.push(`${jobId}:${day}`);
+      },
+    },
+    clock,
+    settings,
+  });
   const enqueue = (id: string) =>
     jobs.enqueue({
       id,
       job: { kind: "generate", input: { width: 2, height: 2, seed: "s" } },
       createdAt: clock.now(),
     });
-  return { clock, jobs, puzzleRepo, blobs, manager, enqueue };
+  return { clock, jobs, puzzleRepo, blobs, manager, enqueue, dailies };
 }
 
 describe("JobRunManager.runNext", () => {
@@ -91,6 +105,20 @@ describe("JobRunManager.runNext", () => {
     });
     expect(puzzleRepo.get("j1")?.status).toBe("published");
     expect(await blobs.get("puzzles/j1/solution.txt")).toBe("112211121121");
+  });
+
+  test("a daily puzzle's generation goes to the daily scheduler, not the practice list", async () => {
+    const runner = new FakeTaskRunner(async () => GENERATED);
+    const { jobs, puzzleRepo, manager, dailies } = setup(runner);
+    jobs.enqueue({
+      id: "d1",
+      job: { kind: "generate", input: { width: 2, height: 2, seed: "s", day: "2026-10-26" } },
+      createdAt: 0,
+    });
+    expect(await manager.runNext("w")).toBe(true);
+    expect(dailies).toEqual(["d1:2026-10-26"]);
+    expect(puzzleRepo.get("d1")).toBeNull();
+    expect(jobs.get("d1")).toMatchObject({ status: "done", result: { puzzleId: "d1" } });
   });
 
   test("a verification uses the verify time limit and records the status", async () => {

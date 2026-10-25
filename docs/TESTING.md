@@ -49,6 +49,7 @@ Server tests follow its layers:
 - The S3 blob store test runs against Garage when the `S3_*` settings are set (from `.env`) and Garage answers; otherwise it is skipped, as in CI. Start Garage (README, Local services) to run it.
 - The account and session managers run on fakes too (users, sessions, mailed tokens, password hashing, CAPTCHA) with the in-memory mailer and rate limiter. Route tests build the account side with `accountDeps` from the server's test support and pass a client address as `app.request`'s third argument.
 - The SMTP mailer test sends through Mailpit and reads the message back from Mailpit's API when it answers on 127.0.0.1:8025; otherwise it is skipped. The Turnstile adapter is tested with a fake `fetch`, never against Cloudflare.
+- The daily puzzle, ranked attempt, leaderboard and display name managers run on fakes too. `FakeAttemptRepository` ranks by the same rules as the SQL (time, then who finished first), and the SQLite repository tests check the SQL itself. A fake clock takes tests across 00:00 UTC. Route tests build the daily side with `dailyDeps` and store daily puzzles with `storeDaily`, both from the server's test support.
 
 ## Web app
 

@@ -8,6 +8,12 @@ import {
 import type { SmtpSettings } from "./adapters/mail/smtp-mailer.ts";
 import type { JobRunSettings } from "./managers/job-run-manager.ts";
 
+/**
+ * The daily seed secret for development and tests. Like Turnstile's test keys, it is refused for a
+ * site that isn't on localhost: anyone could work out daily puzzles made with it.
+ */
+export const DEV_DAILY_SEED_SECRET = "loophole-dev-daily-seed-secret";
+
 const Port = z.coerce.number().int().min(1).max(65535);
 const Ms = z.coerce.number().int().positive();
 
@@ -35,6 +41,8 @@ const EnvSchema = z.object({
   SMTP_PASSWORD: z.string().min(1).optional(),
   SMTP_REQUIRE_TLS: z.stringbool().optional(),
   MAIL_FROM: z.string().min(1).default("Loophole <no-reply@loophole.localhost>"),
+  DAILY_SEED_SECRET: z.string().min(16).default(DEV_DAILY_SEED_SECRET),
+  DAILY_DAYS_AHEAD: z.coerce.number().int().min(1).max(30).default(3),
 });
 
 export interface Config {
@@ -59,6 +67,14 @@ export interface Config {
   readonly smtp: SmtpSettings;
   /** How long a login session lasts. */
   readonly sessionTtlMs: number;
+  readonly dailies: {
+    /** Daily seeds are derived from this, so they can't be guessed (worker only). */
+    readonly seedSecret: string;
+    /** How many days, today included, the worker keeps generated. */
+    readonly daysAhead: number;
+    /** How often the worker checks that the coming days are generated. */
+    readonly stockMs: number;
+  };
 }
 
 /** Reads the server's settings from environment variables (see `.env.example`). Throws on bad values. */
@@ -72,14 +88,16 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
   }
   const e = parsed.data;
   const publicHost = new URL(e.PUBLIC_URL).hostname;
-  if (
-    e.TURNSTILE_SECRET_KEY === TURNSTILE_TEST_SECRET_KEY &&
-    publicHost !== "localhost" &&
-    publicHost !== "127.0.0.1"
-  ) {
+  const local = publicHost === "localhost" || publicHost === "127.0.0.1";
+  if (e.TURNSTILE_SECRET_KEY === TURNSTILE_TEST_SECRET_KEY && !local) {
     // Fail closed: the test secret passes every token, so it must never guard a real site.
     throw new Error(
       `TURNSTILE_SECRET_KEY is Cloudflare's always-pass test key, but PUBLIC_URL (${e.PUBLIC_URL}) is not localhost. Set TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY to a real Turnstile widget's keys.`,
+    );
+  }
+  if (e.DAILY_SEED_SECRET === DEV_DAILY_SEED_SECRET && !local) {
+    throw new Error(
+      `DAILY_SEED_SECRET is the development value, but PUBLIC_URL (${e.PUBLIC_URL}) is not localhost. Set it to a long random string (for example \`openssl rand -base64 32\`) and keep it secret.`,
     );
   }
   return {
@@ -118,5 +136,6 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
       requireTls: e.SMTP_REQUIRE_TLS,
     },
     sessionTtlMs: 30 * 24 * 60 * 60 * 1000,
+    dailies: { seedSecret: e.DAILY_SEED_SECRET, daysAhead: e.DAILY_DAYS_AHEAD, stockMs: 60_000 },
   };
 }

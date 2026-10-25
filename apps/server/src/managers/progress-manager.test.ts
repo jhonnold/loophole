@@ -32,6 +32,7 @@ function setup() {
       traceKey: null,
       createdAt: 0,
       creatorId: null,
+      releaseAt: null,
     });
   }
   const progress = new FakeProgressRepository();

@@ -41,6 +41,7 @@ describe("loadConfig", () => {
         from: "Loophole <no-reply@loophole.localhost>",
       },
       sessionTtlMs: 30 * 24 * 60 * 60 * 1000,
+      dailies: { seedSecret: "loophole-dev-daily-seed-secret", daysAhead: 3, stockMs: 60_000 },
     });
     expect(config.workerId).toContain(String(process.pid));
   });
@@ -76,6 +77,8 @@ describe("loadConfig", () => {
       SMTP_USER: "user",
       SMTP_PASSWORD: "pass",
       MAIL_FROM: "Loophole <hi@loophole.example>",
+      DAILY_SEED_SECRET: "a-long-random-production-secret",
+      DAILY_DAYS_AHEAD: "5",
     });
     expect(config).toMatchObject({
       publicUrl: "https://loophole.example",
@@ -89,6 +92,7 @@ describe("loadConfig", () => {
         password: "pass",
         from: "Loophole <hi@loophole.example>",
       },
+      dailies: { seedSecret: "a-long-random-production-secret", daysAhead: 5 },
     });
   });
 
@@ -105,6 +109,17 @@ describe("loadConfig", () => {
     expect(loadConfig({ ...S3, PUBLIC_URL: "http://127.0.0.1:4174" }).turnstile.secretKey).toBe(
       "1x0000000000000000000000000000000AA",
     );
+  });
+
+  test("refuses the development daily seed secret for a site that isn't on localhost", () => {
+    const site = {
+      ...S3,
+      PUBLIC_URL: "https://loophole.example",
+      TURNSTILE_SITE_KEY: "site",
+      TURNSTILE_SECRET_KEY: "secret",
+    };
+    expect(() => loadConfig(site)).toThrow(/DAILY_SEED_SECRET is the development value/);
+    expect(() => loadConfig({ ...site, DAILY_SEED_SECRET: "short" })).toThrow(/DAILY_SEED_SECRET/);
   });
 
   test("requires PUBLIC_URL: there is no default", () => {

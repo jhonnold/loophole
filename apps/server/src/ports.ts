@@ -2,9 +2,12 @@ import type { Puzzle } from "@loophole/core";
 import type {
   AccountTokenPurpose,
   AccountTokenRecord,
+  AttemptRecord,
+  DailyRecord,
   Job,
   JobInput,
   JobResult,
+  LeaderboardSlice,
   ProgressRecord,
   PuzzleRecord,
   PuzzleStatus,
@@ -197,4 +200,89 @@ export interface ReportRepository {
   /** Reports of puzzles that are still published, newest first. */
   listForPublished(limit: number): ReportRecord[];
   deleteForPuzzle(puzzleId: string): void;
+}
+
+/** Daily puzzles, one row per UTC day and size class (PRD FR-22). */
+export interface DailyRepository {
+  get(day: string, size: number): DailyRecord | null;
+  getByPuzzle(puzzleId: string): DailyRecord | null;
+  /** The day's rows, smallest size first. */
+  listDay(day: string): DailyRecord[];
+  /** Stores a new row. Returns false, storing nothing, when the day and size already have one. */
+  insert(record: DailyRecord): boolean;
+  /**
+   * Moves a row from attempt `fromAttempt` to the next attempt with a new job. Returns false when
+   * the row is no longer at `fromAttempt` (another worker moved it first).
+   */
+  retry(day: string, size: number, fromAttempt: number, jobId: string): boolean;
+  /**
+   * Links the stored puzzle to the row whose job is `jobId`. Returns false when the row has moved
+   * on to another job.
+   */
+  setPuzzle(
+    day: string,
+    size: number,
+    jobId: string,
+    puzzleId: string,
+    generatorVersion: string | null,
+  ): boolean;
+  /**
+   * Runs `fn` in one transaction of the database the jobs table is in, so claiming a row and
+   * queueing its job happen together or not at all.
+   */
+  atomically<T>(fn: () => T): T;
+}
+
+/** Ranked attempts at daily puzzles, and the leaderboards built from them (PRD FR-23, FR-24). */
+export interface AttemptRepository {
+  get(userId: string, puzzleId: string): AttemptRecord | null;
+  /** Stores a new attempt. Does nothing when the user already has one at this puzzle. */
+  insert(record: AttemptRecord): void;
+  /** Marks the attempt assisted unless it is finished. */
+  markAssisted(userId: string, puzzleId: string): void;
+  /**
+   * Finishes an attempt that is still being played. Returns false when there is none (missing or
+   * already finished).
+   */
+  finish(
+    userId: string,
+    puzzleId: string,
+    result: { finishedAt: number; timeMs: number; ranked: boolean },
+  ): boolean;
+  /** The user's attempts on daily puzzles of `day`. */
+  listForDay(userId: string, day: string): AttemptRecord[];
+  /** Every day on which the user finished an attempt, ranked or not; any order. */
+  finishedDays(userId: string): string[];
+  /** The user's best ranked time in each bucket. */
+  bests(userId: string): { area: number; level: number; timeMs: number }[];
+  /** Ranked solves of one puzzle, fastest first: the top `limit` and `viewerId`'s neighbourhood. */
+  puzzleBoard(puzzleId: string, viewerId: string | null, limit: number): LeaderboardSlice;
+  /**
+   * Each player's best ranked time in one bucket, fastest first: the top `limit` and `viewerId`'s
+   * neighbourhood.
+   */
+  bucketBoard(
+    area: number,
+    level: number,
+    viewerId: string | null,
+    limit: number,
+  ): LeaderboardSlice;
+}
+
+/** Names players chose to show on leaderboards. */
+export interface DisplayNameRepository {
+  get(userId: string): string | null;
+  /**
+   * Sets the user's name, or removes it when `name` is null. Returns false, changing nothing, when
+   * another player has the same name (ignoring ASCII case).
+   */
+  set(userId: string, name: string | null, now: number): boolean;
+}
+
+/**
+ * Seeds for daily puzzles: the same for the same day, size and attempt, and unguessable without
+ * the server's secret (DECISIONS, "Daily puzzles").
+ */
+export interface DailySeeder {
+  seed(day: string, size: number, attempt: number): string;
 }

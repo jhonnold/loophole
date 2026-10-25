@@ -7,13 +7,19 @@ import { serveStatic } from "hono/bun";
 import { HTTPException } from "hono/http-exception";
 import type { Job, PuzzleRecord } from "../domain.ts";
 import {
+  AttemptNotFoundError,
   CaptchaFailedError,
+  DailyEndedError,
+  DailyNotFoundError,
+  DisplayNameTakenError,
   InvalidBoardError,
   InvalidCredentialsError,
+  InvalidDisplayNameError,
   InvalidTokenError,
   PuzzleNotFoundError,
   QueueFullError,
   RateLimitedError,
+  WrongSolutionError,
 } from "../managers/errors.ts";
 import type { HintManager } from "../managers/hint-manager.ts";
 import type { JobManager } from "../managers/job-manager.ts";
@@ -21,6 +27,7 @@ import type { ProgressManager } from "../managers/progress-manager.ts";
 import type { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { type AccountRouteDeps, registerAccountRoutes, tooManyRequests } from "./accounts.ts";
 import { sameOriginOnly } from "./csrf.ts";
+import { type DailyRouteDeps, registerDailyRoutes } from "./daily.ts";
 import { problem, problemResponse } from "./problem.ts";
 import { registerProgressRoutes } from "./progress.ts";
 import { type ReportRouteDeps, registerReportRoutes } from "./reports.ts";
@@ -38,7 +45,11 @@ import {
 import { currentUser } from "./session-cookie.ts";
 import { registerSubmissionRoutes, type SubmissionRouteDeps } from "./submissions.ts";
 
-export interface AppDeps extends AccountRouteDeps, SubmissionRouteDeps, ReportRouteDeps {
+export interface AppDeps
+  extends AccountRouteDeps,
+    SubmissionRouteDeps,
+    ReportRouteDeps,
+    DailyRouteDeps {
   readonly puzzles: PuzzleManager;
   readonly jobs: JobManager;
   readonly hints: HintManager;
@@ -90,7 +101,7 @@ const hintRoute = createRoute({
   path: "/api/puzzles/{id}/hint",
   summary: "The next hint for a player's board",
   description:
-    "Works from the player's marks and the stored solution, which is never sent (PRD FR-12, FR-25).",
+    "Works from the player's marks and the stored solution, which is never sent (PRD FR-12, FR-25). For a logged-in player, it marks their ranked attempt at the puzzle as assisted.",
   request: {
     params: IdParamSchema,
     body: { required: true, content: { "application/json": { schema: HintRequestSchema } } },
@@ -184,7 +195,9 @@ export function createApp(deps: AppDeps): OpenAPIHono {
   });
 
   app.openapi(hintRoute, async (c) => {
-    const hint = await hints.hint(c.req.valid("param").id, c.req.valid("json").edges);
+    const user = await currentUser(c, deps.sessions);
+    const { id } = c.req.valid("param");
+    const hint = await hints.hint(id, c.req.valid("json").edges, user?.id ?? null);
     if (hint === null) return problem(c, 404, "Puzzle not found");
     return c.json(toHintDto(hint), 200);
   });
@@ -205,6 +218,7 @@ export function createApp(deps: AppDeps): OpenAPIHono {
   registerProgressRoutes(app, deps);
   registerSubmissionRoutes(app, deps);
   registerReportRoutes(app, deps);
+  registerDailyRoutes(app, deps);
 
   app.all("/api/*", (c) => problem(c, 404, "Not found"));
 
@@ -228,6 +242,18 @@ export function createApp(deps: AppDeps): OpenAPIHono {
       return problem(c, 400, "CAPTCHA check failed", { detail: err.message });
     if (err instanceof InvalidTokenError)
       return problem(c, 400, "Invalid or expired link", { detail: err.message });
+    if (err instanceof DailyNotFoundError)
+      return problem(c, 404, "Daily puzzle not found", { detail: err.message });
+    if (err instanceof DailyEndedError)
+      return problem(c, 409, "Daily is over", { detail: err.message });
+    if (err instanceof AttemptNotFoundError)
+      return problem(c, 404, "Attempt not found", { detail: err.message });
+    if (err instanceof WrongSolutionError)
+      return problem(c, 400, "Not the solution", { detail: err.message });
+    if (err instanceof InvalidDisplayNameError)
+      return problem(c, 400, "Name not allowed", { detail: err.message });
+    if (err instanceof DisplayNameTakenError)
+      return problem(c, 409, "Name taken", { detail: err.message });
     if (err instanceof RateLimitedError) return tooManyRequests(c, err.retryAfterMs);
     if (err instanceof HTTPException) return problem(c, err.status, err.message);
     console.error(err);

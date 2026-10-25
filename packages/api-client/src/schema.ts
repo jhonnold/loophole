@@ -151,7 +151,7 @@ export interface paths {
         put?: never;
         /**
          * The next hint for a player's board
-         * @description Works from the player's marks and the stored solution, which is never sent (PRD FR-12, FR-25).
+         * @description Works from the player's marks and the stored solution, which is never sent (PRD FR-12, FR-25). For a logged-in player, it marks their ranked attempt at the puzzle as assisted.
          */
         post: {
             parameters: {
@@ -1791,6 +1791,696 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/daily": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A day's daily puzzles, one per size class (today by default) */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description A UTC day up to today; default today. */
+                    day?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The puzzles. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DailySet"];
+                    };
+                };
+                /** @description Invalid day. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description A day still to come. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{userId}/daily": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The logged-in player's streak, last week, today's attempts and best times */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Must be the logged-in user's id; anything else is refused with 403. */
+                    userId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The summary. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DailySummary"];
+                    };
+                };
+                /** @description Invalid id. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Not logged in. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The path names another user, or the request came from another site (CSRF protection). */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Too many requests; `Retry-After` says when to try again. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{userId}/attempts/{puzzleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The logged-in player's ranked attempt at a daily puzzle */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Must be the logged-in user's id; anything else is refused with 403. */
+                    userId: string;
+                    puzzleId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The attempt, or null. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AttemptResult"];
+                    };
+                };
+                /** @description Invalid id. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Not logged in. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The path names another user, or the request came from another site (CSRF protection). */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description No daily puzzle with this id that players can see. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Too many requests; `Retry-After` says when to try again. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Start a ranked attempt at today's daily puzzle
+         * @description One attempt per player and daily (PRD FR-25): the clock starts on the server now and doesn't stop. Starting again returns the attempt already started. Needs a confirmed email.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Must be the logged-in user's id; anything else is refused with 403. */
+                    userId: string;
+                    puzzleId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The attempt. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StartedAttempt"];
+                    };
+                };
+                /** @description Invalid id. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Not logged in. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The path names another user, the email isn't confirmed, or the request came from another site (CSRF protection). */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description No daily puzzle with this id that players can see. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The daily's day is over: it can be played, but not ranked. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Too many requests; `Retry-After` says when to try again. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{userId}/attempts/{puzzleId}/finish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish a ranked attempt with the solved board
+         * @description The server checks the board against the stored solution (PRD FR-17, FR-25) and sets the ranked time: the player's own time, but never more than a tenth of the server's time (3 to 15 s) under it. A solve is ranked unless a hint was used or it was faster than the loop can be drawn. Sending it again returns the finished attempt unchanged.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Must be the logged-in user's id; anything else is refused with 403. */
+                    userId: string;
+                    puzzleId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["FinishAttemptRequest"];
+                };
+            };
+            responses: {
+                /** @description The finished attempt, with its rank. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StartedAttempt"];
+                    };
+                };
+                /** @description Invalid body, a board that doesn't fit, or not the solution. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Not logged in. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The path names another user, the email isn't confirmed, or the request came from another site (CSRF protection). */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description No such daily, or no attempt started at it. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Request body larger than 64 KiB. */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Request body is not JSON. */
+                415: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Too many requests; `Retry-After` says when to try again. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leaderboards/daily/{puzzleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A daily puzzle's leaderboard
+         * @description Ranked solves by time; ties go to whoever finished first. When logged in, the player's own row and its neighbours are included even outside the top.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    puzzleId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The leaderboard. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Leaderboard"];
+                    };
+                };
+                /** @description Invalid id or query. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description No daily puzzle with this id that players can see. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leaderboards/areas/{area}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The all-time leaderboard of one area and level
+         * @description Each player's best ranked time on daily puzzles of this area (width × height) and level (PRD FR-23).
+         */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                    level?: number;
+                };
+                header?: never;
+                path: {
+                    area: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The leaderboard. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Leaderboard"];
+                    };
+                };
+                /** @description Invalid area or query. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{userId}/display-name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The name the logged-in player shows on leaderboards */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Must be the logged-in user's id; anything else is refused with 403. */
+                    userId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The name, or null. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DisplayName"];
+                    };
+                };
+                /** @description Invalid id. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Not logged in. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The path names another user, or the request came from another site (CSRF protection). */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Too many requests; `Retry-After` says when to try again. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        /**
+         * Choose, change or remove the name shown on leaderboards
+         * @description 3 to 20 of A–Z, a–z, 0–9, _ . or -, with at least one letter or digit. Names are public and unique, ignoring case. Null removes it: the player then shows as anonymous.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Must be the logged-in user's id; anything else is refused with 403. */
+                    userId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SetDisplayNameRequest"];
+                };
+            };
+            responses: {
+                /** @description The name now. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DisplayName"];
+                    };
+                };
+                /** @description Invalid body, or a name that can't be used. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Not logged in. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The path names another user, or the request came from another site (CSRF protection). */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Another player has this name. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Request body larger than 64 KiB. */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Request body is not JSON. */
+                415: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Too many requests; `Retry-After` says when to try again. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1860,7 +2550,7 @@ export interface components {
             kind: "mistake";
             /** @description The first edge marked differently from the solution. */
             edge: number;
-            /** @description How many marks are wrong. */
+            /** @description How many marks are wrong. Always 1 on today's daily puzzles, so a hint can't be used to check a whole board. */
             count: number;
         } | {
             /** @enum {string} */
@@ -2092,6 +2782,120 @@ export interface components {
                  */
                 createdAt: string;
             }[];
+        };
+        /** @description A day's daily puzzles, one per size class (PRD FR-22). */
+        DailySet: {
+            /**
+             * @description A UTC day, YYYY-MM-DD.
+             * @example 2026-10-25
+             */
+            day: string;
+            /** @description The day is today, so its puzzles can be ranked. */
+            live: boolean;
+            /**
+             * Format: date-time
+             * @description When the next day's puzzles come out (00:00 UTC).
+             * @example 2026-10-25T12:00:00.000Z
+             */
+            nextAt: string;
+            puzzles: {
+                /** @description The puzzle is size × size. */
+                size: number;
+                /** @description Null while the puzzle isn't ready. Open it with GET /api/puzzles/{id}. */
+                puzzleId: string | null;
+            }[];
+        };
+        DailySummary: {
+            /**
+             * @description A UTC day, YYYY-MM-DD.
+             * @example 2026-10-25
+             */
+            day: string;
+            /** @description Consecutive days, up to today, with a finished daily (PRD FR-24). */
+            streak: number;
+            /** @description The last seven days, oldest first. */
+            week: {
+                /**
+                 * @description A UTC day, YYYY-MM-DD.
+                 * @example 2026-10-25
+                 */
+                day: string;
+                finished: boolean;
+            }[];
+            /** @description Today's attempts. */
+            attempts: components["schemas"]["Attempt"][];
+            /** @description Best ranked time per leaderboard bucket. */
+            bests: {
+                area: number;
+                level: number;
+                timeMs: number;
+            }[];
+        };
+        /** @description A player's one ranked attempt at a daily puzzle. */
+        Attempt: {
+            puzzleId: string;
+            /**
+             * @description A UTC day, YYYY-MM-DD.
+             * @example 2026-10-25
+             */
+            day: string;
+            /** @description Width × height: the leaderboard bucket. */
+            area: number;
+            level: number;
+            /** @enum {string} */
+            status: "playing" | "finished";
+            /**
+             * Format: date-time
+             * @example 2026-10-25T12:00:00.000Z
+             */
+            startedAt: string;
+            finishedAt: string | null;
+            /** @description Time on the ranked clock: since the start while playing (measured by the server), the ranked time once finished. */
+            elapsedMs: number;
+            /** @description A hint was shown during the attempt. */
+            assisted: boolean;
+            /** @description The finished solve counts on leaderboards: no hint, and not faster than the loop can be drawn. False while playing. */
+            ranked: boolean;
+            /** @description Place on this daily's leaderboard, for a ranked solve. */
+            rank: number | null;
+        };
+        /** @description `attempt` is null when none was started. */
+        AttemptResult: {
+            attempt: components["schemas"]["Attempt"] | null;
+        };
+        StartedAttempt: {
+            attempt: components["schemas"]["Attempt"];
+        };
+        FinishAttemptRequest: {
+            /** @description The player's board: one character per edge, 0 empty, 1 line, 2 cross (docs/FORMAT.md). */
+            edges: string;
+            /** @description The player's own clock since the attempt started; it counts when it is at most a tenth of the server's time (3 to 15 s) under it. */
+            elapsedMs: number;
+        };
+        /** @description Ranked solves by time, without hinted ones (PRD FR-23). */
+        Leaderboard: {
+            area: number;
+            level: number;
+            /** @description How many players are on the board. */
+            total: number;
+            /** @description The top `limit` rows, then the logged-in player's row and its neighbours, by rank. */
+            entries: components["schemas"]["LeaderboardEntry"][];
+            me: components["schemas"]["LeaderboardEntry"] | null;
+        };
+        LeaderboardEntry: {
+            rank: number;
+            /** @description The player's display name; null for a player who hasn't chosen one. */
+            name: string | null;
+            timeMs: number;
+            /** @description This row is the logged-in player's. */
+            me: boolean;
+        };
+        /** @description The name shown on leaderboards; null for none. */
+        DisplayName: {
+            displayName: string | null;
+        };
+        SetDisplayNameRequest: {
+            displayName: string | null;
         };
     };
     responses: never;

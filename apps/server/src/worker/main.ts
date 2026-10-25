@@ -2,6 +2,8 @@
 // managers, and runs jobs until SIGINT or SIGTERM. The job in progress finishes first.
 import { S3BlobStore } from "../adapters/blob/s3-blob-store.ts";
 import { systemClock } from "../adapters/clock.ts";
+import { hmacDailySeeder } from "../adapters/daily-seeds.ts";
+import { SqliteDailyRepository } from "../adapters/db/daily-repository.ts";
 import { openDatabase } from "../adapters/db/database.ts";
 import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
 import { SqlitePuzzleRepository } from "../adapters/db/puzzle-repository.ts";
@@ -9,6 +11,7 @@ import { SqliteSubmissionRepository } from "../adapters/db/submission-repository
 import { MemoryRateLimiter } from "../adapters/rate-limiter.ts";
 import { ThreadTaskRunner } from "../adapters/tasks/thread-task-runner.ts";
 import { loadConfig } from "../config.ts";
+import { DailyStockManager } from "../managers/daily-stock-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
 import { JobRunManager } from "../managers/job-run-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
@@ -24,25 +27,37 @@ const puzzles = new PuzzleManager({
   clock: systemClock,
 });
 const queue = new SqliteJobQueue(db);
+const jobs = new JobManager({
+  jobs: queue,
+  clock: systemClock,
+  newId: () => crypto.randomUUID(),
+  maxQueued: config.maxQueuedJobs,
+});
 // The worker only decides submissions; queueing them and the per-account limit are the API's.
 const submissions = new SubmissionManager({
   submissions: new SqliteSubmissionRepository(db),
   puzzles,
-  jobs: new JobManager({
-    jobs: queue,
-    clock: systemClock,
-    newId: () => crypto.randomUUID(),
-    maxQueued: config.maxQueuedJobs,
-  }),
+  jobs,
   limiter: new MemoryRateLimiter(systemClock),
   clock: systemClock,
   newId: () => crypto.randomUUID(),
+});
+// Keeps the coming days' daily puzzles generated (PRD FR-22).
+const dailies = new DailyStockManager({
+  dailies: new SqliteDailyRepository(db),
+  jobs,
+  puzzles,
+  seeds: hmacDailySeeder(config.dailies.seedSecret),
+  clock: systemClock,
+  newId: () => crypto.randomUUID(),
+  settings: { daysAhead: config.dailies.daysAhead },
 });
 const runs = new JobRunManager({
   jobs: queue,
   tasks: new ThreadTaskRunner(),
   puzzles,
   submissions,
+  dailies,
   clock: systemClock,
   settings: config.jobs,
 });
@@ -55,9 +70,11 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 console.log(`Worker ${config.workerId} polling for jobs`);
 await runWorkerLoop({
   runs,
+  dailies,
   workerId: config.workerId,
   pollMs: config.pollMs,
   sweepMs: config.jobs.staleMs / 2,
+  stockMs: config.dailies.stockMs,
   signal: controller.signal,
 });
 db.close();
