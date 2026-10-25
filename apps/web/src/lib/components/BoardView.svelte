@@ -132,23 +132,24 @@
   // Wheel and trackpad: Ctrl/⌘ + wheel (and trackpad pinch, which the browser reports the same
   // way) zooms around the pointer; plain wheel and two-finger scroll pan. Svelte adds wheel
   // listeners as passive, so this one is added by hand to be able to stop page zoom and scroll.
+  // The listener stays put while the view moves (a new `zoom` object comes with every view).
+  const zoomable = $derived(zoom !== null);
   $effect(() => {
     const el = surface;
-    if (el === undefined || zoom === null) return;
-    const limits = zoom;
+    if (el === undefined || !zoomable) return;
     const onwheel = (e: WheelEvent) => {
       // Never let the page scroll or zoom under the board, even while a stroke is held.
       e.preventDefault();
-      if (gesture !== null) return;
+      if (gesture !== null || zoom === null) return;
       const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? port.height : 1;
       let dx = e.deltaX * unit;
       let dy = e.deltaY * unit;
       if (e.ctrlKey || e.metaKey) {
-        onview(zoomAround(grid, view, view.cell * Math.exp(-dy * 0.01), local(e), port, limits));
+        onview(zoomAround(grid, view, view.cell * Math.exp(-dy * 0.01), local(e), port, zoom));
         return;
       }
       if (e.shiftKey && dx === 0) [dx, dy] = [dy, 0];
-      onview(panBy(grid, view, -dx, -dy, port, limits));
+      onview(panBy(grid, view, -dx, -dy, port, zoom));
     };
     el.addEventListener("wheel", onwheel, { passive: false });
     return () => el.removeEventListener("wheel", onwheel);
