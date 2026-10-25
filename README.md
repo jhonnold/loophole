@@ -182,10 +182,13 @@ To restore, stop the API and the worker, put the backup in place and start them 
 ```sh
 export COMPOSE_FILE=compose.prod.yml
 docker compose stop api worker
-docker compose run --rm --no-deps -v /srv/backups/loophole:/backups:ro api \
-  bun apps/server/scripts/restore-db.ts /backups/loophole-<time>.sqlite.gz
+docker compose run --rm -T --no-deps api \
+  sh -c 'cat >/tmp/restore.sqlite.gz && bun apps/server/scripts/restore-db.ts /tmp/restore.sqlite.gz' \
+  </srv/backups/loophole/loophole-<time>.sqlite.gz
 docker compose start api worker
 ```
+
+The backup is streamed into the container, so it needs no read access for the container's user.
 
 In development, `bun apps/server/scripts/restore-db.ts backups/loophole-<time>.sqlite.gz` does the same for `DATABASE_PATH`, with the dev servers stopped.
 

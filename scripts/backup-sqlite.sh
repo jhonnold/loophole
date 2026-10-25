@@ -6,6 +6,8 @@
 # Production: run with COMPOSE_FILE=compose.prod.yml; the copy is made inside the api container
 # and streamed out. README, "Backups", has the restore steps and the Garage notes.
 set -euo pipefail
+# Copies are private to the user running this: the database holds password hashes and session hashes.
+umask 077
 
 cd "$(dirname "$0")/.."
 
@@ -13,6 +15,9 @@ DEST="${1:-backups}"
 KEEP="${KEEP:-14}"
 NAME="loophole-$(date -u +%Y%m%dT%H%M%SZ).sqlite"
 mkdir -p "$DEST"
+chmod 700 "$DEST"
+# A copy that fails part way leaves no partial file behind.
+trap 'rm -f "$DEST/$NAME" "$DEST/$NAME.gz.part"' EXIT
 
 if [ -n "${COMPOSE_FILE:-}" ]; then
   docker compose exec -T api sh -c \
