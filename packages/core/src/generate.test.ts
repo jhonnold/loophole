@@ -154,6 +154,7 @@ describe("generate: options", () => {
       { width: 5, height: 5, seed: "x".repeat(129) },
       { width: 5, height: 5, seed: "s", thresholds: { minCoverage: 1.5, minSpan: 0.8 } },
       { width: 5, height: 5, seed: "s", thresholds: { minCoverage: 0.4, minSpan: Number.NaN } },
+      { width: 5, height: 5, seed: "s", thresholds: { minCoverage: 0.4 } as LoopThresholds },
     ];
     for (const options of bad) {
       let calls = 0;
