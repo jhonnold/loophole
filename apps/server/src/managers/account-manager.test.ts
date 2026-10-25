@@ -235,6 +235,17 @@ describe("AccountManager password reset and deletion", () => {
     ).rejects.toBeInstanceOf(InvalidTokenError);
   });
 
+  test("a request over the mail cap keeps the last mailed link working", async () => {
+    const { mailer, accounts, signUp } = setup();
+    await signUp();
+    await accounts.requestPasswordReset("ann@example.com");
+    await accounts.requestPasswordReset("ann@example.com");
+    const last = lastLinkToken(mailer);
+    await accounts.requestPasswordReset("ann@example.com");
+    expect(mailer.sent).toHaveLength(3);
+    await accounts.resetPassword(last, "new-password");
+  });
+
   test("a reset request for an unknown email mails nothing", async () => {
     const { mailer, accounts } = setup();
     await accounts.requestPasswordReset("nobody@example.com");

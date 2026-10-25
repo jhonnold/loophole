@@ -95,7 +95,9 @@ export class AccountManager {
       createdAt: clock.now(),
     };
     if (users.insert(user)) await this.#sendVerification(user);
-    else await this.#mail(email, alreadyRegisteredMail(this.#deps.publicUrl));
+    else if (this.#mailAllowed(email)) {
+      await this.#deps.mailer.send({ to: email, ...alreadyRegisteredMail(this.#deps.publicUrl) });
+    }
   }
 
   /**
@@ -133,12 +135,13 @@ export class AccountManager {
   /** Mails a password reset link if the email has an account; otherwise nothing. */
   async requestPasswordReset(emailInput: string): Promise<void> {
     const user = this.#deps.users.getByEmail(normalizeEmail(emailInput));
-    if (user === null) return;
+    // Over the mail cap, no token is issued either, so the last mailed link keeps working.
+    if (user === null || !this.#mailAllowed(user.email)) return;
     const token = await this.#issueToken(user.id, "reset-password", RESET_TOKEN_TTL_MS);
-    await this.#mail(
-      user.email,
-      resetMail(`${this.#deps.publicUrl}/reset-password#token=${token}`),
-    );
+    await this.#deps.mailer.send({
+      to: user.email,
+      ...resetMail(`${this.#deps.publicUrl}/reset-password#token=${token}`),
+    });
   }
 
   /**
@@ -176,8 +179,12 @@ export class AccountManager {
   }
 
   async #sendVerification(user: UserRecord): Promise<void> {
+    if (!this.#mailAllowed(user.email)) return;
     const token = await this.#issueToken(user.id, "verify-email", VERIFY_TOKEN_TTL_MS);
-    await this.#mail(user.email, verifyMail(`${this.#deps.publicUrl}/verify-email#token=${token}`));
+    await this.#deps.mailer.send({
+      to: user.email,
+      ...verifyMail(`${this.#deps.publicUrl}/verify-email#token=${token}`),
+    });
   }
 
   async #issueToken(userId: string, purpose: AccountTokenPurpose, ttlMs: number): Promise<string> {
@@ -203,9 +210,9 @@ export class AccountManager {
     return record.userId;
   }
 
-  async #mail(to: string, mail: { subject: string; text: string }): Promise<void> {
-    if (!this.#deps.limiter.hit(`mail:${to}`, MAIL_PER_EMAIL).allowed) return;
-    await this.#deps.mailer.send({ to, ...mail });
+  /** Counts one mail to `to` against its hourly cap. Callers check before issuing a token. */
+  #mailAllowed(to: string): boolean {
+    return this.#deps.limiter.hit(`mail:${to}`, MAIL_PER_EMAIL).allowed;
   }
 
   #limit(key: string, rule: RateRule): void {
