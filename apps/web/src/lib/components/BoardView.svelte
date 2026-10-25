@@ -16,11 +16,11 @@
   import {
     miniJump,
     miniLayout,
-    panBy,
     revealRect,
     type Size,
     SVG_MAX_SIZE,
     type View,
+    wheelView,
     ZOOM_STEP,
     type ZoomLimits,
     zoomAround,
@@ -28,6 +28,7 @@
   import BoardCanvas from "./BoardCanvas.svelte";
   import BoardSvg from "./BoardSvg.svelte";
   import MiniMap from "./MiniMap.svelte";
+  import ZoomControls from "./ZoomControls.svelte";
 
   interface Props {
     puzzle: Puzzle;
@@ -154,18 +155,7 @@
       // Never let the page scroll or zoom under the board, even while a stroke is held.
       e.preventDefault();
       if (gesture !== null || zoom === null) return;
-      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? port.height : 1;
-      let dx = e.deltaX * unit;
-      let dy = e.deltaY * unit;
-      if (e.ctrlKey || e.metaKey) {
-        // A mouse-wheel notch is about 100 px of delta; clamp it so one notch is about 1.28×, not
-        // e×. Trackpad pinches send small deltas, which this rate keeps quick.
-        const step = Math.max(-25, Math.min(25, dy));
-        onview(zoomAround(grid, view, view.cell * Math.exp(-step * 0.01), local(e), port, zoom));
-        return;
-      }
-      if (e.shiftKey && dx === 0) [dx, dy] = [dy, 0];
-      onview(panBy(grid, view, -dx, -dy, port, zoom));
+      onview(wheelView(grid, view, e, local(e), port, zoom));
     };
     el.addEventListener("wheel", onwheel, { passive: false });
     return () => el.removeEventListener("wheel", onwheel);
@@ -233,7 +223,6 @@
     else if (cmd.type === "erase") onedit([[cursor, EdgeState.Unknown]], false);
   }
 
-  const percent = $derived(zoom === null ? 100 : Math.round((view.cell / zoom.min) * 100));
 </script>
 
 <div
@@ -302,25 +291,7 @@
       {port}
       onjump={(x, y) => onview(miniJump(grid, view, x, y, miniLayout(grid), port, limits))}
     />
-    <div class="zoom">
-      <button
-        type="button"
-        aria-label="Zoom out"
-        disabled={view.cell <= limits.min}
-        onclick={() => zoomBy(1 / ZOOM_STEP, centre())}
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg>
-      </button>
-      <span class="percent">{percent}%</span>
-      <button
-        type="button"
-        aria-label="Zoom in"
-        disabled={view.cell >= limits.max}
-        onclick={() => zoomBy(ZOOM_STEP, centre())}
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14" /></svg>
-      </button>
-    </div>
+    <ZoomControls {view} {limits} onzoom={(factor) => zoomBy(factor, centre())} />
   {/if}
   <p id="board-cursor" class="visually-hidden" aria-live="polite">{showCursor ? cursorLabel : ""}</p>
 </div>
@@ -367,48 +338,5 @@
     white-space: nowrap;
     pointer-events: none;
     z-index: 2;
-  }
-
-  /* Zoom controls (Night artboard): bottom right of the board. */
-  .zoom {
-    position: absolute;
-    right: 8px;
-    bottom: 8px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px;
-    background: color-mix(in srgb, var(--ground) 92%, transparent);
-    border: 1.5px solid var(--hairline);
-    border-radius: 999px;
-    z-index: 1;
-  }
-
-  .zoom button {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    border: 0;
-    background: transparent;
-    color: var(--ink);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    cursor: pointer;
-  }
-
-  .zoom button:disabled {
-    color: var(--disabled);
-    cursor: default;
-  }
-
-  .percent {
-    min-width: 40px;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--ink-soft);
-    text-align: center;
-    font-variant-numeric: tabular-nums;
   }
 </style>

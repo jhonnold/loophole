@@ -156,6 +156,14 @@ export function edgeAt(grid: Grid, layout: Layout, x: number, y: number): number
   return fu < 0.5 ? grid.cellEdges[k + 3] : grid.cellEdges[k + 1];
 }
 
+/** The cell under (x, y), in board pixels, or `NONE` outside the dots. */
+export function cellAt(grid: Grid, layout: Layout, x: number, y: number): number {
+  const col = Math.floor((x - layout.margin) / layout.cell);
+  const row = Math.floor((y - layout.margin) / layout.cell);
+  if (col < 0 || row < 0 || col >= grid.width || row >= grid.height) return NONE;
+  return cellIndex(grid, row, col);
+}
+
 /** The dot nearest to (x, y), clamped to the board. */
 export function dotAt(grid: Grid, layout: Layout, x: number, y: number): number {
   const col = Math.min(grid.width, Math.max(0, Math.round((x - layout.margin) / layout.cell)));
