@@ -1,29 +1,22 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ClaimThreadMessage } from "../../test-support/claim-thread.ts";
 import { openDatabase } from "./database.ts";
 import { SqliteJobQueue } from "./job-queue.ts";
 
-const THREADS = 4;
+const WORKERS = 4;
 const JOBS = 2000;
-const THREAD_URL = new URL("../../test-support/claim-thread.ts", import.meta.url).href;
+const SCRIPT = new URL("../../test-support/claim-child.ts", import.meta.url).pathname;
 
-/** Sends `message` and resolves with the thread's next reply. */
-function ask<T>(thread: Worker, message: ClaimThreadMessage): Promise<T> {
-  return new Promise((resolve, reject) => {
-    thread.onmessage = (event: MessageEvent<T>) => resolve(event.data);
-    thread.onerror = (event) => reject(new Error(event.message));
-    thread.postMessage(message);
-  });
-}
-
+// Separate processes, as workers are in production (DECISIONS, "Concurrent-open tests use
+// processes").
 test("workers on separate connections never claim the same job", async () => {
   const dir = mkdtempSync(join(tmpdir(), "loophole-claim-"));
-  const threads = Array.from({ length: THREADS }, () => new Worker(THREAD_URL));
+  const running: { kill(): void }[] = [];
   try {
     const path = join(dir, "jobs.sqlite");
+    const goFile = join(dir, "go");
     const db = openDatabase(path);
     const queue = new SqliteJobQueue(db);
     db.transaction(() => {
@@ -35,16 +28,43 @@ test("workers on separate connections never claim the same job", async () => {
         });
       }
     })();
-    // Every thread connects first, then all start claiming at once.
-    await Promise.all(threads.map((t, i) => ask(t, { type: "open", path, worker: `w${i}` })));
-    const claimed = await Promise.all(threads.map((t) => ask<string[]>(t, { type: "go" })));
+    const children = Array.from({ length: WORKERS }, (_, i) =>
+      Bun.spawn([process.execPath, SCRIPT, path, `w${i}`, goFile], {
+        stdout: "pipe",
+        stderr: "inherit",
+      }),
+    );
+    running.push(...children);
+    // Every worker connects first, then all start claiming at once.
+    const readers = children.map((child) => child.stdout.getReader());
+    const decoder = new TextDecoder();
+    const output = children.map(() => "");
+    await Promise.all(
+      readers.map(async (reader, i) => {
+        while (!output[i].includes("ready\n")) {
+          const { value, done } = await reader.read();
+          if (done) throw new Error(`worker ${i} exited before connecting`);
+          output[i] += decoder.decode(value);
+        }
+      }),
+    );
+    writeFileSync(goFile, "");
+    const claimed = await Promise.all(
+      readers.map(async (reader, i) => {
+        for (let r = await reader.read(); !r.done; r = await reader.read()) {
+          output[i] += decoder.decode(r.value);
+        }
+        return JSON.parse(output[i].slice(output[i].indexOf("ready\n") + 6)) as string[];
+      }),
+    );
     const all = claimed.flat();
     expect(all.length).toBe(JOBS);
     expect(new Set(all).size).toBe(JOBS);
     expect(queue.countQueued()).toBe(0);
     db.close();
   } finally {
-    for (const t of threads) t.terminate();
+    // A worker still waiting for the go file (another failed early) must not outlive the test.
+    for (const child of running) child.kill();
     rmSync(dir, { recursive: true });
   }
-});
+}, 30_000);

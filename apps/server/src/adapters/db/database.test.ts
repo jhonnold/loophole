@@ -92,27 +92,25 @@ describe("openDatabase and migrate", () => {
     }
   });
 
-  test("several connections opening a new file at once all succeed in WAL mode", async () => {
-    const url = new URL("../../test-support/open-thread.ts", import.meta.url).href;
+  // Separate processes, as the API and the worker are. Threads would not do: bun:sqlite's table of
+  // open databases is shared by a process's threads without a lock, so two threads opening at the
+  // same moment can get the same connection (DECISIONS, "Concurrent-open tests use processes").
+  test("several processes opening a new file at once all succeed in WAL mode", async () => {
+    const script = new URL("../../test-support/open-child.ts", import.meta.url).pathname;
     for (let trial = 0; trial < 5; trial++) {
       const dir = mkdtempSync(join(tmpdir(), "loophole-open-"));
-      const threads = Array.from({ length: 4 }, () => new Worker(url));
       try {
         const path = join(dir, "new.sqlite");
+        const children = Array.from({ length: 4 }, () =>
+          Bun.spawn([process.execPath, script, path], { stdout: "pipe", stderr: "inherit" }),
+        );
         const modes = await Promise.all(
-          threads.map(
-            (thread) =>
-              new Promise<string>((resolve) => {
-                thread.onmessage = (event: MessageEvent<string>) => resolve(event.data);
-                thread.postMessage(path);
-              }),
-          ),
+          children.map(async (child) => (await new Response(child.stdout).text()).trim()),
         );
         expect(modes).toEqual(["wal", "wal", "wal", "wal"]);
       } finally {
-        for (const thread of threads) thread.terminate();
         rmSync(dir, { recursive: true });
       }
     }
-  });
+  }, 30_000);
 });
