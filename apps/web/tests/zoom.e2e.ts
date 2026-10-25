@@ -244,6 +244,30 @@ test.describe("phone at 2× pixel density (FR-16)", () => {
     const canvas = page.locator("[role=application] canvas");
     expect(Number(await canvas.getAttribute("width"))).toBe(Math.round(v.box.width * 2));
   });
+
+  test("the canvas re-reads the pixel density when it changes", async ({ page }) => {
+    await page.goto("/play/giant-100");
+    const canvas = page.locator("[role=application] canvas");
+    const v = await boardView(page);
+    await expect
+      .poll(async () => Number(await canvas.getAttribute("width")))
+      .toBe(Math.round(v.box.width * 2));
+    const cdp = await page.context().newCDPSession(page);
+    // The height changes too, so the window fires a resize (headless Chromium does not report the
+    // density change itself); the canvas must then match the new density and board width.
+    await cdp.send("Emulation.setDeviceMetricsOverride", {
+      width: 360,
+      height: 561,
+      deviceScaleFactor: 1,
+      mobile: true,
+    });
+    await expect
+      .poll(async () => {
+        const b = await boardView(page);
+        return Number(await canvas.getAttribute("width")) === Math.round(b.box.width);
+      })
+      .toBe(true);
+  });
 });
 
 test.describe("desktop, zoomable boards (FR-13, NFR-5)", () => {

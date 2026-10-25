@@ -4,6 +4,7 @@
   import type { Layout } from "../game/geometry.ts";
   import { type Palette, paintBoard } from "../game/paint.ts";
   import type { Size, View } from "../game/viewport.ts";
+  import { onPixelRatioChange } from "../pixel-ratio.ts";
   import { onThemeChange } from "../theme.ts";
 
   interface Props {
@@ -44,18 +45,17 @@
 
   onMount(() => {
     ratio = window.devicePixelRatio || 1;
-    const onresize = () => {
-      ratio = window.devicePixelRatio || 1;
-    };
     const bump = () => {
       restyle++;
     };
     const stopTheme = onThemeChange(bump);
-    window.addEventListener("resize", onresize);
+    const stopRatio = onPixelRatioChange(() => {
+      ratio = window.devicePixelRatio || 1;
+    });
     document.fonts.load('500 16px "Zen Kaku Gothic New"', "0123").then(bump, () => {});
     return () => {
       stopTheme();
-      window.removeEventListener("resize", onresize);
+      stopRatio();
     };
   });
 </script>

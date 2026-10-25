@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { edgeSegment } from "../game/geometry.ts";
   import { miniLayout, miniRect, type Size, type View } from "../game/viewport.ts";
+  import { onPixelRatioChange } from "../pixel-ratio.ts";
   import { onThemeChange } from "../theme.ts";
 
   interface Props {
@@ -68,9 +69,16 @@
 
   onMount(() => {
     ratio = window.devicePixelRatio || 1;
-    return onThemeChange(() => {
+    const stopRatio = onPixelRatioChange(() => {
+      ratio = window.devicePixelRatio || 1;
+    });
+    const stopTheme = onThemeChange(() => {
       restyle++;
     });
+    return () => {
+      stopRatio();
+      stopTheme();
+    };
   });
 </script>
 
