@@ -1,4 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { MemoryBlobStore } from "../adapters/blob/memory-blob-store.ts";
 import { openDatabase } from "../adapters/db/database.ts";
 import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
@@ -27,7 +30,10 @@ class RecordingMetrics implements ApiMetrics {
   }
 }
 
-function setup(blobs: BlobStore = new MemoryBlobStore()) {
+function setup(
+  blobs: BlobStore = new MemoryBlobStore(),
+  options: { accessLog?: boolean; webDir?: string } = {},
+) {
   const db = openDatabase(":memory:");
   const clock = new FakeClock(Date.UTC(2026, 9, 25, 12));
   const deps = accountDeps(db, clock);
@@ -44,6 +50,8 @@ function setup(blobs: BlobStore = new MemoryBlobStore()) {
     ...submissionDeps(db, clock, puzzles, jobs),
     ...deps,
     metrics,
+    accessLog: options.accessLog,
+    webDir: options.webDir,
   });
   const send = (method: string, path: string, body?: unknown, cookie?: string) => {
     const headers: Record<string, string> = { "Sec-Fetch-Site": "same-origin" };
@@ -143,7 +151,50 @@ describe("GET /api/admin/health", () => {
   });
 });
 
+/** Runs `fn` with console.info captured; returns what it logged. */
+async function captureInfo(fn: () => Promise<void>): Promise<unknown[][]> {
+  const info = spyOn(console, "info").mockImplementation(() => {});
+  try {
+    await fn();
+    return info.mock.calls;
+  } finally {
+    info.mockRestore();
+  }
+}
+
 describe("request observation", () => {
+  test("the access log has the method, route template, status and time, and no path or query", async () => {
+    const { app } = setup(undefined, { accessLog: true });
+    const logged = await captureInfo(async () => {
+      await app.request("/api/puzzles/abc-123?token=xyz");
+    });
+    expect(logged).toHaveLength(1);
+    const [message, fields] = logged[0] as [string, Record<string, unknown>];
+    expect(message).toBe("request");
+    expect(Object.keys(fields).sort()).toEqual(["method", "ms", "route", "status"]);
+    expect(fields).toMatchObject({ method: "GET", route: "/api/puzzles/:id", status: 404 });
+    const text = JSON.stringify(logged);
+    expect(text).not.toContain("abc-123");
+    expect(text).not.toContain("xyz");
+  });
+
+  test("the web app's files that load are not logged, and health checks that pass", async () => {
+    const webDir = mkdtempSync(join(tmpdir(), "loophole-web-"));
+    try {
+      writeFileSync(join(webDir, "index.html"), "<!doctype html><title>Loophole</title>");
+      writeFileSync(join(webDir, "app.js"), "console.log(1);");
+      const { app } = setup(undefined, { accessLog: true, webDir });
+      const logged = await captureInfo(async () => {
+        expect((await app.request("/app.js")).status).toBe(200);
+        expect((await app.request("/")).status).toBe(200);
+        expect((await app.request("/api/health")).status).toBe(200);
+      });
+      expect(logged).toEqual([]);
+    } finally {
+      rmSync(webDir, { recursive: true, force: true });
+    }
+  });
+
   test("counts requests under their route template and gives each an id", async () => {
     const { app, metrics } = setup();
     const res = await app.request("/api/puzzles/nope-123");
