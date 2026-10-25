@@ -248,6 +248,8 @@ describe("saved progress routes", () => {
       headers: { "Content-Type": "text/plain" },
     });
     expect(form.status).toBe(415);
+    // The 64 KiB body cap applies to the progress routes too.
+    await expectProblem(await send("PUT", path, save("0".repeat(70_000), 1), { cookie }), 413);
   });
 
   test("validates the board and the body", async () => {
