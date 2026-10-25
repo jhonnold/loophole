@@ -92,6 +92,7 @@ export class PrometheusWorkerMetrics implements WorkerMetrics {
   readonly #jobs: Counter<"kind" | "status">;
   readonly #jobDuration: Histogram<"kind" | "status">;
   readonly #dailyFailures: Counter<"size">;
+  readonly #lost: Counter;
 
   constructor(registry: Registry, sources: WorkerGaugeSources) {
     const registers = [registry];
@@ -106,6 +107,11 @@ export class PrometheusWorkerMetrics implements WorkerMetrics {
       help: "Time from claiming a job to ending it, by kind and status.",
       labelNames: ["kind", "status"],
       buckets: [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 30, 45, 60],
+      registers,
+    });
+    this.#lost = new Counter({
+      name: "loophole_jobs_lost_total",
+      help: "Jobs failed for good because their worker stopped on every attempt.",
       registers,
     });
     this.#dailyFailures = new Counter({
@@ -151,6 +157,10 @@ export class PrometheusWorkerMetrics implements WorkerMetrics {
   jobFinished(kind: JobKind, status: JobEnd["status"], seconds: number): void {
     this.#jobs.inc({ kind, status });
     this.#jobDuration.observe({ kind, status }, seconds);
+  }
+
+  jobsLost(count: number): void {
+    this.#lost.inc(count);
   }
 
   dailyFailure(size: number): void {

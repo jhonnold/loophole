@@ -160,7 +160,8 @@ The API and the worker each serve Prometheus metrics on a port of their own, off
 | `loophole_auth_failures_total{reason}` | API | Refused logins, CAPTCHA checks, mailed links and cross-site requests |
 | `loophole_mail_failures_total` | API | Mails that could not be sent |
 | `loophole_rate_limit_evictions_total` | API | Rate-limit counters dropped during a flood of new clients |
-| `loophole_jobs_finished_total{kind,status}`, `loophole_job_duration_seconds{kind,status}` | worker | Jobs ended (done, failed, timeout) and how long they ran |
+| `loophole_jobs_finished_total{kind,status}`, `loophole_job_duration_seconds{kind,status}` | worker | Jobs whose end this worker stored (done, failed, timeout) and how long they ran; a job taken back by recovery is counted when it is run again |
+| `loophole_jobs_lost_total` | worker | Jobs failed for good because their worker stopped on every attempt. Not in `loophole_jobs_finished_total`, which counts only the ends this worker stored |
 | `loophole_jobs{status}` | worker | Jobs queued and running now |
 | `loophole_daily_days_stocked{size}` | worker | Days in a row, from today, whose daily puzzle is generated (0: today's is missing) |
 | `loophole_daily_generation_failures_total{size}` | worker | Daily generations that failed and will be retried |

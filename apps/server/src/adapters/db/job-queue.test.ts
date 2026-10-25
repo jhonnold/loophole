@@ -101,14 +101,14 @@ describe("SqliteJobQueue", () => {
     queue.claimNext("w1", 1000);
     queue.heartbeat("b", "w1", 5000);
     // "a" went silent at 1000; "b" is still beating.
-    expect(queue.recoverStale(2000, 2, 6000)).toBe(1);
+    expect(queue.recoverStale(2000, 2, 6000)).toEqual({ requeued: 1, lost: 0 });
     expect(queue.get("a")).toMatchObject({ status: "queued", claimedBy: null, attempts: 1 });
     expect(queue.get("b")?.status).toBe("running");
     // The old worker can no longer report on "a".
     expect(queue.finish("a", "w1", { status: "failed", error: "x" }, 6000)).toBe(false);
     // Second attempt goes silent too: with maxAttempts 2 it fails for good.
     expect(queue.claimNext("w2", 7000)?.id).toBe("a");
-    expect(queue.recoverStale(8000, 2, 9000)).toBe(2);
+    expect(queue.recoverStale(8000, 2, 9000)).toEqual({ requeued: 1, lost: 1 });
     expect(queue.get("a")).toMatchObject({ status: "failed", attempts: 2, finishedAt: 9000 });
     expect(queue.get("a")?.error).toContain("stopped responding");
     expect(queue.get("b")?.status).toBe("queued");

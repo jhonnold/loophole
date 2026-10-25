@@ -237,18 +237,23 @@ export class FakeJobQueue implements JobQueue {
     return true;
   }
 
-  recoverStale(staleBefore: number, maxAttempts: number, now: number): number {
-    let changed = 0;
+  recoverStale(
+    staleBefore: number,
+    maxAttempts: number,
+    now: number,
+  ): { requeued: number; lost: number } {
+    const counts = { requeued: 0, lost: 0 };
     for (const job of this.jobs.values()) {
       if (job.status !== "running" || (job.heartbeatAt ?? 0) >= staleBefore) continue;
-      changed++;
       if (job.attempts >= maxAttempts) {
+        counts.lost++;
         this.#update(job.id, { status: "failed", error: "stale", finishedAt: now });
       } else {
+        counts.requeued++;
         this.#update(job.id, { status: "queued", claimedBy: null, progress: 0 });
       }
     }
-    return changed;
+    return counts;
   }
 
   #holds(id: string, workerId: string): boolean {

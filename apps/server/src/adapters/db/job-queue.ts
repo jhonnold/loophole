@@ -153,10 +153,14 @@ export class SqliteJobQueue implements JobQueue {
     return row !== null;
   }
 
-  recoverStale(staleBefore: number, maxAttempts: number, now: number): number {
-    const failed = this.#failStale.run({ before: staleBefore, max: maxAttempts, now }).changes;
+  recoverStale(
+    staleBefore: number,
+    maxAttempts: number,
+    now: number,
+  ): { requeued: number; lost: number } {
+    const lost = this.#failStale.run({ before: staleBefore, max: maxAttempts, now }).changes;
     const requeued = this.#requeueStale.run({ before: staleBefore, max: maxAttempts }).changes;
-    return failed + requeued;
+    return { requeued, lost };
   }
 }
 

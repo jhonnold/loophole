@@ -42,6 +42,7 @@ describe("Prometheus metrics", () => {
     });
     metrics.jobFinished("generate", "timeout", 60);
     metrics.dailyFailure(40);
+    metrics.jobsLost(2);
     let text = await registry.metrics();
     expect(text).toContain('loophole_jobs{status="queued"} 3');
     expect(text).toContain('loophole_jobs{status="running"} 1');
@@ -49,6 +50,7 @@ describe("Prometheus metrics", () => {
     expect(text).toContain('loophole_daily_days_stocked{size="40"} 0');
     expect(text).toContain('loophole_jobs_finished_total{kind="generate",status="timeout"} 1');
     expect(text).toContain('loophole_daily_generation_failures_total{size="40"} 1');
+    expect(text).toContain("loophole_jobs_lost_total 2");
     expect(text).toContain('loophole_submissions{verdict="unknown"} 1');
     queued = 0;
     text = await registry.metrics();

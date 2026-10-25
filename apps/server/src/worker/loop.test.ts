@@ -24,7 +24,7 @@ describe("runWorkerLoop", () => {
       },
       recoverStale() {
         calls.push("recover");
-        return 0;
+        return { requeued: 0, lost: 0 };
       },
     };
     await runWorkerLoop({
@@ -65,7 +65,7 @@ describe("runWorkerLoop", () => {
       runNext: async () => false,
       recoverStale: () => {
         recovered++;
-        return 0;
+        return { requeued: 0, lost: 0 };
       },
     };
     const started = performance.now();
@@ -94,7 +94,7 @@ describe("runWorkerLoop", () => {
         controller.abort();
         return false;
       },
-      recoverStale: () => 0,
+      recoverStale: () => ({ requeued: 0, lost: 0 }),
     };
     await runWorkerLoop({
       runs,
@@ -133,7 +133,7 @@ describe("runWorkerLoop", () => {
         time += 30_000;
         return false;
       },
-      recoverStale: () => 0,
+      recoverStale: () => ({ requeued: 0, lost: 0 }),
     };
     await runWorkerLoop({
       runs,

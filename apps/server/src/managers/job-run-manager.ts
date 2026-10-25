@@ -30,7 +30,7 @@ export interface JobRunManagerDeps {
   readonly clock: Clock;
   readonly settings: JobRunSettings;
   /** Counts each job's end and running time; tests may leave it out. */
-  readonly metrics?: Pick<WorkerMetrics, "jobFinished">;
+  readonly metrics?: Pick<WorkerMetrics, "jobFinished" | "jobsLost">;
 }
 
 /** Runs queued jobs, one at a time per worker: claim, run off-thread, store the outcome. */
@@ -82,22 +82,26 @@ export class JobRunManager {
       clearInterval(heartbeat);
     }
     const finishedAt = clock.now();
-    if (!jobs.finish(job.id, workerId, end, finishedAt)) {
+    // Counted only when the job really ended here: a job taken back is run again, and counted then.
+    if (jobs.finish(job.id, workerId, end, finishedAt)) {
+      this.#deps.metrics?.jobFinished(
+        job.kind,
+        end.status,
+        (finishedAt - (job.startedAt ?? finishedAt)) / 1000,
+      );
+    } else {
       console.warn(`Job ${job.id} was taken back; result not recorded`);
     }
-    this.#deps.metrics?.jobFinished(
-      job.kind,
-      end.status,
-      (finishedAt - (job.startedAt ?? finishedAt)) / 1000,
-    );
     return true;
   }
 
   /** Requeues or fails running jobs whose worker stopped sending heartbeats. */
-  recoverStale(): number {
+  recoverStale(): { requeued: number; lost: number } {
     const { jobs, clock, settings } = this.#deps;
     const now = clock.now();
-    return jobs.recoverStale(now - settings.staleMs, settings.maxAttempts, now);
+    const recovery = jobs.recoverStale(now - settings.staleMs, settings.maxAttempts, now);
+    if (recovery.lost > 0) this.#deps.metrics?.jobsLost(recovery.lost);
+    return recovery;
   }
 
   /**

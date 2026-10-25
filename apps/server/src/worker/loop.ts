@@ -42,8 +42,9 @@ export async function runWorkerLoop({
     try {
       if (now() - lastSweep >= sweepMs) {
         lastSweep = now();
-        const recovered = runs.recoverStale();
-        if (recovered > 0) console.log(`Recovered ${recovered} abandoned job(s)`);
+        const { requeued, lost } = runs.recoverStale();
+        if (requeued > 0) console.log(`Recovered ${requeued} abandoned job(s)`);
+        if (lost > 0) console.error(`Failed ${lost} job(s) abandoned on their last attempt`);
       }
       if (now() - lastStock >= stockMs) {
         lastStock = now();

@@ -79,9 +79,13 @@ export interface JobQueue {
   finish(id: string, workerId: string, end: JobEnd, now: number): boolean;
   /**
    * Running jobs whose last heartbeat is before `staleBefore` go back to the queue, or fail once
-   * they have been claimed `maxAttempts` times. Returns how many jobs it changed.
+   * they have been claimed `maxAttempts` times. Returns how many of each.
    */
-  recoverStale(staleBefore: number, maxAttempts: number, now: number): number;
+  recoverStale(
+    staleBefore: number,
+    maxAttempts: number,
+    now: number,
+  ): { requeued: number; lost: number };
 }
 
 export type JobEnd =
@@ -310,4 +314,6 @@ export interface WorkerMetrics {
   jobFinished(kind: JobKind, status: JobEnd["status"], seconds: number): void;
   /** A daily puzzle's generation failed, timed out or was lost; the next check retries it. */
   dailyFailure(size: number): void;
+  /** Jobs failed for good: their worker stopped on every attempt. */
+  jobsLost(count: number): void;
 }
