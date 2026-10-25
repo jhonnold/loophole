@@ -21,6 +21,8 @@ export interface PuzzleRecord {
   readonly traceKey: string | null;
   /** Milliseconds since the epoch. */
   readonly createdAt: number;
+  /** The player who submitted it; null for generated puzzles and once the account is deleted. */
+  readonly creatorId: string | null;
 }
 
 export type JobKind = "generate" | "verify";
@@ -35,6 +37,8 @@ export interface GenerateInput {
 
 export interface VerifyInput {
   readonly puzzle: PuzzleWireV1;
+  /** Set when the check is for a player's submission, which the worker then decides. */
+  readonly submissionId?: string;
 }
 
 /** What a finished job produced. */
@@ -84,6 +88,8 @@ export interface VerifyOutcome {
   readonly status: VerifyStatus;
   /** Solutions found, in edge-state encoding. */
   readonly solutions: readonly string[];
+  /** For a `unique` puzzle, the rule solver's steps from an empty board (for hints); else empty. */
+  readonly steps: readonly Step[];
 }
 
 export type TaskOutput =
@@ -148,4 +154,57 @@ export interface ProgressRecord {
   /** When this attempt was first saved. */
   readonly createdAt: number;
   readonly updatedAt: number;
+}
+
+export type SubmissionStatus = "pending" | "published" | "rejected";
+
+/**
+ * Why a submission was published or rejected (PRD FR-27):
+ * - `unique`: verified to have one solution, and published.
+ * - `duplicate`: a puzzle with the same clues is already published; the submission points at it.
+ * - `none`, `multiple`, `unknown`: the verifier's answer (`unknown`: out of time).
+ * - `removed`: a puzzle with the same clues was unpublished by an admin.
+ * - `error`: the check failed for another reason.
+ */
+export type SubmissionVerdict =
+  | "unique"
+  | "duplicate"
+  | "none"
+  | "multiple"
+  | "unknown"
+  | "removed"
+  | "error";
+
+/** A player's submitted puzzle and what became of it. */
+export interface SubmissionRecord {
+  readonly id: string;
+  readonly userId: string;
+  /** Clues only: no seed or metadata. */
+  readonly puzzle: Puzzle;
+  readonly status: SubmissionStatus;
+  /** Null while pending. */
+  readonly verdict: SubmissionVerdict | null;
+  /** The published puzzle: this submission's own, or an earlier one with the same clues. */
+  readonly puzzleId: string | null;
+  /** The verification job, or null when none was needed. */
+  readonly jobId: string | null;
+  readonly createdAt: number;
+  readonly decidedAt: number | null;
+}
+
+/** A player's report of a published puzzle (PRD FR-28). */
+export interface ReportRecord {
+  readonly puzzleId: string;
+  readonly reporterId: string;
+  readonly reason: string;
+  readonly createdAt: number;
+}
+
+/** A reported puzzle, for the admins' list. */
+export interface ReportedPuzzle {
+  readonly puzzle: PuzzleRecord;
+  /** How many players reported it. */
+  readonly count: number;
+  /** The newest reports first, at most a few. */
+  readonly reports: readonly ReportRecord[];
 }

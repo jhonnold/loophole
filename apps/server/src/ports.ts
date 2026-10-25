@@ -1,3 +1,4 @@
+import type { Puzzle } from "@loophole/core";
 import type {
   AccountTokenPurpose,
   AccountTokenRecord,
@@ -6,7 +7,12 @@ import type {
   JobResult,
   ProgressRecord,
   PuzzleRecord,
+  PuzzleStatus,
+  ReportRecord,
   SessionRecord,
+  SubmissionRecord,
+  SubmissionStatus,
+  SubmissionVerdict,
   Task,
   TaskOutcome,
   UserRecord,
@@ -28,6 +34,10 @@ export interface PuzzleRepository {
   get(id: string): PuzzleRecord | null;
   /** Published puzzles, newest first. */
   listPublished(limit: number): PuzzleRecord[];
+  /** A stored puzzle, published or not, with the same size and clues as `puzzle`; null if none. */
+  findByClues(puzzle: Puzzle): PuzzleRecord | null;
+  /** Returns false when there is no puzzle with this id. */
+  setStatus(id: string, status: PuzzleStatus): boolean;
 }
 
 /** Text blobs by key, such as solutions and solver traces. */
@@ -162,4 +172,29 @@ export interface ProgressRepository {
   delete(userId: string, puzzleId: string): void;
   /** The user's unsolved records, most recently updated first. */
   listUnsolved(userId: string, limit: number): ProgressRecord[];
+}
+
+/** How a pending submission ended. */
+export interface SubmissionDecision {
+  readonly status: Exclude<SubmissionStatus, "pending">;
+  readonly verdict: SubmissionVerdict;
+  readonly puzzleId: string | null;
+  readonly decidedAt: number;
+}
+
+export interface SubmissionRepository {
+  insert(record: SubmissionRecord): void;
+  get(id: string): SubmissionRecord | null;
+  /** The user's submissions, newest first. */
+  listForUser(userId: string, limit: number): SubmissionRecord[];
+  /** Records the decision on a pending submission. Returns false when it was not pending. */
+  decide(id: string, decision: SubmissionDecision): boolean;
+}
+
+export interface ReportRepository {
+  /** Stores a report, replacing the reporter's earlier report of the same puzzle. */
+  upsert(report: ReportRecord): void;
+  /** Reports of puzzles that are still published, newest first. */
+  listForPublished(limit: number): ReportRecord[];
+  deleteForPuzzle(puzzleId: string): void;
 }

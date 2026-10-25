@@ -31,6 +31,7 @@ function setup() {
       solutionKey: `puzzles/${id}/solution.txt`,
       traceKey: null,
       createdAt: 0,
+      creatorId: null,
     });
   }
   const progress = new FakeProgressRepository();

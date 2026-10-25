@@ -3,9 +3,9 @@ openapi: 3.1.0
 info:
   title: Loophole API
   version: 0.1.0
-  description: Puzzles, background jobs, accounts and saved progress. Errors are
-    RFC 9457 problem details. State-changing requests from other sites are
-    refused (403).
+  description: Puzzles, background jobs, accounts, saved progress, submitted
+    puzzles and reports. Errors are RFC 9457 problem details. State-changing
+    requests from other sites are refused (403).
 components:
   securitySchemes:
     session:
@@ -600,6 +600,174 @@ components:
         - baseVersion
         - device
       additionalProperties: false
+    Submission:
+      type: object
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 64
+        width:
+          type: integer
+          minimum: 1
+          maximum: 100
+        height:
+          type: integer
+          minimum: 1
+          maximum: 100
+        status:
+          type: string
+          enum:
+            - pending
+            - published
+            - rejected
+        verdict:
+          type:
+            - string
+            - "null"
+          enum:
+            - unique
+            - duplicate
+            - none
+            - multiple
+            - unknown
+            - removed
+            - error
+            - null
+          description: "Null while pending. `unique`: published. `duplicate`: the same
+            clues were already published, see `puzzleId`. `none`, `multiple`: no
+            solution, or more than one. `unknown`: the verifier ran out of time.
+            `removed`: the same clues were unpublished by an admin. `error`: the
+            check failed."
+        puzzleId:
+          type:
+            - string
+            - "null"
+          minLength: 1
+          maxLength: 64
+          description: The published puzzle to play and share.
+        createdAt:
+          type: string
+          format: date-time
+          example: 2026-10-25T12:00:00.000Z
+        decidedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+          example: 2026-10-25T12:00:00.000Z
+      required:
+        - id
+        - width
+        - height
+        - status
+        - verdict
+        - puzzleId
+        - createdAt
+        - decidedAt
+      description: A submitted puzzle and the verifier's verdict.
+    SubmitRequest:
+      type: object
+      properties:
+        width:
+          type: integer
+          minimum: 1
+          maximum: 100
+        height:
+          type: integer
+          minimum: 1
+          maximum: 100
+        clues:
+          type: string
+          maxLength: 10000
+          pattern: ^[0-3.]*$
+          description: "One character per cell, row-major: 0-3 or '.' (docs/FORMAT.md)."
+      required:
+        - width
+        - height
+        - clues
+      additionalProperties: false
+      description: "A puzzle to publish: its size and clues."
+    SubmissionList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Submission"
+      required:
+        - items
+    ReportRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: What is wrong with the puzzle, 1 to 500 characters.
+      required:
+        - reason
+      additionalProperties: false
+    ReportedPuzzleList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportedPuzzle"
+      required:
+        - items
+    ReportedPuzzle:
+      type: object
+      properties:
+        puzzleId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        width:
+          type: integer
+          minimum: 1
+          maximum: 100
+        height:
+          type: integer
+          minimum: 1
+          maximum: 100
+        origin:
+          type: string
+          enum:
+            - generated
+            - submitted
+        createdAt:
+          type: string
+          format: date-time
+          example: 2026-10-25T12:00:00.000Z
+        count:
+          type: integer
+          minimum: 1
+          description: How many players reported it.
+        reports:
+          type: array
+          items:
+            type: object
+            properties:
+              reason:
+                type: string
+              createdAt:
+                type: string
+                format: date-time
+                example: 2026-10-25T12:00:00.000Z
+            required:
+              - reason
+              - createdAt
+          description: The newest reports first, at most five.
+      required:
+        - puzzleId
+        - width
+        - height
+        - origin
+        - createdAt
+        - count
+        - reports
   parameters: {}
 paths:
   /api/health:
@@ -664,7 +832,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
         "404":
-          description: No published puzzle with this id.
+          description: No published puzzle with this id (admins also get unpublished ones).
           content:
             application/problem+json:
               schema:
@@ -1318,6 +1486,293 @@ paths:
                 $ref: "#/components/schemas/Problem"
         "429":
           description: Too many requests; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/submissions:
+    post:
+      summary: Submit a puzzle for publishing
+      description: The server checks that the puzzle has exactly one solution in the
+        background (PRD FR-27); poll the returned submission until it is no
+        longer pending. Unique puzzles are published at once. Needs a confirmed
+        email.
+      security:
+        - session: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitRequest"
+      responses:
+        "202":
+          description: Accepted. `Location` points at the submission.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Submission"
+        "400":
+          description: Invalid request body.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Not logged in.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Email not confirmed, or sent from another site (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Request body larger than 64 KiB.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Request body is not JSON.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many submissions; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Too many jobs waiting; try again later.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    get:
+      summary: The logged-in player's submissions, newest first
+      security:
+        - session: []
+      responses:
+        "200":
+          description: Submissions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmissionList"
+        "401":
+          description: Not logged in.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/submissions/{id}:
+    get:
+      summary: One of the logged-in player's submissions
+      security:
+        - session: []
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            example: 0b8e9f5c-6f7e-4c43-9d55-0d5f8e7b3a21
+          required: true
+          name: id
+          in: path
+      responses:
+        "200":
+          description: The submission.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Submission"
+        "400":
+          description: Invalid id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Not logged in.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No submission of yours with this id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/puzzles/{id}/report:
+    post:
+      summary: Report a published puzzle to the admins
+      description: Reporting the same puzzle again replaces your earlier reason.
+      security:
+        - session: []
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            example: 0b8e9f5c-6f7e-4c43-9d55-0d5f8e7b3a21
+          required: true
+          name: id
+          in: path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportRequest"
+      responses:
+        "204":
+          description: Reported.
+        "400":
+          description: Invalid id or body.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Not logged in.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Sent from another site (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No published puzzle with this id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Request body larger than 64 KiB.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Request body is not JSON.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many reports; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/admin/reports:
+    get:
+      summary: Reported puzzles that are still published (admins only)
+      security:
+        - session: []
+      responses:
+        "200":
+          description: Reported puzzles, the most recently reported first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportedPuzzleList"
+        "401":
+          description: Not logged in.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Not an admin.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/admin/puzzles/{id}/unpublish:
+    post:
+      summary: Unpublish a puzzle (admins only)
+      description: It leaves every list, and players get 404 for it (PRD FR-28).
+      security:
+        - session: []
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            example: 0b8e9f5c-6f7e-4c43-9d55-0d5f8e7b3a21
+          required: true
+          name: id
+          in: path
+      responses:
+        "204":
+          description: Unpublished (also when it already was).
+        "400":
+          description: Invalid id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Not logged in.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Not an admin, or sent from another site (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No puzzle with this id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/admin/puzzles/{id}/reports:
+    delete:
+      summary: Dismiss a puzzle's reports, keeping it published (admins only)
+      security:
+        - session: []
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            example: 0b8e9f5c-6f7e-4c43-9d55-0d5f8e7b3a21
+          required: true
+          name: id
+          in: path
+      responses:
+        "204":
+          description: Dismissed.
+        "400":
+          description: Invalid id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Not logged in.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Not an admin, or sent from another site (CSRF protection).
           content:
             application/problem+json:
               schema:

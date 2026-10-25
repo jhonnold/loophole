@@ -13,6 +13,7 @@ import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { accountDeps } from "../test-support/accounts.ts";
 import { FakeClock, sequentialIds } from "../test-support/fakes.ts";
 import { sqliteProgress } from "../test-support/progress.ts";
+import { submissionDeps } from "../test-support/submissions.ts";
 import { createApp } from "./app.ts";
 import type { Problem } from "./problem.ts";
 
@@ -40,6 +41,7 @@ function setup(options: { webDir?: string; maxQueued?: number } = {}) {
     ...accountDeps(db, clock),
     hints: new HintManager({ puzzles }),
     progress: sqliteProgress(db, puzzles, clock),
+    ...submissionDeps(db, clock, puzzles, jobs),
     webDir: options.webDir,
   });
   const puzzleIds = sequentialIds("p");

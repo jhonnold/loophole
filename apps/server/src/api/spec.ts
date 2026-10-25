@@ -12,7 +12,9 @@ import { openDatabase } from "../adapters/db/database.ts";
 import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
 import { SqliteProgressRepository } from "../adapters/db/progress-repository.ts";
 import { SqlitePuzzleRepository } from "../adapters/db/puzzle-repository.ts";
+import { SqliteReportRepository } from "../adapters/db/report-repository.ts";
 import { SqliteSessionRepository } from "../adapters/db/session-repository.ts";
+import { SqliteSubmissionRepository } from "../adapters/db/submission-repository.ts";
 import { SqliteUserRepository } from "../adapters/db/user-repository.ts";
 import { MemoryMailer } from "../adapters/mail/memory-mailer.ts";
 import { argon2idHasher } from "../adapters/password-hasher.ts";
@@ -23,7 +25,9 @@ import { HintManager } from "../managers/hint-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
 import { ProgressManager } from "../managers/progress-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
+import { ReportManager } from "../managers/report-manager.ts";
 import { SessionManager } from "../managers/session-manager.ts";
+import { SubmissionManager } from "../managers/submission-manager.ts";
 import { createApp } from "./app.ts";
 
 export function openApiDocument() {
@@ -41,6 +45,12 @@ export function openApiDocument() {
     puzzles: new SqlitePuzzleRepository(db),
     blobs: new MemoryBlobStore(),
     clock: systemClock,
+  });
+  const jobs = new JobManager({
+    jobs: new SqliteJobQueue(db),
+    clock: systemClock,
+    newId: () => crypto.randomUUID(),
+    maxQueued: 1,
   });
   const app = createApp({
     accounts: new AccountManager({
@@ -67,11 +77,20 @@ export function openApiDocument() {
       puzzles,
       clock: systemClock,
     }),
-    jobs: new JobManager({
-      jobs: new SqliteJobQueue(db),
+    jobs,
+    submissions: new SubmissionManager({
+      submissions: new SqliteSubmissionRepository(db),
+      puzzles,
+      jobs,
+      limiter,
       clock: systemClock,
       newId: () => crypto.randomUUID(),
-      maxQueued: 1,
+    }),
+    reports: new ReportManager({
+      reports: new SqliteReportRepository(db),
+      puzzles,
+      limiter,
+      clock: systemClock,
     }),
   });
   const doc = app.getOpenAPI31Document({
@@ -80,7 +99,7 @@ export function openApiDocument() {
       title: "Loophole API",
       version: "0.1.0",
       description:
-        "Puzzles, background jobs, accounts and saved progress. Errors are RFC 9457 problem details. State-changing requests from other sites are refused (403).",
+        "Puzzles, background jobs, accounts, saved progress, submitted puzzles and reports. Errors are RFC 9457 problem details. State-changing requests from other sites are refused (403).",
     },
   });
   db.close();

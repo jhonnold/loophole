@@ -153,6 +153,43 @@ export function panBy(
   return anchorView(grid, view, view.cell, { x: 0, y: 0 }, { x: dx, y: dy }, port, limits);
 }
 
+/** What a wheel or trackpad event says, as `WheelEvent` has it. */
+export interface WheelInput {
+  readonly deltaX: number;
+  readonly deltaY: number;
+  /** 0 pixels, 1 lines, 2 pages. */
+  readonly deltaMode: number;
+  readonly ctrlKey: boolean;
+  readonly metaKey: boolean;
+  readonly shiftKey: boolean;
+}
+
+/**
+ * The view after a wheel or trackpad event at `at` (viewport pixels): Ctrl/⌘ + wheel, and trackpad
+ * pinch, which browsers report the same way, zoom around the pointer; the plain wheel and
+ * two-finger scroll pan; Shift turns vertical wheel movement sideways.
+ */
+export function wheelView(
+  grid: Grid,
+  view: View,
+  input: WheelInput,
+  at: Point,
+  port: Size,
+  limits: ZoomLimits,
+): View {
+  const unit = input.deltaMode === 1 ? 16 : input.deltaMode === 2 ? port.height : 1;
+  let dx = input.deltaX * unit;
+  let dy = input.deltaY * unit;
+  if (input.ctrlKey || input.metaKey) {
+    // A mouse-wheel notch is about 100 px of delta; clamp it so one notch is about 1.28×, not
+    // e×. Trackpad pinches send small deltas, which this rate keeps quick.
+    const step = Math.max(-25, Math.min(25, dy));
+    return zoomAround(grid, view, view.cell * Math.exp(-step * 0.01), at, port, limits);
+  }
+  if (input.shiftKey && dx === 0) [dx, dy] = [dy, 0];
+  return panBy(grid, view, -dx, -dy, port, limits);
+}
+
 /**
  * Two-finger pinch: from the view when the second finger landed (`start`, fingers at `a0` and
  * `b0`) to the fingers now at `a1` and `b1`. The cell size follows the distance between the fingers

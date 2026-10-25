@@ -8,7 +8,9 @@ import { openDatabase } from "../adapters/db/database.ts";
 import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
 import { SqliteProgressRepository } from "../adapters/db/progress-repository.ts";
 import { SqlitePuzzleRepository } from "../adapters/db/puzzle-repository.ts";
+import { SqliteReportRepository } from "../adapters/db/report-repository.ts";
 import { SqliteSessionRepository } from "../adapters/db/session-repository.ts";
+import { SqliteSubmissionRepository } from "../adapters/db/submission-repository.ts";
 import { SqliteUserRepository } from "../adapters/db/user-repository.ts";
 import { BackgroundMailer } from "../adapters/mail/background-mailer.ts";
 import { SmtpMailer } from "../adapters/mail/smtp-mailer.ts";
@@ -21,7 +23,9 @@ import { HintManager } from "../managers/hint-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
 import { ProgressManager } from "../managers/progress-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
+import { ReportManager } from "../managers/report-manager.ts";
 import { SessionManager } from "../managers/session-manager.ts";
+import { SubmissionManager } from "../managers/submission-manager.ts";
 import { createApp } from "./app.ts";
 
 const config = loadConfig(process.env);
@@ -73,11 +77,28 @@ const progress = new ProgressManager({
   puzzles,
   clock: systemClock,
 });
+const submissions = new SubmissionManager({
+  submissions: new SqliteSubmissionRepository(db),
+  puzzles,
+  jobs,
+  limiter,
+  clock: systemClock,
+  newId: () => crypto.randomUUID(),
+});
+const reports = new ReportManager({
+  reports: new SqliteReportRepository(db),
+  puzzles,
+  limiter,
+  clock: systemClock,
+});
 const app = createApp({
   puzzles,
   jobs,
   hints,
   progress,
+  submissions,
+  reports,
+
   accounts,
   sessions,
   limiter,

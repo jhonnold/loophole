@@ -8,10 +8,11 @@ const LIST_LIMIT = 20;
 function summary(p: Schemas["PuzzleSummary"]): PuzzleSummary {
   return {
     id: p.id,
-    name: "Generated",
+    name: p.origin === "submitted" ? "Player-made" : "Generated",
     subtitle: "Practice · 練習",
     width: p.width,
     height: p.height,
+    origin: p.origin,
   };
 }
 

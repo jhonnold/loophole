@@ -30,6 +30,7 @@ function setup() {
       solutionKey: `puzzles/${id}/solution.txt`,
       traceKey: null,
       createdAt: 0,
+      creatorId: null,
     });
   }
   return { db, users, repo: new SqliteProgressRepository(db) };

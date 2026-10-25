@@ -23,6 +23,7 @@ import { type AccountRouteDeps, registerAccountRoutes, tooManyRequests } from ".
 import { sameOriginOnly } from "./csrf.ts";
 import { problem, problemResponse } from "./problem.ts";
 import { registerProgressRoutes } from "./progress.ts";
+import { type ReportRouteDeps, registerReportRoutes } from "./reports.ts";
 import {
   GenerateRequestSchema,
   HealthSchema,
@@ -34,8 +35,10 @@ import {
   PuzzleListSchema,
   PuzzleSchema,
 } from "./schemas.ts";
+import { currentUser } from "./session-cookie.ts";
+import { registerSubmissionRoutes, type SubmissionRouteDeps } from "./submissions.ts";
 
-export interface AppDeps extends AccountRouteDeps {
+export interface AppDeps extends AccountRouteDeps, SubmissionRouteDeps, ReportRouteDeps {
   readonly puzzles: PuzzleManager;
   readonly jobs: JobManager;
   readonly hints: HintManager;
@@ -78,7 +81,7 @@ const getPuzzleRoute = createRoute({
   responses: {
     200: { description: "The puzzle.", content: { "application/json": { schema: PuzzleSchema } } },
     400: problemResponse("Invalid id."),
-    404: problemResponse("No published puzzle with this id."),
+    404: problemResponse("No published puzzle with this id (admins also get unpublished ones)."),
   },
 });
 
@@ -169,8 +172,13 @@ export function createApp(deps: AppDeps): OpenAPIHono {
     return c.json({ items: puzzles.listRecent(limit).map(toPuzzleSummary) }, 200);
   });
 
-  app.openapi(getPuzzleRoute, (c) => {
-    const record = puzzles.get(c.req.valid("param").id);
+  app.openapi(getPuzzleRoute, async (c) => {
+    const id = c.req.valid("param").id;
+    let record = puzzles.get(id);
+    // Admins can still open an unpublished puzzle, to review it (PRD FR-28).
+    if (record === null && (await currentUser(c, deps.sessions))?.isAdmin) {
+      record = puzzles.getAny(id);
+    }
     if (record === null) return problem(c, 404, "Puzzle not found");
     return c.json(toPuzzleDto(record), 200);
   });
@@ -195,6 +203,8 @@ export function createApp(deps: AppDeps): OpenAPIHono {
 
   registerAccountRoutes(app, deps);
   registerProgressRoutes(app, deps);
+  registerSubmissionRoutes(app, deps);
+  registerReportRoutes(app, deps);
 
   app.all("/api/*", (c) => problem(c, 404, "Not found"));
 

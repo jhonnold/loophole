@@ -19,8 +19,10 @@ describe("openDatabase and migrate", () => {
       "jobs",
       "progress",
       "puzzles",
+      "reports",
       "schema_migrations",
       "sessions",
+      "submissions",
       "users",
     ]);
     migrate(db);
@@ -28,7 +30,7 @@ describe("openDatabase and migrate", () => {
       .query<{ version: number }, []>("SELECT version FROM schema_migrations")
       .all();
     // 003 was set aside for hints, which needed no table.
-    expect(versions).toEqual([{ version: 1 }, { version: 2 }, { version: 4 }]);
+    expect(versions).toEqual([{ version: 1 }, { version: 2 }, { version: 4 }, { version: 5 }]);
   });
 
   test("applies new numbered files in numeric order and skips applied ones", () => {

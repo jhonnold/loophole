@@ -89,3 +89,28 @@ describe("PuzzleManager", () => {
     expect(await manager.getSolution("nope")).toBeNull();
   });
 });
+
+describe("PuzzleManager for submitted puzzles", () => {
+  test("saveSubmitted stores a published puzzle with its creator", async () => {
+    const { puzzles, blobs, manager } = setup();
+    const puzzle = createPuzzle(2, 2, [2, 2, 2, 2]);
+    expect(await manager.saveSubmitted("s-1", puzzle, "112211121121", [], "u1")).toBe("s-1");
+    expect(puzzles.get("s-1")).toMatchObject({
+      origin: "submitted",
+      status: "published",
+      creatorId: "u1",
+    });
+    expect(await blobs.get("puzzles/s-1/solution.txt")).toBe("112211121121");
+  });
+
+  test("unpublish hides a puzzle from players but getAny and findByClues still see it", async () => {
+    const { manager, save } = setup();
+    const id = await save();
+    expect(manager.unpublish(id)).toBe(true);
+    expect(manager.get(id)).toBeNull();
+    expect(manager.listRecent(10)).toEqual([]);
+    expect(manager.getAny(id)?.status).toBe("unpublished");
+    expect(manager.findByClues(createPuzzle(2, 2, [2, 2, 2, 2]))?.id).toBe(id);
+    expect(manager.unpublish("nope")).toBe(false);
+  });
+});
