@@ -1,4 +1,13 @@
-import { cellCoords, dotCoords, type Grid, NONE } from "@loophole/core";
+import {
+  cellCoords,
+  cellIndex,
+  dotCoords,
+  dotIndex,
+  type Grid,
+  hEdgeIndex,
+  NONE,
+  vEdgeIndex,
+} from "@loophole/core";
 
 /**
  * Pixel layout of a board: `cell` is the cell size S from the design kit, `margin` the paper
@@ -108,7 +117,7 @@ export function edgeAt(grid: Grid, layout: Layout, x: number, y: number): number
   const r = Math.min(H - 1, Math.max(0, Math.floor(v)));
   const fu = u - c;
   const fv = v - r;
-  const k = (r * W + c) * 4; // cellEdges order: top, right, bottom, left
+  const k = cellIndex(grid, r, c) * 4; // cellEdges order: top, right, bottom, left
   if (fv <= fu && fv <= 1 - fu) return grid.cellEdges[k];
   if (fv >= fu && fv >= 1 - fu) return grid.cellEdges[k + 2];
   return fu < 0.5 ? grid.cellEdges[k + 3] : grid.cellEdges[k + 1];
@@ -118,7 +127,7 @@ export function edgeAt(grid: Grid, layout: Layout, x: number, y: number): number
 export function dotAt(grid: Grid, layout: Layout, x: number, y: number): number {
   const col = Math.min(grid.width, Math.max(0, Math.round((x - layout.margin) / layout.cell)));
   const row = Math.min(grid.height, Math.max(0, Math.round((y - layout.margin) / layout.cell)));
-  return row * (grid.width + 1) + col;
+  return dotIndex(grid, row, col);
 }
 
 /**
@@ -128,17 +137,16 @@ export function dotAt(grid: Grid, layout: Layout, x: number, y: number): number 
 export function dotPath(grid: Grid, from: number, to: number): number[] {
   const a = dotCoords(grid, from);
   const b = dotCoords(grid, to);
-  const W = grid.width;
   const out: number[] = [];
   let { row, col } = a;
   while (col !== b.col) {
     const next = col < b.col ? col + 1 : col - 1;
-    out.push(row * W + Math.min(col, next));
+    out.push(hEdgeIndex(grid, row, Math.min(col, next)));
     col = next;
   }
   while (row !== b.row) {
     const next = row < b.row ? row + 1 : row - 1;
-    out.push(grid.hEdgeCount + Math.min(row, next) * (W + 1) + col);
+    out.push(vEdgeIndex(grid, Math.min(row, next), col));
     row = next;
   }
   return out;

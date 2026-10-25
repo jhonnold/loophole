@@ -1,4 +1,4 @@
-import { EdgeState, type Grid, vEdgeIndex } from "@loophole/core";
+import { cellIndex, EdgeState, type Grid, vEdgeIndex } from "@loophole/core";
 
 /**
  * Marks the cells inside the loop (1) and outside (0), for the solved wash. Scans each row from
@@ -10,7 +10,7 @@ export function insideCells(grid: Grid, edges: Uint8Array): Uint8Array {
     let inside = 0;
     for (let c = 0; c < grid.width; c++) {
       if (edges[vEdgeIndex(grid, r, c)] === EdgeState.Line) inside ^= 1;
-      out[r * grid.width + c] = inside;
+      out[cellIndex(grid, r, c)] = inside;
     }
   }
   return out;
