@@ -129,6 +129,12 @@
     return { layout: viewLayout(grid, view.cell), view, port, zoom };
   });
 
+  // Saves and sends it now, as the page may be going away.
+  function saveNow() {
+    save();
+    saves?.flush();
+  }
+
   function save() {
     if (!ready) return;
     saves?.save({
@@ -318,25 +324,19 @@
     const onvisibility = () => {
       if (document.visibilityState === "hidden") {
         setPaused(true);
-        save();
-        saves?.flush();
+        saveNow();
       } else {
         saves?.refresh();
       }
     };
-    const onpagehide = () => {
-      save();
-      saves?.flush();
-    };
     document.addEventListener("visibilitychange", onvisibility);
-    window.addEventListener("pagehide", onpagehide);
+    window.addEventListener("pagehide", saveNow);
     return () => {
       clearInterval(tick);
       wideQuery.removeEventListener("change", onwide);
       document.removeEventListener("visibilitychange", onvisibility);
-      window.removeEventListener("pagehide", onpagehide);
-      save();
-      saves?.flush();
+      window.removeEventListener("pagehide", saveNow);
+      saveNow();
       saves?.close();
     };
   });

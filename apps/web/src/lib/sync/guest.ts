@@ -1,5 +1,5 @@
 import { progressKey } from "../game/progress.ts";
-import { type ListableStorage, readSaved, type SavedBoard } from "./sync.ts";
+import { type ImportOutcome, type ListableStorage, readSaved, type SavedBoard } from "./sync.ts";
 
 const GUEST_PREFIX = progressKey("");
 
@@ -50,10 +50,7 @@ export interface ImportSummary {
  * sends what is left; the server's rules make a repeat harmless anyway.
  */
 export async function importGuestSaves(
-  importOne: (
-    puzzleId: string,
-    saved: SavedBoard,
-  ) => Promise<"imported" | "kept" | "skipped" | "failed">,
+  importOne: (puzzleId: string, saved: SavedBoard) => Promise<ImportOutcome>,
   storage: ListableStorage | null,
   isBuiltIn: (id: string) => boolean,
 ): Promise<ImportSummary> {

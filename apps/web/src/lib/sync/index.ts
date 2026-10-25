@@ -104,20 +104,20 @@ export async function importGuestProgress(userId: string): Promise<ImportSummary
   return importGuestSaves((id, saved) => sync.importGuest(id, saved), storage, isBuiltIn);
 }
 
+function stopSync(userId: string): void {
+  if (current?.userId !== userId) return;
+  current.close();
+  current = null;
+}
+
 /** After logout: drops this browser's copy of the account's synced boards, keeping unsent saves. */
 export function forgetSyncedProgress(userId: string): void {
-  if (current?.userId === userId) {
-    current.close();
-    current = null;
-  }
+  stopSync(userId);
   forgetSynced(storage, userId);
 }
 
 /** Removes this device's copy of a deleted account's progress (NFR-6). */
 export function forgetAccount(userId: string): void {
-  if (current?.userId === userId) {
-    current.close();
-    current = null;
-  }
+  stopSync(userId);
   forgetUser(storage, userId);
 }

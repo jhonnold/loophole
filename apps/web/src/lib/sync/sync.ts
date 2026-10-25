@@ -18,7 +18,7 @@ export interface SavedBoard {
 /** How long after the last change a save goes to the server. */
 export const SAVE_DELAY_MS = 2000;
 /** How long opening a puzzle waits for the server before using the copy on this device. */
-export const LOAD_TIMEOUT_MS = 4000;
+const LOAD_TIMEOUT_MS = 4000;
 /** Waits before trying failed saves again; the last one repeats. */
 export const RETRY_MS = [5_000, 15_000, 60_000] as const;
 /** How long a background save may hang before it counts as failed and is retried. */
@@ -27,7 +27,7 @@ const BACKGROUND_TIMEOUT_MS = 30_000;
 /** Runs `fn` after `ms` and returns a function that cancels it. Tests pass a manual one. */
 export type Schedule = (fn: () => void, ms: number) => () => void;
 
-export const realSchedule: Schedule = (fn, ms) => {
+const realSchedule: Schedule = (fn, ms) => {
   const timer = setTimeout(fn, ms);
   return () => clearTimeout(timer);
 };
@@ -104,24 +104,28 @@ function same(a: SavedBoard | null, b: SavedBoard | null): boolean {
 }
 
 /** Key prefix of everything stored on this device for one account. */
-export function userPrefix(userId: string): string {
+function userPrefix(userId: string): string {
   return `loophole:user:${userId}:`;
 }
 
-/** Removes everything stored on this device for an account (after deleting it, NFR-6). */
-export function forgetUser(storage: ListableStorage | null, userId: string): void {
-  if (storage === null) return;
-  const prefix = userPrefix(userId);
+/** Removes every key that `matches`. */
+function removeKeys(storage: ListableStorage, matches: (key: string) => boolean): void {
   try {
     const keys: string[] = [];
     for (let i = 0; i < storage.length; i++) {
       const key = storage.key(i);
-      if (key?.startsWith(prefix)) keys.push(key);
+      if (key !== null && matches(key)) keys.push(key);
     }
     for (const key of keys) storage.removeItem(key);
   } catch {
     // Storage refused; nothing more to do.
   }
+}
+
+/** Removes everything stored on this device for an account (after deleting it, NFR-6). */
+export function forgetUser(storage: ListableStorage | null, userId: string): void {
+  const prefix = userPrefix(userId);
+  if (storage !== null) removeKeys(storage, (key) => key.startsWith(prefix));
 }
 
 /**
@@ -135,16 +139,7 @@ export function forgetSynced(storage: ListableStorage | null, userId: string): v
     ...storedSet(storage, `${userPrefix(userId)}unsynced`).list(),
     ...storedSet(storage, `${userPrefix(userId)}deleting`).list(),
   ]);
-  try {
-    const keys: string[] = [];
-    for (let i = 0; i < storage.length; i++) {
-      const key = storage.key(i);
-      if (key?.startsWith(prefix) && !keep.has(key.slice(prefix.length))) keys.push(key);
-    }
-    for (const key of keys) storage.removeItem(key);
-  } catch {
-    // Storage refused; nothing more to do.
-  }
+  removeKeys(storage, (key) => key.startsWith(prefix) && !keep.has(key.slice(prefix.length)));
 }
 
 /** A set of puzzle ids kept in storage as a JSON array. */
@@ -241,6 +236,15 @@ function classify(status: number): PushResult | "drop" {
   return "drop";
 }
 
+/** A background request (one no screen waits on) gives up after a while; keepalive ones can't. */
+function withTimeout(init: PushInit): PushInit {
+  return {
+    ...init,
+    signal:
+      init.signal ?? (init.keepalive ? undefined : AbortSignal.timeout(BACKGROUND_TIMEOUT_MS)),
+  };
+}
+
 /** Resolves with "retry" when `signal` aborts: a screen stops waiting for a slow server. */
 function untilAborted(signal: AbortSignal): Promise<PushResult> {
   return new Promise((resolve) => {
@@ -324,10 +328,7 @@ export function createProgressSync(deps: ProgressSyncDeps): ProgressSync {
         status = (
           await client.DELETE("/api/users/{userId}/progress/{puzzleId}", {
             ...path(puzzleId),
-            ...init,
-            signal:
-              init.signal ??
-              (init.keepalive ? undefined : AbortSignal.timeout(BACKGROUND_TIMEOUT_MS)),
+            ...withTimeout(init),
           })
         ).response.status;
       } catch {
@@ -382,9 +383,7 @@ export function createProgressSync(deps: ProgressSyncDeps): ProgressSync {
     return client.PUT("/api/users/{userId}/progress/{puzzleId}", {
       ...path(puzzleId),
       body: { edges, elapsedMs, assisted, baseVersion: version, device: from },
-      ...init,
-      signal:
-        init.signal ?? (init.keepalive ? undefined : AbortSignal.timeout(BACKGROUND_TIMEOUT_MS)),
+      ...withTimeout(init),
     });
   }
 
