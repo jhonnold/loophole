@@ -51,6 +51,24 @@ export const RULE_TEXT: Readonly<Record<RuleId, string>> = {
     "Trying the other choice for this edge quickly leads to a contradiction, so it must be this way.",
 };
 
+/** A short name for each rule, shown as the hint card's title. */
+export const RULE_TITLE: Readonly<Record<RuleId, string>> = {
+  "clue-zero": "A zero",
+  "clue-satisfied": "Clue complete",
+  "clue-needs-all": "Clue saturated",
+  "dot-full": "Dot full",
+  "dot-continue": "Line goes on",
+  "dot-dead-end": "Dead end",
+  "corner-1": "1 in a corner",
+  "corner-3": "3 in a corner",
+  "adjacent-3s": "3s side by side",
+  "diagonal-3s": "3s corner to corner",
+  "premature-loop": "No small loops",
+  "loop-complete": "Loop complete",
+  parity: "Inside and outside",
+  lookahead: "Try and see",
+};
+
 /** One edge a step decided. */
 export interface EdgeChange {
   readonly edge: number;
