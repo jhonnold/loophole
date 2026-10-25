@@ -212,7 +212,7 @@ Entry format:
 - **Reason:** A 100×100 board has 30 000 marks, too many DOM nodes to move every frame; culling keeps a frame to a few hundred. One transform per frame keeps SVG pinch-zoom cheap without giving up crisp marks at rest.
 
 ## 2026-10-25 · WT5 `web-large-grids` · Large practice fixtures with every clue shown
-- **Question:** The generator doesn't exist yet. Where do 20×20 to 100×100 boards for layout and performance work come from?
+- **Question:** (Written before WT3 merged.) Where do 20×20 to 100×100 boards for layout and performance work come from?
 - **Decision:** `apps/web/scripts/large-fixtures.ts` grows and reshapes a random region with core's seeded generator (each step keeps the boundary one simple loop), takes the boundary as the solution and shows every clue. It writes four fixtures (20×20, 30×30, 40×40, 100×100) and their solutions; the output is deterministic. The fixture test checks with core's `verify` (node budget, no time limit) that every fixture has exactly one solution; the rules alone solve the large ones, with no search.
 - **Reason:** Real loops give realistic line density for rendering and timing, and full clues make uniqueness easy to prove. They are easy puzzles; generated ones replace them when the server serves puzzles.
 
@@ -220,3 +220,48 @@ Entry format:
 - **Question:** How is "60 fps drawing up to 30×30, smooth large boards" (NFR-2) checked?
 - **Decision:** `tests/perf.e2e.ts`, tagged `@perf`, slows the CPU 4× through the Chrome DevTools Protocol and records animation-frame intervals while drawing on a zoomed 30×30 SVG board and while pinching and panning the 100×100 canvas board. It fails if the 95th percentile reaches 20 ms or any frame reaches 50 ms. `bun run test:perf` runs it; `bun run test:e2e` skips it.
 - **Reason:** Frame timing depends on the machine, so it can't be a reliable gate, but a scripted check catches large regressions and prints numbers to compare.
+
+## 2026-10-25 · WT6 `server-foundation` · Server layers and how they are checked
+- **Question:** How is the server split into entrypoints, managers and adapters, and what keeps the layers apart?
+- **Decision:** `apps/server/src` has `api/` and `worker/` (entrypoints, each with a `main.ts` composition root), `managers/`, `adapters/`, plus `domain.ts` (domain types) and `ports.ts` (the adapter interfaces managers depend on). Biome `noRestrictedImports` overrides enforce the direction: managers can't import adapters, entrypoints, `bun:sqlite`, Hono or zod; entrypoints other than the composition roots (`main.ts`, `spec.ts`) can't import adapters; adapters can't import managers or entrypoints. Tests are exempt. The API process uses `JobManager` (queue and report); the worker uses `JobRunManager` (claim, run, store), so the API never holds a task runner.
+- **Reason:** The lint makes a layering slip fail the gate instead of waiting for review. Keeping interfaces in one module outside `adapters/` lets the manager rule be a plain "no imports from adapters".
+
+## 2026-10-25 · WT6 `server-foundation` · Server scripts run from the repo root
+- **Question:** Bun loads `.env` only from the working directory, but workspace scripts run in their package's folder. How do the server processes get the root `.env`?
+- **Decision:** The server's scripts (`dev:api`, `dev:worker`, `gen:api`, `check:api`) live in the root `package.json` and call the entrypoints by path, so they run in the repo root, Bun loads the root `.env`, and relative settings (`DATABASE_PATH=data/loophole.sqlite`, `WEB_DIR`) resolve against the root. `.env.example` and the README say so.
+- **Reason:** One `.env`, no `--env-file=../../.env` in every script, and paths in settings mean the same thing from every script. `data/` is git-ignored.
+
+## 2026-10-25 · WT6 `server-foundation` · Synchronous repositories, asynchronous blob store
+- **Question:** Should the repository and queue interfaces return promises?
+- **Decision:** No. `PuzzleRepository` and `JobQueue` are synchronous, like `bun:sqlite`; `BlobStore` and `TaskRunner` are asynchronous. Statements are prepared once per repository with `db.query` and named parameters (`strict: true`). Migrations are numbered `.sql` files applied in order, each in an immediate transaction, recorded in `schema_migrations`. `openDatabase` sets `busy_timeout` (5 s) first, then switches to WAL, retrying "database is locked" for up to about a second.
+- **Reason:** SQLite calls are synchronous and fast; promises would add ceremony with no gain. A move to another database would change the interfaces anyway. Switching a new file to WAL takes an exclusive lock that SQLite does not wait for, so the API and the worker starting together on a new database could crash one of them (reproduced in review: about half of simultaneous starts); the retry fixes that, and the immediate transaction then serializes the migrations.
+
+## 2026-10-25 · WT6 `server-foundation` · Puzzle storage and blob keys
+- **Question:** What goes in SQLite and what goes in the blob store?
+- **Decision:** The `puzzles` row holds the clue string (wire format), size, seed, generator version, `level` (1 for all, FR-29), `origin` (generated/submitted), `status` (published/unpublished), the blob keys and `created_at` (ms). Solutions go to `puzzles/<id>/solution.txt` (edge-state encoding) and the solver's steps to `puzzles/<id>/trace.json` (`{"v":1,"steps":[...]}`, about 1.3 MB at 100×100), written before the row so a row never points at a missing blob. `GET /api/puzzles/{id}` returns clues only; `PuzzleManager.getSolution` reads a solution server-side. Job ids, and seeds the user leaves out, are random UUIDs; a generated puzzle takes the id of the job that made it, and inserting an existing puzzle id does nothing, so a job that runs twice (a worker recovered while still finishing) stores one puzzle. Only `meta.generator` is kept from a puzzle's metadata.
+- **Reason:** Clues are small and served on every play; solutions and traces are only needed for checks and hints (FR-25, FR-6). A failed blob write leaves at most an orphaned blob, never a broken row.
+
+## 2026-10-25 · WT6 `server-foundation` · Job queue: claiming, heartbeats, retries
+- **Question:** How do workers share the jobs table, and what happens to jobs that crash, fail or run too long?
+- **Decision:** `claimNext` is one `UPDATE … WHERE id = (SELECT … oldest queued) AND status = 'queued' RETURNING *`. Every later update names the claiming worker and does nothing if another worker holds the job. A running job sends a heartbeat every 5 s; progress writes count as heartbeats. When idle, a worker requeues running jobs with no heartbeat for 30 s, and fails them once they have been claimed 3 times. A job that fails or times out is not retried, since generation is deterministic and would do the same again. The worker loop logs an error from the database (or anything else) and carries on after its poll wait instead of exiting; a failed heartbeat is logged and skipped. `jobs.kind` has no CHECK constraint (validated in code), so new kinds need no table rebuild; `status` does.
+- **Reason:** SQLite runs each statement atomically under its write lock, so no two workers can claim one job (tested with four threads on one file). Heartbeats separate a crashed worker from a slow job.
+
+## 2026-10-25 · WT6 `server-foundation` · Job time limits and progress
+- **Question:** What limits apply to generation and verification jobs, and how is progress reported (FR-11, NFR-1)?
+- **Decision:** Each task runs in a fresh Bun `Worker`; the time limit is `terminate()` (generate is synchronous, so a stop can't be cooperative). Limits: 60 s for generation (100×100 takes about 13 s) and 45 s for verification, which runs `verify` with its default 30 s budget inside. Both are settings (`GENERATE_TIMEOUT_MS`, `VERIFY_TIMEOUT_MS`). The thread maps generation progress to 0–0.9 (clue removal tests are about 90% of the time; whole-board solves follow with no progress calls) and posts only when the whole percent changes; the worker writes progress to the job row at most every 500 ms. A timed-out or failed job keeps its last progress. On SIGINT/SIGTERM the worker finishes the job in hand, then exits.
+- **Reason:** A hard outer limit holds even for code that never yields. Throttling at both ends keeps 10,000 progress calls on a 100×100 board down to a handful of database writes.
+
+## 2026-10-25 · WT6 `server-foundation` · HTTP API shape and errors
+- **Question:** What do the first endpoints look like, and how are errors reported?
+- **Decision:** `GET /api/health`; `GET /api/puzzles?limit=` (recent published, newest first, default 20, at most 100); `GET /api/puzzles/{id}`; `POST /api/jobs/generate` (`{width, height, seed?}`, unknown fields rejected) answering 202 with the job and a `Location` header; `GET /api/jobs/{id}` (`status`, `progress` 0–1, `result.puzzleId` when done, `error`). Times are ISO 8601 strings. Every error is RFC 9457 problem details (`application/problem+json`, `{type, title, status, detail?, errors?}`), with `errors` listing each invalid field for 400s. While 100 jobs are queued, new ones get 503. Request bodies under `/api` are capped at 64 KiB (413), enough for a 100×100 puzzle; `Bun.serve` caps every body at 1 MiB. With `WEB_DIR` set, the API also serves the built web app with `index.html` for unknown non-API paths.
+- **Reason:** One error shape for validation, missing resources and server faults. The body cap stops one request from making the server read and parse many megabytes (Bun's default limit is 128 MB). The queue cap stops an open endpoint from piling up unbounded CPU work before accounts and rate limits exist.
+
+## 2026-10-25 · WT6 `server-foundation` · OpenAPI document and generated client
+- **Question:** Where do the spec and the client live, and how does the gate catch a stale one?
+- **Decision:** `bun run gen:api` builds the app over in-memory adapters, writes the OpenAPI 3.1 document to `openapi.yaml` at the repo root, and writes `openapi-typescript` types to `packages/api-client/src/schema.ts`; the package wraps them with `openapi-fetch`. `bun run check:api` (in `bun run check`, after typecheck) regenerates in memory and fails if either file differs. The generated `schema.ts` is excluded from Biome. Versions: `hono` 4.13.13 (4.13.14 is a day old), `@hono/zod-openapi` 1.6.3, `zod` 4.6.7, `openapi-typescript` 7.13.0, `openapi-fetch` 0.17.0, `yaml` 2.9.1.
+- **Reason:** Comparing with the files on disk, not `git diff`, lets the gate pass on uncommitted but regenerated work. `openapi-typescript` declares a TypeScript 5 peer range; it works with 6.0.3 and Bun only warns.
+
+## 2026-10-25 · WT6 `server-foundation` · Web app: built-in puzzles first, then the API
+- **Question:** How does the web app get server puzzles while keeping the fixtures (including `giant-100` for `test:perf`)?
+- **Decision:** `puzzleSource` combines the fixture source and an API source built on the generated client: the list is the fixtures followed by up to 20 recent server puzzles ("Generated"), or just the fixtures if the API can't be reached; `get` looks up fixture ids locally before asking the API. Vite proxies `/api` to `localhost:3000` in `vite dev`; `vite preview` has no proxy.
+- **Reason:** The end-to-end and frame-time tests keep their boards with no server, and the screens did not change. Without a preview proxy the Playwright runs never depend on whether an API happens to be running.

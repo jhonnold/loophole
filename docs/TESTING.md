@@ -33,9 +33,20 @@ When a property fails, fast-check prints a `seed` and `path`. To replay that exa
 
 1. `bun run lint`: Biome lint and format check
 2. `bun run typecheck`: each workspace's `typecheck` script. Every workspace defines a `typecheck` script; one without it is skipped silently.
-3. `bun run test`: `bun test` over the whole repo
+3. `bun run check:api`: fails if `openapi.yaml` or the generated API client no longer match the server's routes (`bun run gen:api` fixes it)
+4. `bun run test`: `bun test` over the whole repo
 
 GitHub Actions runs `bun install --frozen-lockfile` and then `bun run check` on every push to `main` and on every pull request.
+
+## Server
+
+Server tests follow its layers:
+
+- Managers are tested with the fakes in the server's test support (clock, puzzle repository, job queue, task runner) and the in-memory blob store, so they run without a database or threads.
+- SQLite repositories and the job queue are tested on in-memory databases (`openDatabase(":memory:")`), which run the real migrations. The claim race test uses a database file shared by several threads.
+- Routes are tested through Hono's `app.request` over real managers and in-memory adapters, with no server listening.
+- The thread task runner is tested with real Bun worker threads, including a 100×100 generation stopped at its time limit.
+- The S3 blob store test runs against Garage when the `S3_*` settings are set (from `.env`) and Garage answers; otherwise it is skipped, as in CI. Start Garage (README, Local services) to run it.
 
 ## Web app
 
