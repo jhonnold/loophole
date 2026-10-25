@@ -979,6 +979,320 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/users/{userId}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The logged-in user's unsolved puzzles, most recently saved first */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Must be the logged-in user's id; anything else is refused with 403. */
+                    userId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Unsolved saved progress. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProgressList"];
+                    };
+                };
+                /** @description Invalid query. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Not logged in. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The path names another user, or the request came from another site (CSRF protection). */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Too many requests; `Retry-After` says when to try again. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{userId}/progress/{puzzleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The logged-in user's saved board on a puzzle */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Must be the logged-in user's id; anything else is refused with 403. */
+                    userId: string;
+                    puzzleId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The saved board, or null. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ProgressResult"];
+                    };
+                };
+                /** @description Invalid id. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Not logged in. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The path names another user, or the request came from another site (CSRF protection). */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description No published puzzle with this id. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Too many requests; `Retry-After` says when to try again. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        /**
+         * Save the logged-in user's board on a puzzle
+         * @description A solved record is kept until it is deleted. Sending the board already stored only updates the play time and keeps the version. A solved board replaces an unsolved one. Otherwise the board is saved only if it continues from the stored `version` (`baseVersion`) or comes from the `device` that saved it, so a stale tab can't overwrite newer play from another device. `assisted` only ever turns on. Whether the board is solved is worked out by the server.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Must be the logged-in user's id; anything else is refused with 403. */
+                    userId: string;
+                    puzzleId: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SaveProgressRequest"];
+                };
+            };
+            responses: {
+                /** @description What is saved now, and whether it is the board sent. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SaveProgressResult"];
+                    };
+                };
+                /** @description Invalid body, or a board that does not fit the puzzle. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Not logged in. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The path names another user, or the request came from another site (CSRF protection). */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description No published puzzle with this id. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Request body larger than 64 KiB. */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Request body is not JSON. */
+                415: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Too many requests; `Retry-After` says when to try again. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /** Forget the logged-in user's board on a puzzle (start over) */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Must be the logged-in user's id; anything else is refused with 403. */
+                    userId: string;
+                    puzzleId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Deleted (also when nothing was saved). */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Invalid id. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Not logged in. */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description The path names another user, or the request came from another site (CSRF protection). */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Too many requests; `Retry-After` says when to try again. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1161,6 +1475,60 @@ export interface components {
         };
         DeleteAccountRequest: {
             password: string;
+        };
+        ProgressList: {
+            items: components["schemas"]["ProgressSummary"][];
+        };
+        ProgressSummary: {
+            puzzleId: string;
+            width: number;
+            height: number;
+            /** @description Play time on this attempt in milliseconds. */
+            elapsedMs: number;
+            assisted: boolean;
+            /**
+             * Format: date-time
+             * @example 2026-10-25T12:00:00.000Z
+             */
+            updatedAt: string;
+        };
+        /** @description `progress` is null when nothing is saved. */
+        ProgressResult: {
+            progress: components["schemas"]["Progress"] | null;
+        };
+        /** @description A saved board on one puzzle (PRD FR-21). */
+        Progress: {
+            puzzleId: string;
+            /** @description Edge states (docs/FORMAT.md). */
+            edges: string;
+            /** @description Play time on this attempt in milliseconds. */
+            elapsedMs: number;
+            solved: boolean;
+            /** @description A hint was shown during this attempt. */
+            assisted: boolean;
+            /** @description Goes up with every save that replaces the board; send it back as `baseVersion`. */
+            version: number;
+            /**
+             * Format: date-time
+             * @example 2026-10-25T12:00:00.000Z
+             */
+            updatedAt: string;
+        };
+        SaveProgressResult: {
+            progress: components["schemas"]["Progress"];
+            /** @description False when the saved record was kept instead: it is solved, or the save was stale. `progress` is then that record. */
+            accepted: boolean;
+        };
+        SaveProgressRequest: {
+            /** @description The player's board: one character per edge, 0 empty, 1 line, 2 cross (docs/FORMAT.md). */
+            edges: string;
+            /** @description Play time on this attempt in milliseconds. */
+            elapsedMs: number;
+            assisted: boolean;
+            /** @description The `version` this board continues from, or null when the client had none. */
+            baseVersion: number | null;
+            /** @description A random id for this browser, the same on every save. */
+            device: string;
         };
     };
     responses: never;

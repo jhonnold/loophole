@@ -8,6 +8,7 @@ import { JobManager } from "../managers/job-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { accountDeps } from "../test-support/accounts.ts";
 import { FakeClock, sequentialIds } from "../test-support/fakes.ts";
+import { sqliteProgress } from "../test-support/progress.ts";
 import { createApp } from "./app.ts";
 import type { Problem } from "./problem.ts";
 import { SESSION_COOKIE } from "./session-cookie.ts";
@@ -24,6 +25,7 @@ function setup(options: { trustProxy?: boolean } = {}) {
   const app = createApp({
     puzzles,
     hints: new HintManager({ puzzles }),
+    progress: sqliteProgress(db, puzzles, clock),
     jobs: new JobManager({
       jobs: new SqliteJobQueue(db),
       clock,

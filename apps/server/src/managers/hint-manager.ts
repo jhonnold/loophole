@@ -1,13 +1,6 @@
 import { decodeEdges, FormatError, findHint, type Hint } from "@loophole/core";
+import { InvalidBoardError } from "./errors.ts";
 import type { PuzzleManager } from "./puzzle-manager.ts";
-
-/** The board sent for a hint does not fit the puzzle (wrong length or a bad character). */
-export class InvalidBoardError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "InvalidBoardError";
-  }
-}
 
 /**
  * How long a hint request may look for a deduction. Generated puzzles answer in a few ms; a

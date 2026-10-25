@@ -6,6 +6,7 @@ import { systemClock } from "../adapters/clock.ts";
 import { SqliteAccountTokenRepository } from "../adapters/db/account-token-repository.ts";
 import { openDatabase } from "../adapters/db/database.ts";
 import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
+import { SqliteProgressRepository } from "../adapters/db/progress-repository.ts";
 import { SqlitePuzzleRepository } from "../adapters/db/puzzle-repository.ts";
 import { SqliteSessionRepository } from "../adapters/db/session-repository.ts";
 import { SqliteUserRepository } from "../adapters/db/user-repository.ts";
@@ -18,6 +19,7 @@ import { loadConfig } from "../config.ts";
 import { AccountManager } from "../managers/account-manager.ts";
 import { HintManager } from "../managers/hint-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
+import { ProgressManager } from "../managers/progress-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { SessionManager } from "../managers/session-manager.ts";
 import { createApp } from "./app.ts";
@@ -66,10 +68,16 @@ const accounts = new AccountManager({
   publicUrl: config.publicUrl,
 });
 const hints = new HintManager({ puzzles });
+const progress = new ProgressManager({
+  progress: new SqliteProgressRepository(db),
+  puzzles,
+  clock: systemClock,
+});
 const app = createApp({
   puzzles,
   jobs,
   hints,
+  progress,
   accounts,
   sessions,
   limiter,

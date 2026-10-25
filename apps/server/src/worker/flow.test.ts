@@ -12,6 +12,7 @@ import { JobManager } from "../managers/job-manager.ts";
 import { JobRunManager } from "../managers/job-run-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { accountDeps } from "../test-support/accounts.ts";
+import { sqliteProgress } from "../test-support/progress.ts";
 
 // The whole path in one process: the API queues a generation, the worker's manager runs it in a
 // real thread, and the API serves the stored puzzle.
@@ -46,7 +47,13 @@ function setup() {
   });
   const hints = new HintManager({ puzzles });
   return {
-    app: createApp({ puzzles, jobs, hints, ...accountDeps(db, systemClock) }),
+    app: createApp({
+      puzzles,
+      jobs,
+      hints,
+      progress: sqliteProgress(db, puzzles, systemClock),
+      ...accountDeps(db, systemClock),
+    }),
     runs,
     puzzles,
   };

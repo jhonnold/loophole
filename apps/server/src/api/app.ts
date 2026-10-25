@@ -8,17 +8,21 @@ import { HTTPException } from "hono/http-exception";
 import type { Job, PuzzleRecord } from "../domain.ts";
 import {
   CaptchaFailedError,
+  InvalidBoardError,
   InvalidCredentialsError,
   InvalidTokenError,
+  PuzzleNotFoundError,
   QueueFullError,
   RateLimitedError,
 } from "../managers/errors.ts";
-import { type HintManager, InvalidBoardError } from "../managers/hint-manager.ts";
+import type { HintManager } from "../managers/hint-manager.ts";
 import type { JobManager } from "../managers/job-manager.ts";
+import type { ProgressManager } from "../managers/progress-manager.ts";
 import type { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { type AccountRouteDeps, registerAccountRoutes, tooManyRequests } from "./accounts.ts";
 import { sameOriginOnly } from "./csrf.ts";
 import { problem, problemResponse } from "./problem.ts";
+import { registerProgressRoutes } from "./progress.ts";
 import {
   GenerateRequestSchema,
   HealthSchema,
@@ -35,6 +39,7 @@ export interface AppDeps extends AccountRouteDeps {
   readonly puzzles: PuzzleManager;
   readonly jobs: JobManager;
   readonly hints: HintManager;
+  readonly progress: ProgressManager;
   /** Folder of the built web app to serve at `/`, with `index.html` for unknown paths. */
   readonly webDir?: string;
 }
@@ -189,6 +194,7 @@ export function createApp(deps: AppDeps): OpenAPIHono {
   });
 
   registerAccountRoutes(app, deps);
+  registerProgressRoutes(app, deps);
 
   app.all("/api/*", (c) => problem(c, 404, "Not found"));
 
@@ -204,6 +210,8 @@ export function createApp(deps: AppDeps): OpenAPIHono {
       return problem(c, 503, "Queue full", { detail: err.message });
     if (err instanceof InvalidBoardError)
       return problem(c, 400, "Invalid board", { detail: err.message });
+    if (err instanceof PuzzleNotFoundError)
+      return problem(c, 404, "Puzzle not found", { detail: err.message });
     if (err instanceof InvalidCredentialsError)
       return problem(c, 401, "Wrong email or password", { detail: err.message });
     if (err instanceof CaptchaFailedError)

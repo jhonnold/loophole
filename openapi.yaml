@@ -3,8 +3,9 @@ openapi: 3.1.0
 info:
   title: Loophole API
   version: 0.1.0
-  description: Puzzles, background jobs and accounts. Errors are RFC 9457 problem
-    details. State-changing requests from other sites are refused (403).
+  description: Puzzles, background jobs, accounts and saved progress. Errors are
+    RFC 9457 problem details. State-changing requests from other sites are
+    refused (403).
 components:
   securitySchemes:
     session:
@@ -465,6 +466,139 @@ components:
           maxLength: 128
       required:
         - password
+      additionalProperties: false
+    ProgressList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProgressSummary"
+      required:
+        - items
+    ProgressSummary:
+      type: object
+      properties:
+        puzzleId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        width:
+          type: integer
+        height:
+          type: integer
+        elapsedMs:
+          type: integer
+          minimum: 0
+          maximum: 8640000000
+          description: Play time on this attempt in milliseconds.
+        assisted:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+          example: 2026-10-25T12:00:00.000Z
+      required:
+        - puzzleId
+        - width
+        - height
+        - elapsedMs
+        - assisted
+        - updatedAt
+    ProgressResult:
+      type: object
+      properties:
+        progress:
+          anyOf:
+            - $ref: "#/components/schemas/Progress"
+            - type: "null"
+      required:
+        - progress
+      description: "`progress` is null when nothing is saved."
+    Progress:
+      type: object
+      properties:
+        puzzleId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        edges:
+          type: string
+          description: Edge states (docs/FORMAT.md).
+        elapsedMs:
+          type: integer
+          minimum: 0
+          maximum: 8640000000
+          description: Play time on this attempt in milliseconds.
+        solved:
+          type: boolean
+        assisted:
+          type: boolean
+          description: A hint was shown during this attempt.
+        version:
+          type: integer
+          minimum: 1
+          description: Goes up with every save that replaces the board; send it back as
+            `baseVersion`.
+        updatedAt:
+          type: string
+          format: date-time
+          example: 2026-10-25T12:00:00.000Z
+      required:
+        - puzzleId
+        - edges
+        - elapsedMs
+        - solved
+        - assisted
+        - version
+        - updatedAt
+      description: A saved board on one puzzle (PRD FR-21).
+    SaveProgressResult:
+      type: object
+      properties:
+        progress:
+          $ref: "#/components/schemas/Progress"
+        accepted:
+          type: boolean
+          description: "False when the saved record was kept instead: it is solved, or the
+            save was stale. `progress` is then that record."
+      required:
+        - progress
+        - accepted
+    SaveProgressRequest:
+      type: object
+      properties:
+        edges:
+          type: string
+          maxLength: 20200
+          pattern: ^[012]*$
+          description: "The player's board: one character per edge, 0 empty, 1 line, 2
+            cross (docs/FORMAT.md)."
+        elapsedMs:
+          type: integer
+          minimum: 0
+          maximum: 8640000000
+          description: Play time on this attempt in milliseconds.
+        assisted:
+          type: boolean
+        baseVersion:
+          anyOf:
+            - type: integer
+              minimum: 1
+            - type: "null"
+          description: The `version` this board continues from, or null when the client
+            had none.
+        device:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: A random id for this browser, the same on every save.
+      required:
+        - edges
+        - elapsedMs
+        - assisted
+        - baseVersion
+        - device
       additionalProperties: false
   parameters: {}
 paths:
@@ -935,6 +1069,255 @@ paths:
                 $ref: "#/components/schemas/Problem"
         "429":
           description: Too many attempts; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/users/{userId}/progress:
+    get:
+      summary: The logged-in user's unsolved puzzles, most recently saved first
+      security:
+        - session: []
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            description: Must be the logged-in user's id; anything else is refused with 403.
+          required: true
+          description: Must be the logged-in user's id; anything else is refused with 403.
+          name: userId
+          in: path
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+            example: 20
+          required: false
+          name: limit
+          in: query
+      responses:
+        "200":
+          description: Unsolved saved progress.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgressList"
+        "400":
+          description: Invalid query.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Not logged in.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: The path names another user, or the request came from another site
+            (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many requests; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/users/{userId}/progress/{puzzleId}:
+    get:
+      summary: The logged-in user's saved board on a puzzle
+      security:
+        - session: []
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            description: Must be the logged-in user's id; anything else is refused with 403.
+          required: true
+          description: Must be the logged-in user's id; anything else is refused with 403.
+          name: userId
+          in: path
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+          required: true
+          name: puzzleId
+          in: path
+      responses:
+        "200":
+          description: The saved board, or null.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgressResult"
+        "400":
+          description: Invalid id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Not logged in.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: The path names another user, or the request came from another site
+            (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No published puzzle with this id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many requests; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    put:
+      summary: Save the logged-in user's board on a puzzle
+      description: A solved record is kept until it is deleted. Sending the board
+        already stored only updates the play time and keeps the version. A
+        solved board replaces an unsolved one. Otherwise the board is saved only
+        if it continues from the stored `version` (`baseVersion`) or comes from
+        the `device` that saved it, so a stale tab can't overwrite newer play
+        from another device. `assisted` only ever turns on. Whether the board is
+        solved is worked out by the server.
+      security:
+        - session: []
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            description: Must be the logged-in user's id; anything else is refused with 403.
+          required: true
+          description: Must be the logged-in user's id; anything else is refused with 403.
+          name: userId
+          in: path
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+          required: true
+          name: puzzleId
+          in: path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveProgressRequest"
+      responses:
+        "200":
+          description: What is saved now, and whether it is the board sent.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaveProgressResult"
+        "400":
+          description: Invalid body, or a board that does not fit the puzzle.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Not logged in.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: The path names another user, or the request came from another site
+            (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No published puzzle with this id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Request body larger than 64 KiB.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Request body is not JSON.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many requests; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      summary: Forget the logged-in user's board on a puzzle (start over)
+      security:
+        - session: []
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            description: Must be the logged-in user's id; anything else is refused with 403.
+          required: true
+          description: Must be the logged-in user's id; anything else is refused with 403.
+          name: userId
+          in: path
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+          required: true
+          name: puzzleId
+          in: path
+      responses:
+        "204":
+          description: Deleted (also when nothing was saved).
+        "400":
+          description: Invalid id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Not logged in.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: The path names another user, or the request came from another site
+            (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many requests; `Retry-After` says when to try again.
           content:
             application/problem+json:
               schema:
