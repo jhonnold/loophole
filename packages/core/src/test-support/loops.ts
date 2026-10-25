@@ -86,3 +86,36 @@ export function puzzleFromLoop(grid: Grid, loop: Uint8Array, rng: Rng, keep = 1)
   );
   return createPuzzle(grid.width, grid.height, clues);
 }
+
+/** How much of the board a loop covers: enclosed cells, and the rows and columns its inside spans. */
+export interface LoopCoverage {
+  readonly area: number;
+  readonly rows: number;
+  readonly cols: number;
+}
+
+/**
+ * Measures a loop by scanning each row left to right: a cell is inside when an odd number of
+ * vertical line edges lie to its left. Independent of the generator's own bookkeeping.
+ */
+export function loopCoverage(grid: Grid, edges: Uint8Array): LoopCoverage {
+  const W = grid.width;
+  let area = 0;
+  let top = grid.height;
+  let bottom = -1;
+  let left = W;
+  let right = -1;
+  for (let r = 0; r < grid.height; r++) {
+    let inside = false;
+    for (let c = 0; c < W; c++) {
+      if (edges[grid.hEdgeCount + r * (W + 1) + c] === EdgeState.Line) inside = !inside;
+      if (!inside) continue;
+      area++;
+      top = Math.min(top, r);
+      bottom = Math.max(bottom, r);
+      left = Math.min(left, c);
+      right = Math.max(right, c);
+    }
+  }
+  return { area, rows: bottom - top + 1, cols: right - left + 1 };
+}
