@@ -4,7 +4,7 @@ Loophole is a web app for Slitherlink, the Japanese loop puzzle: draw one closed
 
 ## Status
 
-Early development. The repo has the build tooling, the local dev services, the design kit, and the start of the puzzle engine: the grid model, the wire format, rule checks for play, a brute-force solution counter for tests, and a seeded random number generator. The solver, generator, server and web app are being built in phases; each phase's plan is in [`docs/plans/`](docs/plans/).
+Early development. The repo has the build tooling, the local dev services, the design kit, and the start of the puzzle engine: the grid model, the wire format, rule checks for play, a brute-force solution counter for tests, a seeded random number generator, a rule-based solver that records each deduction for hints, and a verifier that says whether a puzzle has one solution, none, several, or could not be decided in time. The generator, server and web app are being built in phases; each phase's plan is in [`docs/plans/`](docs/plans/).
 
 ## Quickstart
 
@@ -49,6 +49,7 @@ All of these credentials are for local development only. `docker compose down` s
 | `bun run format` | Apply Biome fixes |
 | `bun run typecheck` | Run each workspace's `typecheck` script |
 | `bun run test` | Run all tests with `bun test` |
+| `bun run --cwd packages/core bench` | Time puzzle verification on 10×10 to 100×100 boards (not part of the check) |
 
 ## Repository layout
 
