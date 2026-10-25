@@ -4,8 +4,9 @@
 
 {#if $auth.status === "user"}
   <a class="account" href="/account">Account</a>
-{:else if $auth.status === "guest"}
-  <a class="account" href="/login">Log in</a>
+{:else}
+  <!-- Until the session answers, the guest pill keeps its place, hidden, so the header doesn't reflow. -->
+  <a class="account" class:pending={$auth.status === "loading"} href="/login">Log in</a>
 {/if}
 
 <style>
@@ -19,5 +20,9 @@
     font-size: 14px;
     font-weight: 700;
     white-space: nowrap;
+  }
+
+  .pending {
+    visibility: hidden;
   }
 </style>

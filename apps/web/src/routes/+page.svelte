@@ -10,6 +10,7 @@
   import type { DailySet, DailySummary } from "$lib/daily/api.ts";
   import {
     countdown,
+    DAILY_SIZES,
     dailyPath,
     dailyRefreshDue,
     dayHeading,
@@ -37,15 +38,24 @@
   let fetchedAt = 0;
 
   const day = $derived(today?.day ?? utcDay(now));
+  const dailyCovers: { size: number; puzzleId: string | null }[] = $derived(
+    today?.puzzles ?? DAILY_SIZES.map((size) => ({ size, puzzleId: null })),
+  );
   const msLeft = $derived(today ? Math.max(0, Date.parse(today.nextAt) - now) : msToNextDay(now));
 
   async function progressOf(id: string, width: number, height: number) {
     return localProgress(id, createGrid(width, height));
   }
 
+  // The day's set doesn't depend on who is logged in, so it's asked for as soon as the page mounts.
   async function refreshDaily() {
     fetchedAt = Date.now();
     today = await daily.day();
+    await refreshCovers();
+  }
+
+  // The streak and the covers' states depend on who is logged in.
+  async function refreshCovers() {
     const user = $auth.status === "user" ? $auth.user : null;
     summary = user === null ? null : await daily.summary(user.id);
     for (const p of today?.puzzles ?? []) {
@@ -65,6 +75,7 @@
 
   onMount(() => {
     refresh();
+    void refreshDaily();
     // New puzzles come out at 00:00 UTC (`nextAt`). The device's clock can run ahead of or behind
     // the server's, so once that time has passed, ask again every 30 s until the server answers
     // with the new day. It also asks every 30 s while the server is unreachable or a size class
@@ -83,7 +94,7 @@
     const who = $auth.status === "user" ? $auth.user.id : "guest";
     if (who === loadedFor) return;
     loadedFor = who;
-    void refreshDaily();
+    void refreshCovers();
   });
 
   function nameOf(id: string): string {
@@ -118,12 +129,18 @@
 
   {#if today === null}
     <p class="card">Daily puzzles need the server, which can't be reached right now. The practice puzzles below work offline.</p>
-  {:else if today !== undefined}
-    <ul class="covers daily" aria-label="Today's daily puzzles">
-      {#each today.puzzles as p (p.size)}
+  {:else}
+    <!-- Until the set arrives, the four covers keep their place, hidden, so nothing below moves. -->
+    <ul
+      class="covers daily"
+      class:pending={today === undefined}
+      aria-busy={today === undefined}
+      aria-label="Today's daily puzzles"
+    >
+      {#each dailyCovers as p (p.size)}
         <li>
           <BookCover
-            href={p.puzzleId === null ? null : dailyPath(today.day, p.size)}
+            href={p.puzzleId === null ? null : dailyPath(day, p.size)}
             width={p.size}
             height={p.size}
             name={sizeName(p.size)}
@@ -297,5 +314,9 @@
     .covers.daily {
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
+  }
+
+  .covers.pending {
+    visibility: hidden;
   }
 </style>
