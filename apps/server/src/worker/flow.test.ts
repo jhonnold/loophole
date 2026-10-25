@@ -7,11 +7,11 @@ import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
 import { SqlitePuzzleRepository } from "../adapters/db/puzzle-repository.ts";
 import { ThreadTaskRunner } from "../adapters/tasks/thread-task-runner.ts";
 import { createApp } from "../api/app.ts";
-import { HintManager } from "../managers/hint-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
 import { JobRunManager } from "../managers/job-run-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { accountDeps } from "../test-support/accounts.ts";
+import { dailyDeps } from "../test-support/daily.ts";
 import { sqliteProgress } from "../test-support/progress.ts";
 import { submissionDeps } from "../test-support/submissions.ts";
 
@@ -48,7 +48,6 @@ function setup(verifyTimeoutMs = 10_000) {
       maxAttempts: 3,
     },
   });
-  const hints = new HintManager({ puzzles });
   const accounts = accountDeps(db, systemClock);
   accounts.users.insert({
     id: "u1",
@@ -62,7 +61,7 @@ function setup(verifyTimeoutMs = 10_000) {
     app: createApp({
       puzzles,
       jobs,
-      hints,
+      ...dailyDeps(db, systemClock, puzzles),
       progress: sqliteProgress(db, puzzles, systemClock),
       submissions,
       reports,

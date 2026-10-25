@@ -4,7 +4,10 @@ import { S3BlobStore } from "../adapters/blob/s3-blob-store.ts";
 import { TURNSTILE_TEST_SECRET_KEY, TurnstileVerifier } from "../adapters/captcha/turnstile.ts";
 import { systemClock } from "../adapters/clock.ts";
 import { SqliteAccountTokenRepository } from "../adapters/db/account-token-repository.ts";
+import { SqliteAttemptRepository } from "../adapters/db/attempt-repository.ts";
+import { SqliteDailyRepository } from "../adapters/db/daily-repository.ts";
 import { openDatabase } from "../adapters/db/database.ts";
+import { SqliteDisplayNameRepository } from "../adapters/db/display-name-repository.ts";
 import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
 import { SqliteProgressRepository } from "../adapters/db/progress-repository.ts";
 import { SqlitePuzzleRepository } from "../adapters/db/puzzle-repository.ts";
@@ -19,8 +22,12 @@ import { randomToken } from "../adapters/random-token.ts";
 import { MemoryRateLimiter } from "../adapters/rate-limiter.ts";
 import { loadConfig } from "../config.ts";
 import { AccountManager } from "../managers/account-manager.ts";
+import { AttemptManager } from "../managers/attempt-manager.ts";
+import { DailyManager } from "../managers/daily-manager.ts";
+import { DisplayNameManager } from "../managers/display-name-manager.ts";
 import { HintManager } from "../managers/hint-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
+import { LeaderboardManager } from "../managers/leaderboard-manager.ts";
 import { ProgressManager } from "../managers/progress-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { ReportManager } from "../managers/report-manager.ts";
@@ -71,7 +78,25 @@ const accounts = new AccountManager({
   newToken: randomToken,
   publicUrl: config.publicUrl,
 });
-const hints = new HintManager({ puzzles });
+const dailies = new DailyManager({
+  dailies: new SqliteDailyRepository(db),
+  puzzles,
+  clock: systemClock,
+});
+const attemptRepo = new SqliteAttemptRepository(db);
+const attempts = new AttemptManager({
+  attempts: attemptRepo,
+  dailies,
+  puzzles,
+  clock: systemClock,
+});
+const leaderboards = new LeaderboardManager({ attempts: attemptRepo, dailies, puzzles });
+const displayNames = new DisplayNameManager({
+  names: new SqliteDisplayNameRepository(db),
+  limiter,
+  clock: systemClock,
+});
+const hints = new HintManager({ puzzles, attempts });
 const progress = new ProgressManager({
   progress: new SqliteProgressRepository(db),
   puzzles,
@@ -98,7 +123,10 @@ const app = createApp({
   progress,
   submissions,
   reports,
-
+  dailies,
+  attempts,
+  leaderboards,
+  displayNames,
   accounts,
   sessions,
   limiter,

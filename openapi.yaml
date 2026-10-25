@@ -4,8 +4,9 @@ info:
   title: Loophole API
   version: 0.1.0
   description: Puzzles, background jobs, accounts, saved progress, submitted
-    puzzles and reports. Errors are RFC 9457 problem details. State-changing
-    requests from other sites are refused (403).
+    puzzles and reports, daily puzzles, ranked attempts and leaderboards. Errors
+    are RFC 9457 problem details. State-changing requests from other sites are
+    refused (403).
 components:
   securitySchemes:
     session:
@@ -166,7 +167,8 @@ components:
             count:
               type: integer
               minimum: 1
-              description: How many marks are wrong.
+              description: How many marks are wrong. Always 1 on today's daily puzzles, so a
+                hint can't be used to check a whole board.
           required:
             - kind
             - edge
@@ -768,6 +770,275 @@ components:
         - createdAt
         - count
         - reports
+    DailySet:
+      type: object
+      properties:
+        day:
+          type: string
+          example: 2026-10-25
+          description: A UTC day, YYYY-MM-DD.
+        live:
+          type: boolean
+          description: The day is today, so its puzzles can be ranked.
+        nextAt:
+          type: string
+          format: date-time
+          example: 2026-10-25T12:00:00.000Z
+          description: When the next day's puzzles come out (00:00 UTC).
+        puzzles:
+          type: array
+          items:
+            type: object
+            properties:
+              size:
+                type: integer
+                minimum: 1
+                maximum: 100
+                description: The puzzle is size × size.
+              puzzleId:
+                anyOf:
+                  - type: string
+                    minLength: 1
+                    maxLength: 64
+                  - type: "null"
+                description: Null while the puzzle isn't ready. Open it with GET
+                  /api/puzzles/{id}.
+            required:
+              - size
+              - puzzleId
+      required:
+        - day
+        - live
+        - nextAt
+        - puzzles
+      description: A day's daily puzzles, one per size class (PRD FR-22).
+    DailySummary:
+      type: object
+      properties:
+        day:
+          type: string
+          example: 2026-10-25
+          description: A UTC day, YYYY-MM-DD.
+        streak:
+          type: integer
+          minimum: 0
+          description: Consecutive days, up to today, with a finished daily (PRD FR-24).
+        week:
+          type: array
+          items:
+            type: object
+            properties:
+              day:
+                type: string
+                example: 2026-10-25
+                description: A UTC day, YYYY-MM-DD.
+              finished:
+                type: boolean
+            required:
+              - day
+              - finished
+          description: The last seven days, oldest first.
+        attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Attempt"
+          description: Today's attempts.
+        bests:
+          type: array
+          items:
+            type: object
+            properties:
+              area:
+                type: integer
+              level:
+                type: integer
+              timeMs:
+                type: integer
+                minimum: 0
+                maximum: 8640000000
+            required:
+              - area
+              - level
+              - timeMs
+          description: Best ranked time per leaderboard bucket.
+      required:
+        - day
+        - streak
+        - week
+        - attempts
+        - bests
+    Attempt:
+      type: object
+      properties:
+        puzzleId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        day:
+          type: string
+          example: 2026-10-25
+          description: A UTC day, YYYY-MM-DD.
+        area:
+          type: integer
+          minimum: 1
+          description: "Width × height: the leaderboard bucket."
+        level:
+          type: integer
+        status:
+          type: string
+          enum:
+            - playing
+            - finished
+        startedAt:
+          type: string
+          format: date-time
+          example: 2026-10-25T12:00:00.000Z
+        finishedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              example: 2026-10-25T12:00:00.000Z
+            - type: "null"
+        elapsedMs:
+          type: integer
+          minimum: 0
+          maximum: 8640000000
+          description: "Time on the ranked clock: since the start while playing (measured
+            by the server), the ranked time once finished."
+        assisted:
+          type: boolean
+          description: A hint was shown during the attempt.
+        ranked:
+          type: boolean
+          description: "The finished solve counts on leaderboards: no hint, and not faster
+            than the loop can be drawn. False while playing."
+        rank:
+          anyOf:
+            - type: integer
+              minimum: 1
+            - type: "null"
+          description: Place on this daily's leaderboard, for a ranked solve.
+      required:
+        - puzzleId
+        - day
+        - area
+        - level
+        - status
+        - startedAt
+        - finishedAt
+        - elapsedMs
+        - assisted
+        - ranked
+        - rank
+      description: A player's one ranked attempt at a daily puzzle.
+    AttemptResult:
+      type: object
+      properties:
+        attempt:
+          anyOf:
+            - $ref: "#/components/schemas/Attempt"
+            - type: "null"
+      required:
+        - attempt
+      description: "`attempt` is null when none was started."
+    StartedAttempt:
+      type: object
+      properties:
+        attempt:
+          $ref: "#/components/schemas/Attempt"
+      required:
+        - attempt
+    FinishAttemptRequest:
+      type: object
+      properties:
+        edges:
+          type: string
+          maxLength: 20200
+          pattern: ^[012]*$
+          description: "The player's board: one character per edge, 0 empty, 1 line, 2
+            cross (docs/FORMAT.md)."
+        elapsedMs:
+          type: integer
+          minimum: 0
+          maximum: 8640000000
+          description: The player's own clock since the attempt started; it counts when it
+            is at most a tenth of the server's time (3 to 15 s) under it.
+      required:
+        - edges
+        - elapsedMs
+      additionalProperties: false
+    Leaderboard:
+      type: object
+      properties:
+        area:
+          type: integer
+        level:
+          type: integer
+        total:
+          type: integer
+          minimum: 0
+          description: How many players are on the board.
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeaderboardEntry"
+          description: The top `limit` rows, then the logged-in player's row and its
+            neighbours, by rank.
+        me:
+          anyOf:
+            - $ref: "#/components/schemas/LeaderboardEntry"
+            - type: "null"
+      required:
+        - area
+        - level
+        - total
+        - entries
+        - me
+      description: Ranked solves by time, without hinted ones (PRD FR-23).
+    LeaderboardEntry:
+      type: object
+      properties:
+        rank:
+          type: integer
+          minimum: 1
+        name:
+          anyOf:
+            - type: string
+            - type: "null"
+          description: The player's display name; null for a player who hasn't chosen one.
+        timeMs:
+          type: integer
+          minimum: 0
+          maximum: 8640000000
+        me:
+          type: boolean
+          description: This row is the logged-in player's.
+      required:
+        - rank
+        - name
+        - timeMs
+        - me
+    DisplayName:
+      type: object
+      properties:
+        displayName:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - displayName
+      description: The name shown on leaderboards; null for none.
+    SetDisplayNameRequest:
+      type: object
+      properties:
+        displayName:
+          anyOf:
+            - type: string
+              pattern: ^[A-Za-z0-9_.-]{3,20}$
+            - type: "null"
+      required:
+        - displayName
+      additionalProperties: false
   parameters: {}
 paths:
   /api/health:
@@ -841,7 +1112,8 @@ paths:
     post:
       summary: The next hint for a player's board
       description: Works from the player's marks and the stored solution, which is
-        never sent (PRD FR-12, FR-25).
+        never sent (PRD FR-12, FR-25). For a logged-in player, it marks their
+        ranked attempt at the puzzle as assisted.
       parameters:
         - schema:
             type: string
@@ -1773,6 +2045,502 @@ paths:
                 $ref: "#/components/schemas/Problem"
         "403":
           description: Not an admin, or sent from another site (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/daily:
+    get:
+      summary: A day's daily puzzles, one per size class (today by default)
+      parameters:
+        - schema:
+            type: string
+            example: 2026-10-25
+            description: A UTC day up to today; default today.
+          required: false
+          description: A UTC day up to today; default today.
+          name: day
+          in: query
+      responses:
+        "200":
+          description: The puzzles.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailySet"
+        "400":
+          description: Invalid day.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: A day still to come.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/users/{userId}/daily:
+    get:
+      summary: The logged-in player's streak, last week, today's attempts and best times
+      security:
+        - session: []
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            description: Must be the logged-in user's id; anything else is refused with 403.
+          required: true
+          description: Must be the logged-in user's id; anything else is refused with 403.
+          name: userId
+          in: path
+      responses:
+        "200":
+          description: The summary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailySummary"
+        "400":
+          description: Invalid id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Not logged in.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: The path names another user, or the request came from another site
+            (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many requests; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/users/{userId}/attempts/{puzzleId}:
+    get:
+      summary: The logged-in player's ranked attempt at a daily puzzle
+      security:
+        - session: []
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            description: Must be the logged-in user's id; anything else is refused with 403.
+          required: true
+          description: Must be the logged-in user's id; anything else is refused with 403.
+          name: userId
+          in: path
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+          required: true
+          name: puzzleId
+          in: path
+      responses:
+        "200":
+          description: The attempt, or null.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttemptResult"
+        "400":
+          description: Invalid id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Not logged in.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: The path names another user, or the request came from another site
+            (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No daily puzzle with this id that players can see.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many requests; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    post:
+      summary: Start a ranked attempt at today's daily puzzle
+      description: "One attempt per player and daily (PRD FR-25): the clock starts on
+        the server now and doesn't stop. Starting again returns the attempt
+        already started. Needs a confirmed email."
+      security:
+        - session: []
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            description: Must be the logged-in user's id; anything else is refused with 403.
+          required: true
+          description: Must be the logged-in user's id; anything else is refused with 403.
+          name: userId
+          in: path
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+          required: true
+          name: puzzleId
+          in: path
+      responses:
+        "200":
+          description: The attempt.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StartedAttempt"
+        "400":
+          description: Invalid id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Not logged in.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: The path names another user, the email isn't confirmed, or the
+            request came from another site (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No daily puzzle with this id that players can see.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: "The daily's day is over: it can be played, but not ranked."
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many requests; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/users/{userId}/attempts/{puzzleId}/finish:
+    post:
+      summary: Finish a ranked attempt with the solved board
+      description: "The server checks the board against the stored solution (PRD
+        FR-17, FR-25) and sets the ranked time: the player's own time, but never
+        more than a tenth of the server's time (3 to 15 s) under it. A solve is
+        ranked unless a hint was used or it was faster than the loop can be
+        drawn. Sending it again returns the finished attempt unchanged."
+      security:
+        - session: []
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            description: Must be the logged-in user's id; anything else is refused with 403.
+          required: true
+          description: Must be the logged-in user's id; anything else is refused with 403.
+          name: userId
+          in: path
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+          required: true
+          name: puzzleId
+          in: path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FinishAttemptRequest"
+      responses:
+        "200":
+          description: The finished attempt, with its rank.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StartedAttempt"
+        "400":
+          description: Invalid body, a board that doesn't fit, or not the solution.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Not logged in.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: The path names another user, the email isn't confirmed, or the
+            request came from another site (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No such daily, or no attempt started at it.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Request body larger than 64 KiB.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Request body is not JSON.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many requests; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/leaderboards/daily/{puzzleId}:
+    get:
+      summary: A daily puzzle's leaderboard
+      description: Ranked solves by time; ties go to whoever finished first. When
+        logged in, the player's own row and its neighbours are included even
+        outside the top.
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+          required: true
+          name: puzzleId
+          in: path
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+            example: 10
+          required: false
+          name: limit
+          in: query
+      responses:
+        "200":
+          description: The leaderboard.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Leaderboard"
+        "400":
+          description: Invalid id or query.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No daily puzzle with this id that players can see.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/leaderboards/areas/{area}:
+    get:
+      summary: The all-time leaderboard of one area and level
+      description: Each player's best ranked time on daily puzzles of this area (width
+        × height) and level (PRD FR-23).
+      parameters:
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+            example: 49
+          required: true
+          name: area
+          in: path
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+            example: 10
+          required: false
+          name: limit
+          in: query
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 1
+            example: 1
+          required: false
+          name: level
+          in: query
+      responses:
+        "200":
+          description: The leaderboard.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Leaderboard"
+        "400":
+          description: Invalid area or query.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/users/{userId}/display-name:
+    get:
+      summary: The name the logged-in player shows on leaderboards
+      security:
+        - session: []
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            description: Must be the logged-in user's id; anything else is refused with 403.
+          required: true
+          description: Must be the logged-in user's id; anything else is refused with 403.
+          name: userId
+          in: path
+      responses:
+        "200":
+          description: The name, or null.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DisplayName"
+        "400":
+          description: Invalid id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Not logged in.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: The path names another user, or the request came from another site
+            (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many requests; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    put:
+      summary: Choose, change or remove the name shown on leaderboards
+      description: "3 to 20 of A–Z, a–z, 0–9, _ . or -, with at least one letter or
+        digit. Names are public and unique, ignoring case. Null removes it: the
+        player then shows as anonymous."
+      security:
+        - session: []
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            description: Must be the logged-in user's id; anything else is refused with 403.
+          required: true
+          description: Must be the logged-in user's id; anything else is refused with 403.
+          name: userId
+          in: path
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetDisplayNameRequest"
+      responses:
+        "200":
+          description: The name now.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DisplayName"
+        "400":
+          description: Invalid body, or a name that can't be used.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Not logged in.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: The path names another user, or the request came from another site
+            (CSRF protection).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Another player has this name.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "413":
+          description: Request body larger than 64 KiB.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          description: Request body is not JSON.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many requests; `Retry-After` says when to try again.
           content:
             application/problem+json:
               schema:
