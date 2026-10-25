@@ -3,27 +3,38 @@
   import { auth, tokenFromHash } from "$lib/auth/index.ts";
   import SiteHeader from "$lib/components/SiteHeader.svelte";
 
-  let status: "checking" | "done" | "failed" = $state("checking");
+  let status: "checking" | "ready" | "confirming" | "done" | "failed" = $state("checking");
   let error = $state("");
   let email = $state("");
   let resent = $state(false);
+  // Held here, not in the URL, until the button is pressed. Mail scanners follow links but don't
+  // press buttons, so they can't confirm an address on someone else's behalf.
+  let token: string | null = null;
 
-  onMount(async () => {
-    const token = tokenFromHash(location.hash);
+  onMount(() => {
+    token = tokenFromHash(location.hash);
     // Keep the token out of the history and out of any shared URL.
     history.replaceState(history.state, "", location.pathname);
     if (token === null) {
       status = "failed";
       error = "This link is incomplete. Copy the whole link from the email.";
-      return;
+    } else {
+      status = "ready";
     }
+  });
+
+  async function confirm() {
+    if (token === null) return;
+    status = "confirming";
     const result = await auth.verifyEmail(token);
+    // A link works once; the server refuses a second use, so drop the token either way.
+    token = null;
     if (result.ok) status = "done";
     else {
       status = "failed";
       error = result.message;
     }
-  });
+  }
 
   async function resend(event: SubmitEvent) {
     event.preventDefault();
@@ -43,6 +54,11 @@
   <h1>Confirm email</h1>
   {#if status === "checking"}
     <p role="status">Checking your link…</p>
+  {:else if status === "ready"}
+    <p>Press the button to confirm that this email address is yours.</p>
+    <button type="button" onclick={confirm}>Confirm my email</button>
+  {:else if status === "confirming"}
+    <p role="status">Confirming…</p>
   {:else if status === "done"}
     <p class="done" role="status">Your email is confirmed.</p>
     {#if $auth.status === "user"}

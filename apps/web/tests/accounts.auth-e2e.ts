@@ -67,8 +67,10 @@ test("sign up, confirm the email, log in and log out", async ({ page }) => {
   await expect(page.getByRole("status")).toContainText(`Check your inbox at ${email}`);
 
   await page.goto(await mailedLink(email));
-  await expect(page.getByRole("status")).toHaveText("Your email is confirmed.");
+  await expect(page.getByRole("button", { name: "Confirm my email" })).toBeVisible();
   expect(new URL(page.url()).hash).toBe(""); // the token is gone from the address bar
+  await page.getByRole("button", { name: "Confirm my email" }).click();
+  await expect(page.getByRole("status")).toHaveText("Your email is confirmed.");
 
   await page.getByRole("link", { name: "Log in" }).last().click();
   await expect(page.getByRole("heading", { name: "Log in" })).toBeVisible();
