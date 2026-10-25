@@ -26,13 +26,13 @@ const WRONG = "100000000000";
 const MIDNIGHT = Date.UTC(2026, 9, 26);
 const T0 = MIDNIGHT - 60 * 60 * 1000;
 
-async function setup() {
+async function setup(blobs = new MemoryBlobStore()) {
   const clock = new FakeClock(T0);
   const dailyRepo = new FakeDailyRepository();
   const repo = new FakeAttemptRepository();
   const puzzles = new PuzzleManager({
     puzzles: new FakePuzzleRepository(),
-    blobs: new MemoryBlobStore(),
+    blobs,
     clock,
   });
   await storeDaily(dailyRepo, puzzles, "2026-10-24", "d24");
@@ -183,6 +183,28 @@ describe("AttemptManager.finish", () => {
     await manager.finish("u2", "d25", { edges: SOLVED, elapsedMs: 60_000 });
     manager.recordHint("u2", "d25");
     expect(manager.get("u2", "d25")).toMatchObject({ attempt: { assisted: false }, rank: 1 });
+  });
+
+  test("a hint that lands while finish reads the solution still marks the solve assisted", async () => {
+    const blobs = new MemoryBlobStore();
+    const { clock, manager } = await setup(blobs);
+    manager.start("u1", "d25");
+    clock.advance(60_000);
+    // Hold the solution's read, so the hint is recorded while finish is waiting on it.
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const read = blobs.get.bind(blobs);
+    blobs.get = async (key) => {
+      await held;
+      return read(key);
+    };
+    const finishing = manager.finish("u1", "d25", { edges: SOLVED, elapsedMs: 60_000 });
+    expect(manager.recordHint("u1", "d25")).toBe(true);
+    release();
+    const done = await finishing;
+    expect(done).toMatchObject({ attempt: { assisted: true, ranked: false }, rank: null });
   });
 
   test("sending the solution again, as a retry does, returns the finished attempt unchanged", async () => {

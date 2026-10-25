@@ -135,7 +135,7 @@ describe("GET /api/daily (FR-22)", () => {
   });
 
   test("a daily is served with clues only, no seed or generator version, and only from its day (FR-25)", async () => {
-    const { clock, send } = await setup();
+    const { clock, send, player } = await setup();
     const res = await send("GET", "/api/puzzles/d25");
     expect(res.status).toBe(200);
     const body = (await res.json()) as Puzzle;
@@ -146,6 +146,19 @@ describe("GET /api/daily (FR-22)", () => {
     // Tomorrow's is hidden from the puzzle, hint and progress routes until midnight.
     await expectProblem(await send("GET", "/api/puzzles/d26"), 404);
     await expectProblem(await send("POST", "/api/puzzles/d26/hint", { edges: EMPTY }), 404);
+    const ann = await player("ann@example.com");
+    const progress = {
+      edges: EMPTY,
+      elapsedMs: 1,
+      assisted: false,
+      baseVersion: null,
+      device: "b",
+    };
+    await expectProblem(
+      await send("PUT", `/api/users/${ann.id}/progress/d26`, progress, { cookie: ann.cookie }),
+      404,
+      "Puzzle not found",
+    );
     // Dailies aren't in the practice list.
     expect(await (await send("GET", "/api/puzzles")).json()).toEqual({ items: [] });
     clock.time = MIDNIGHT;
@@ -261,6 +274,22 @@ describe("ranked attempts (FR-17, FR-25)", () => {
       403,
       "Cross-site request refused",
     );
+  });
+
+  test("limits each player to 120 daily requests a minute, shared by the summary and attempt routes", async () => {
+    const { send, player } = await setup();
+    const ann = await player("ann@example.com");
+    for (let i = 0; i < 120; i++) {
+      const res = await send("GET", `/api/users/${ann.id}/daily`, undefined, {
+        cookie: ann.cookie,
+      });
+      expect(res.status).toBe(200);
+    }
+    const limited = await send("POST", `/api/users/${ann.id}/attempts/d25`, undefined, {
+      cookie: ann.cookie,
+    });
+    await expectProblem(limited, 429);
+    expect(limited.headers.get("Retry-After")).toBe("60");
   });
 
   test("only today's daily can be started", async () => {
