@@ -6,6 +6,7 @@ import { openDatabase } from "../adapters/db/database.ts";
 import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
 import { SqlitePuzzleRepository } from "../adapters/db/puzzle-repository.ts";
 import { loadConfig } from "../config.ts";
+import { HintManager } from "../managers/hint-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { createApp } from "./app.ts";
@@ -24,7 +25,8 @@ const jobs = new JobManager({
   newId: () => crypto.randomUUID(),
   maxQueued: config.maxQueuedJobs,
 });
-const app = createApp({ puzzles, jobs, webDir: config.webDir });
+const hints = new HintManager({ puzzles });
+const app = createApp({ puzzles, jobs, hints, webDir: config.webDir });
 
 const server = Bun.serve({
   hostname: config.host,

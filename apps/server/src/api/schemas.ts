@@ -1,4 +1,5 @@
 import { z } from "@hono/zod-openapi";
+import { RULE_IDS } from "@loophole/core";
 
 // Request and response bodies of the HTTP API. These are the wire shapes the OpenAPI document and
 // the generated client are built from; routes translate them to and from domain types.
@@ -94,3 +95,45 @@ export const JobSchema = z
   .openapi("Job");
 
 export const HealthSchema = z.object({ status: z.literal("ok") }).openapi("Health");
+
+export const HintRequestSchema = z
+  .strictObject({
+    edges: z
+      .string()
+      .regex(/^[012]*$/)
+      .max(20_200)
+      .openapi({
+        description:
+          "The player's board: one character per edge, 0 empty, 1 line, 2 cross (docs/FORMAT.md).",
+      }),
+  })
+  .openapi("HintRequest");
+
+const EdgeIndex = z.int().min(0);
+
+export const HintSchema = z
+  .discriminatedUnion("kind", [
+    z.object({ kind: z.literal("solved") }),
+    z.object({
+      kind: z.literal("mistake"),
+      edge: EdgeIndex.openapi({
+        description: "The first edge marked differently from the solution.",
+      }),
+      count: z.int().min(1).openapi({ description: "How many marks are wrong." }),
+    }),
+    z.object({
+      kind: z.literal("step"),
+      rule: z.enum(RULE_IDS),
+      changes: z.array(z.object({ edge: EdgeIndex, state: z.enum(["line", "cross"]) })),
+      cells: z.array(z.int().min(0)),
+      dots: z.array(z.int().min(0)),
+    }),
+    z.object({
+      kind: z.literal("reveal"),
+      edge: EdgeIndex.openapi({ description: "An open edge that is a line in the solution." }),
+    }),
+  ])
+  .openapi("Hint", {
+    description:
+      "The next hint: a wrong mark, the next deduction (rule, edges it decides, cells and dots it rests on), a line from the solution when no rule applies, or solved.",
+  });

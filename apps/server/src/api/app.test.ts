@@ -7,6 +7,7 @@ import { MemoryBlobStore } from "../adapters/blob/memory-blob-store.ts";
 import { openDatabase } from "../adapters/db/database.ts";
 import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
 import { SqlitePuzzleRepository } from "../adapters/db/puzzle-repository.ts";
+import { HintManager } from "../managers/hint-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { FakeClock, sequentialIds } from "../test-support/fakes.ts";
@@ -31,7 +32,12 @@ function setup(options: { webDir?: string; maxQueued?: number } = {}) {
     newId: sequentialIds("j"),
     maxQueued: options.maxQueued ?? 10,
   });
-  const app = createApp({ puzzles, jobs, webDir: options.webDir });
+  const app = createApp({
+    puzzles,
+    jobs,
+    hints: new HintManager({ puzzles }),
+    webDir: options.webDir,
+  });
   const puzzleIds = sequentialIds("p");
   const savePuzzle = () =>
     puzzles.saveGenerated(puzzleIds(), {
@@ -111,6 +117,44 @@ describe("puzzles", () => {
   test("GET /api/puzzles rejects a bad limit", async () => {
     const body = await expectProblem(await setup().app.request("/api/puzzles?limit=0"), 400);
     expect(body.errors?.[0].path).toBe("limit");
+  });
+});
+
+describe("POST /api/puzzles/{id}/hint", () => {
+  test("answers with the next step, in wire shape", async () => {
+    const { app, savePuzzle } = setup();
+    const id = await savePuzzle();
+    const res = await app.request(`/api/puzzles/${id}/hint`, postJson({ edges: "000000000000" }));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { kind: string; changes: { edge: number; state: string }[] };
+    expect(body.kind).toBe("step");
+    for (const { edge, state } of body.changes) {
+      expect(state).toBe(SOLUTION[edge] === "1" ? "line" : "cross");
+    }
+  });
+
+  test("points out a wrong mark and never sends the solution", async () => {
+    const { app, savePuzzle } = setup();
+    const id = await savePuzzle();
+    const res = await app.request(`/api/puzzles/${id}/hint`, postJson({ edges: "200000000000" }));
+    const text = await res.text();
+    expect(JSON.parse(text)).toEqual({ kind: "mistake", edge: 0, count: 1 });
+    expect(text).not.toContain(SOLUTION);
+  });
+
+  test("rejects a board of the wrong size, bad characters and unknown fields", async () => {
+    const { app, savePuzzle } = setup();
+    const id = await savePuzzle();
+    const url = `/api/puzzles/${id}/hint`;
+    const short = await expectProblem(await app.request(url, postJson({ edges: "000" })), 400);
+    expect(short.detail).toContain("expected 12 characters");
+    await expectProblem(await app.request(url, postJson({ edges: "00000000000x" })), 400);
+    await expectProblem(await app.request(url, postJson({ edges: "0", extra: 1 })), 400);
+  });
+
+  test("is 404 for an unknown puzzle", async () => {
+    const { app } = setup();
+    await expectProblem(await app.request("/api/puzzles/nope/hint", postJson({ edges: "" })), 404);
   });
 });
 

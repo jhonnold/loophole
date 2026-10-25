@@ -5,18 +5,21 @@ import { systemClock } from "../adapters/clock.ts";
 import { openDatabase } from "../adapters/db/database.ts";
 import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
 import { SqlitePuzzleRepository } from "../adapters/db/puzzle-repository.ts";
+import { HintManager } from "../managers/hint-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { createApp } from "./app.ts";
 
 export function openApiDocument() {
   const db = openDatabase(":memory:");
+  const puzzles = new PuzzleManager({
+    puzzles: new SqlitePuzzleRepository(db),
+    blobs: new MemoryBlobStore(),
+    clock: systemClock,
+  });
   const app = createApp({
-    puzzles: new PuzzleManager({
-      puzzles: new SqlitePuzzleRepository(db),
-      blobs: new MemoryBlobStore(),
-      clock: systemClock,
-    }),
+    puzzles,
+    hints: new HintManager({ puzzles }),
     jobs: new JobManager({
       jobs: new SqliteJobQueue(db),
       clock: systemClock,

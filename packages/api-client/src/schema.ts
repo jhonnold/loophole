@@ -140,6 +140,87 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/puzzles/{id}/hint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The next hint for a player's board
+         * @description Works from the player's marks and the stored solution, which is never sent (PRD FR-12, FR-25).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["HintRequest"];
+                };
+            };
+            responses: {
+                /** @description The hint. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Hint"];
+                    };
+                };
+                /** @description Invalid id, or a board that does not fit the puzzle. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description No published puzzle with this id. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Request body larger than 64 KiB. */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description Request body is not JSON. */
+                415: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs/generate": {
         parameters: {
             query?: never;
@@ -334,6 +415,39 @@ export interface components {
             meta?: {
                 [key: string]: string;
             };
+        };
+        /** @description The next hint: a wrong mark, the next deduction (rule, edges it decides, cells and dots it rests on), a line from the solution when no rule applies, or solved. */
+        Hint: {
+            /** @enum {string} */
+            kind: "solved";
+        } | {
+            /** @enum {string} */
+            kind: "mistake";
+            /** @description The first edge marked differently from the solution. */
+            edge: number;
+            /** @description How many marks are wrong. */
+            count: number;
+        } | {
+            /** @enum {string} */
+            kind: "step";
+            /** @enum {string} */
+            rule: "clue-zero" | "clue-satisfied" | "clue-needs-all" | "dot-full" | "dot-continue" | "dot-dead-end" | "corner-1" | "corner-3" | "adjacent-3s" | "diagonal-3s" | "premature-loop" | "loop-complete" | "parity" | "lookahead";
+            changes: {
+                edge: number;
+                /** @enum {string} */
+                state: "line" | "cross";
+            }[];
+            cells: number[];
+            dots: number[];
+        } | {
+            /** @enum {string} */
+            kind: "reveal";
+            /** @description An open edge that is a line in the solution. */
+            edge: number;
+        };
+        HintRequest: {
+            /** @description The player's board: one character per edge, 0 empty, 1 line, 2 cross (docs/FORMAT.md). */
+            edges: string;
         };
         Job: {
             id: string;
