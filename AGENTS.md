@@ -25,6 +25,7 @@ Use conventional commits, for example `feat:`, `fix:`, `test:`, `docs:`, `build:
 ## Further reading
 
 - For requirement ids (FR-n, NFR-n) and product scope, see `docs/PRD.md`.
+- The puzzle and board-state wire format, including how cells, dots and edges are numbered, is specified in `docs/FORMAT.md`.
 - Before writing or reorganizing tests, read `docs/TESTING.md`.
 - For colours, type and board anatomy in UI work, see `docs/design/README.md`.
 - Decisions made during the build, and why, are logged in `docs/DECISIONS.md`. Add an entry when you settle a question the docs don't answer.
