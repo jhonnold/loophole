@@ -158,7 +158,7 @@ test("an uncaught error or unhandled rejection is logged as JSON, then the proce
 });
 
 test("a fatal line longer than a pipe's buffer arrives whole before the process exits", async () => {
-  // Writing to stdout first makes the shared pipe non-blocking, as Bun's own logging does.
+  // A write through process.stderr makes Bun set its pipe non-blocking, as in a running server.
   const script = `import { installJsonLogging } from ${JSON.stringify(`${import.meta.dir}/logging.ts`)};
 process.stdout.write("info\\n");
 process.stderr.write("warm\\n");
