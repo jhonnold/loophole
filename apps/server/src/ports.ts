@@ -1,12 +1,4 @@
-import type {
-  Job,
-  JobInput,
-  JobResult,
-  JobStatus,
-  PuzzleRecord,
-  Task,
-  TaskOutcome,
-} from "./domain.ts";
+import type { Job, JobInput, JobResult, PuzzleRecord, Task, TaskOutcome } from "./domain.ts";
 
 /**
  * The interfaces managers depend on. Adapters implement them; the composition roots
@@ -64,7 +56,7 @@ export interface JobQueue {
 
 export type JobEnd =
   | { readonly status: "done"; readonly result: JobResult }
-  | { readonly status: Exclude<JobStatus, "queued" | "running" | "done">; readonly error: string };
+  | { readonly status: "failed" | "timeout"; readonly error: string };
 
 export interface TaskRunOptions {
   /** The task is stopped and reported as `timeout` after this long. */

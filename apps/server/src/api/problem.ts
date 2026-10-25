@@ -1,13 +1,9 @@
+import type { z } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import type { ProblemSchema } from "./schemas.ts";
 
-export interface Problem {
-  type: string;
-  title: string;
-  status: number;
-  detail?: string;
-  errors?: { path: string; message: string }[];
-}
+export type Problem = z.infer<typeof ProblemSchema>;
 
 /**
  * An `application/problem+json` response (RFC 9457). Built with `c.json` so route handlers

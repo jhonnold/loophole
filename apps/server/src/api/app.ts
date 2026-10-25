@@ -29,7 +29,7 @@ export interface AppDeps {
 }
 
 /** Largest request body the API reads. Leaves room for a 100×100 puzzle (about 10 KB). */
-export const MAX_BODY_BYTES = 64 * 1024;
+const MAX_BODY_BYTES = 64 * 1024;
 
 const problemResponse = (description: string) => ({
   description,
