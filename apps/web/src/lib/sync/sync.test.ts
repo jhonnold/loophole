@@ -173,7 +173,12 @@ function manualSchedule() {
 /** Lets fake requests and their handlers finish. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
 
-function setup() {
+/** A signal that never aborts, so only the tests that ask for a timeout see one. */
+const neverAborts = () => new AbortController().signal;
+
+function setup(
+  overrides: { timeout?: () => AbortSignal; backgroundTimeout?: () => AbortSignal } = {},
+) {
   const { server, client } = fakeServer();
   const storage = memoryStorage();
   const timers = manualSchedule();
@@ -187,7 +192,8 @@ function setup() {
       authLost++;
     },
     schedule: timers.schedule,
-    timeout: () => AbortSignal.timeout(50),
+    timeout: overrides.timeout ?? neverAborts,
+    backgroundTimeout: overrides.backgroundTimeout ?? neverAborts,
   });
   const key = (id: string) => `loophole:user:u1:progress:${id}`;
   const unsynced = () => JSON.parse(storage.data.get("loophole:user:u1:unsynced") ?? "[]");
@@ -379,12 +385,36 @@ describe("progress sync: one request per puzzle", () => {
   });
 
   test("opening a puzzle doesn't wait forever on a save the server never answers", async () => {
-    const { server, storage, sync, key, unsynced } = setup();
+    const { server, storage, sync, key, unsynced } = setup({
+      timeout: () => AbortSignal.timeout(50),
+    });
     storage.setItem(key("p1"), JSON.stringify({ v: 1, edges: ONE_LINE, elapsedMs: 5 }));
     storage.setItem("loophole:user:u1:unsynced", '["p1"]');
     server.hang = true;
     expect(await sync.load("p1", grid)).toEqual(board(ONE_LINE, 5));
     expect(unsynced()).toEqual(["p1"]);
+  });
+
+  test("a background save that hangs gives up after its timeout, and is sent again", async () => {
+    const signals: AbortController[] = [];
+    const { server, sync, timers, unsynced } = setup({
+      backgroundTimeout: () => {
+        const aborter = new AbortController();
+        signals.push(aborter);
+        return aborter.signal;
+      },
+    });
+    server.hang = true;
+    sync.save("p1", board(ONE_LINE, 1000));
+    await timers.runAll(); // the PUT goes out and never answers
+    signals[0]?.abort();
+    await settle();
+    expect(unsynced()).toEqual(["p1"]);
+    // The slot is free again: the save goes out on the next pass.
+    server.hang = false;
+    await sync.pushPending();
+    expect(server.records.get("p1")).toMatchObject({ edges: ONE_LINE });
+    expect(unsynced()).toEqual([]);
   });
 
   test("refresh ignores an answer older than a save made while it was out", async () => {
@@ -414,6 +444,52 @@ describe("progress sync: one request per puzzle", () => {
     sync.save("p1", board("000000000000", 7000));
     await timers.runAll();
     expect(server.records.get("p1")?.edges).toBe("000000000000");
+  });
+});
+
+describe("progress sync: start over while a save is out", () => {
+  test("an accepted save that was out when Start over ran doesn't bring the board back", async () => {
+    const { server, storage, sync, timers, key } = setup();
+    server.hold = "PUT";
+    sync.save("p1", board(ONE_LINE, 1000));
+    await timers.runAll();
+    sync.clear("p1");
+    while (server.held.length > 0) {
+      for (const release of server.held.splice(0)) release();
+      await settle();
+    }
+    expect(storage.data.has(key("p1"))).toBe(false);
+    expect(sync.peek("p1", grid)).toBeNull();
+    expect(server.records.has("p1")).toBe(false);
+  });
+
+  test("a refused save that was out when Start over ran doesn't show the other device's board", async () => {
+    const { server, storage, sync, timers, key } = setup();
+    server.records.set("p1", record(TWO_LINES, 2000));
+    const seen: unknown[] = [];
+    sync.watch("p1", grid, (p) => seen.push(p));
+    server.hold = "PUT";
+    sync.save("p1", board(ONE_LINE, 1000));
+    await timers.runAll();
+    sync.clear("p1");
+    while (server.held.length > 0) {
+      for (const release of server.held.splice(0)) release();
+      await settle();
+    }
+    expect(seen).toEqual([]);
+    expect(storage.data.has(key("p1"))).toBe(false);
+    expect(server.records.has("p1")).toBe(false);
+  });
+
+  test("a solved board that is already stored isn't sent again", async () => {
+    const { server, sync, timers } = setup();
+    sync.save("p1", board(SOLVED, 1000));
+    await timers.runAll();
+    const sent = server.requests.length;
+    sync.save("p1", board(SOLVED, 2000));
+    expect(timers.pending()).toEqual([]);
+    await timers.runAll();
+    expect(server.requests.length).toBe(sent);
   });
 });
 

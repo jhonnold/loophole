@@ -190,6 +190,8 @@ export interface ProgressSyncDeps {
   readonly schedule?: Schedule;
   /** A signal that aborts after `LOAD_TIMEOUT_MS`, for requests a screen waits on. */
   readonly timeout?: () => AbortSignal;
+  /** A signal that aborts after `BACKGROUND_TIMEOUT_MS`, for saves no screen waits on. */
+  readonly backgroundTimeout?: () => AbortSignal;
 }
 
 /**
@@ -236,15 +238,6 @@ function classify(status: number): PushResult | "drop" {
   return "drop";
 }
 
-/** A background request (one no screen waits on) gives up after a while; keepalive ones can't. */
-function withTimeout(init: PushInit): PushInit {
-  return {
-    ...init,
-    signal:
-      init.signal ?? (init.keepalive ? undefined : AbortSignal.timeout(BACKGROUND_TIMEOUT_MS)),
-  };
-}
-
 /** Resolves with "retry" when `signal` aborts: a screen stops waiting for a slow server. */
 function untilAborted(signal: AbortSignal): Promise<PushResult> {
   return new Promise((resolve) => {
@@ -257,6 +250,12 @@ export function createProgressSync(deps: ProgressSyncDeps): ProgressSync {
   const { client, storage, userId, device, onAuthLost } = deps;
   const schedule = deps.schedule ?? realSchedule;
   const timeout = deps.timeout ?? (() => AbortSignal.timeout(LOAD_TIMEOUT_MS));
+  const background = deps.backgroundTimeout ?? (() => AbortSignal.timeout(BACKGROUND_TIMEOUT_MS));
+  /** A background request (one no screen waits on) gives up after a while; keepalive ones can't. */
+  const withTimeout = (init: PushInit): PushInit => ({
+    ...init,
+    signal: init.signal ?? (init.keepalive ? undefined : background()),
+  });
   const prefix = userPrefix(userId);
   const boardKey = (puzzleId: string) => `${prefix}progress:${puzzleId}`;
   const unsynced = storedSet(storage, `${prefix}unsynced`);
@@ -352,6 +351,11 @@ export function createProgressSync(deps: ProgressSyncDeps): ProgressSync {
       return "retry";
     }
     const { data, response } = answer;
+    if (deleting.has(puzzleId)) {
+      // Start over ran while this save was out: its answer must not bring the old board back. The
+      // delete waits behind this request (see clear), so the server ends up without the board.
+      return data === undefined && classify(response.status) === "auth" ? "auth" : "ok";
+    }
     if (data === undefined) {
       const result = classify(response.status);
       if (result !== "drop") return result;
@@ -456,6 +460,8 @@ export function createProgressSync(deps: ProgressSyncDeps): ProgressSync {
     save(puzzleId, progress) {
       const here = readSaved(storage, boardKey(puzzleId));
       const saved = fromProgress(progress, here?.version ?? null);
+      // A solved board is final until Start over: sending it again only gets it refused.
+      if (here?.solved && here.version !== null && here.edges === saved.edges) return;
       // Opening a puzzle and leaving it isn't progress, and an empty record would block a later
       // guest import.
       if (here === null && !/[12]/.test(saved.edges)) return;
