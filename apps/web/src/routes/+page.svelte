@@ -2,44 +2,81 @@
   import type { Schemas } from "@loophole/api-client";
   import { createGrid } from "@loophole/core";
   import { onMount } from "svelte";
+  import { auth } from "$lib/auth/index.ts";
+  import BookCover from "$lib/components/BookCover.svelte";
   import GuestImport from "$lib/components/GuestImport.svelte";
   import SiteHeader from "$lib/components/SiteHeader.svelte";
+  import StreakCard from "$lib/components/StreakCard.svelte";
+  import type { DailySet, DailySummary } from "$lib/daily/api.ts";
+  import { countdown, dailyPath, dayHeading, msToNextDay, sizeName, utcDay } from "$lib/daily/days.ts";
+  import { daily } from "$lib/daily/index.ts";
+  import { type CoverStatus, coverStatus } from "$lib/daily/view.ts";
   import { formatClock } from "$lib/game/timer.ts";
   import { inProgress, localProgress } from "$lib/sync/index.ts";
   import type { PageProps } from "./$types";
 
   let { data }: PageProps = $props();
 
-  type Status = { kind: "new" } | { kind: "playing" | "solved"; clock: string };
-  let statuses: Record<string, Status> = $state({});
+  let statuses: Record<string, CoverStatus> = $state({});
   // A logged-in player's unsolved puzzles from the server, so they can carry on from any device.
   let resume: Schemas["ProgressSummary"][] = $state([]);
+  // Today's daily puzzles: undefined while loading, null when the server can't be reached.
+  let today = $state<DailySet | null | undefined>(undefined);
+  let summary: DailySummary | null = $state(null);
+  let dailyStatuses: Record<number, CoverStatus> = $state({});
+  let now = $state(Date.now());
+
+  const day = $derived(today?.day ?? utcDay(now));
+
+  async function progressOf(id: string, width: number, height: number) {
+    return localProgress(id, createGrid(width, height));
+  }
+
+  async function refreshDaily() {
+    today = await daily.day();
+    const user = $auth.status === "user" ? $auth.user : null;
+    summary = user === null ? null : await daily.summary(user.id);
+    for (const p of today?.puzzles ?? []) {
+      const attempt = summary?.attempts.find((a) => a.puzzleId === p.puzzleId);
+      const progress = p.puzzleId === null ? null : await progressOf(p.puzzleId, p.size, p.size);
+      dailyStatuses[p.size] = coverStatus({ size: p.size, ready: p.puzzleId !== null, attempt, progress });
+    }
+  }
 
   async function refresh() {
     for (const p of data.puzzles) {
-      const saved = await localProgress(p.id, createGrid(p.width, p.height));
-      statuses[p.id] =
-        saved === null
-          ? { kind: "new" }
-          : { kind: saved.solved ? "solved" : "playing", clock: formatClock(saved.elapsedMs) };
+      const saved = await progressOf(p.id, p.width, p.height);
+      statuses[p.id] = coverStatus({ size: p.width, ready: true, progress: saved });
     }
     resume = await inProgress();
   }
 
   onMount(() => {
     refresh();
+    // New puzzles come out at 00:00 UTC; the countdown reaches it and the covers change.
+    let shownDay = utcDay(Date.now());
+    const tick = setInterval(() => {
+      now = Date.now();
+      if (utcDay(now) !== shownDay) {
+        shownDay = utcDay(now);
+        void refreshDaily();
+      }
+    }, 1000);
+    return () => clearInterval(tick);
+  });
+
+  // Covers and the streak depend on who is logged in, so load them once that is known.
+  let loadedFor: string | null = null;
+  $effect(() => {
+    if ($auth.status === "loading") return;
+    const who = $auth.status === "user" ? $auth.user.id : "guest";
+    if (who === loadedFor) return;
+    loadedFor = who;
+    void refreshDaily();
   });
 
   function nameOf(id: string): string {
     return data.puzzles.find((p) => p.id === id)?.name ?? "Puzzle";
-  }
-
-  // Pale cover tints per size class (design kit, Colour). Text on covers is always ink.
-  function tint(width: number): string {
-    if (width <= 7) return "#F2C4CE";
-    if (width <= 10) return "#E8DFC4";
-    if (width <= 20) return "#C8DAE6";
-    return "#D5E3C2";
   }
 </script>
 
@@ -51,54 +88,108 @@
 
 <main class="page">
   <GuestImport dismissible onimported={refresh} />
-  {#if resume.length > 0}
-    <h2>Continue</h2>
-    <ul class="resume">
-      {#each resume as r (r.puzzleId)}
+
+  <div class="heading">
+    <span class="date">{dayHeading(day)}</span>
+    <h1>Today's puzzles</h1>
+    <span class="next" role="timer">New puzzles in {countdown(msToNextDay(now))}</span>
+  </div>
+
+  {#if $auth.status === "user" && summary !== null}
+    {#if $auth.user.emailVerified}
+      <StreakCard streak={summary.streak} week={summary.week} />
+    {:else}
+      <p class="card">Confirm your email to play daily puzzles ranked and keep a streak.</p>
+    {/if}
+  {:else if $auth.status === "guest"}
+    <p class="card">With an account, your daily solves are ranked and you keep a streak.</p>
+  {/if}
+
+  {#if today === null}
+    <p class="card">Daily puzzles need the server, which can't be reached right now. The practice puzzles below work offline.</p>
+  {:else if today !== undefined}
+    <ul class="covers daily" aria-label="Today's daily puzzles">
+      {#each today.puzzles as p (p.size)}
         <li>
-          <a href="/play/{r.puzzleId}">
-            <b>{nameOf(r.puzzleId)} · {r.width}×{r.height}</b>
-            <span>In progress · {formatClock(r.elapsedMs)}</span>
-          </a>
+          <BookCover
+            href={p.puzzleId === null ? null : dailyPath(today.day, p.size)}
+            width={p.size}
+            height={p.size}
+            name={sizeName(p.size)}
+            status={dailyStatuses[p.size] ?? coverStatus({ size: p.size, ready: p.puzzleId !== null })}
+          />
         </li>
       {/each}
     </ul>
   {/if}
-  <h1>Practice puzzles</h1>
-  <ul class="covers">
-    {#each data.puzzles as p (p.id)}
-      {@const status = statuses[p.id] ?? { kind: "new" }}
-      <li>
-        <a class="cover" href="/play/{p.id}" style:background={tint(p.width)}>
-          <span class="badge">{p.width}×{p.height}</span>
-          <span class="kana">スリザーリンク</span>
-          <span class="name">{p.name}</span>
-          <span class="paper" aria-hidden="true"></span>
-          <span class="status">
-            {#if status.kind === "solved"}
-              <span class="stamp" aria-hidden="true">完</span>Solved · {status.clock}
-            {:else if status.kind === "playing"}
-              <span class="dot" aria-hidden="true"></span>In progress · {status.clock}
-            {:else}
-              <span class="dot hollow" aria-hidden="true"></span>New · not started
-            {/if}
-          </span>
-        </a>
-      </li>
-    {/each}
-  </ul>
+
+  {#if resume.length > 0}
+    <section class="section" aria-labelledby="continue-h">
+      <h2 id="continue-h">Continue</h2>
+      <ul class="resume">
+        {#each resume as r (r.puzzleId)}
+          <li>
+            <a href="/play/{r.puzzleId}">
+              <b>{nameOf(r.puzzleId)} · {r.width}×{r.height}</b>
+              <span>In progress · {formatClock(r.elapsedMs)}</span>
+            </a>
+          </li>
+        {/each}
+      </ul>
+    </section>
+  {/if}
+
+  <section class="section" aria-labelledby="practice-h">
+    <div class="section-head">
+      <h2 id="practice-h">Practice <span class="jp">練習</span></h2>
+      <span class="soft">fresh, proven unique</span>
+    </div>
+    <ul class="covers">
+      {#each data.puzzles as p (p.id)}
+        <li>
+          <BookCover
+            href="/play/{p.id}"
+            width={p.width}
+            height={p.height}
+            name={p.name}
+            status={statuses[p.id] ?? coverStatus({ size: p.width, ready: true })}
+          />
+        </li>
+      {/each}
+    </ul>
+  </section>
 </main>
 
 <style>
-
   .page {
     max-width: 960px;
     margin: 0 auto;
     padding: 16px 16px calc(24px + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .heading {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .date,
+  .next {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ink-soft);
+  }
+
+  .next {
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
   }
 
   h1 {
-    margin: 0 0 14px;
+    margin: 0;
     font-family: var(--font-display);
     font-weight: 900;
     font-size: 32px;
@@ -106,15 +197,48 @@
   }
 
   h2 {
-    margin: 0 0 10px;
+    margin: 0;
     font-family: var(--font-display);
     font-weight: 900;
-    font-size: 22px;
+    font-size: 20px;
+  }
+
+  .jp {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ink-soft);
+  }
+
+  .section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .soft {
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+
+  .card {
+    margin: 0;
+    padding: 10px 14px;
+    background: var(--sheet);
+    border: 2px solid var(--ink);
+    border-radius: 6px;
+    font-size: 15px;
   }
 
   .resume {
     list-style: none;
-    margin: 0 0 20px;
+    margin: 0;
     padding: 0;
     display: flex;
     flex-direction: column;
@@ -148,86 +272,14 @@
     gap: 12px;
   }
 
-  .cover {
-    position: relative;
-    height: 184px;
-    padding: 12px;
-    border-radius: 6px;
-    color: #1e1c19;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+  /* Today's four covers: two by two on phones (Home artboard), one row on wide screens. */
+  .covers.daily {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .cover:hover {
-    color: #1e1c19;
-    outline: 2px solid #1e1c19;
-  }
-
-  .badge {
-    position: absolute;
-    top: 0;
-    right: 0;
-    padding: 5px 9px;
-    border-radius: 0 6px 0 6px;
-    background: #23355e;
-    color: #fffdf8;
-    font-size: 13px;
-    font-weight: 700;
-  }
-
-  .kana {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-  }
-
-  .name {
-    font-family: var(--font-display);
-    font-weight: 900;
-    font-size: 24px;
-    line-height: 1;
-  }
-
-  .paper {
-    flex: 1 1 auto;
-    border: 2px solid #1e1c19;
-    background-color: #fffdf8;
-    background-image: radial-gradient(#1e1c19 1.3px, transparent 1.6px);
-    background-size: 12px 12px;
-    background-position: 4px 4px;
-  }
-
-  .status {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    font-weight: 700;
-  }
-
-  .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #2e4c8a;
-  }
-
-  .dot.hollow {
-    background: none;
-    border: 1.5px solid #1e1c19;
-  }
-
-  .stamp {
-    width: 18px;
-    height: 18px;
-    border: 2px solid #c23b22;
-    border-radius: 4px;
-    color: #c23b22;
-    font-family: var(--font-display);
-    font-size: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  @media (min-width: 720px) {
+    .covers.daily {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
   }
 </style>
