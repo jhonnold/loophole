@@ -6,8 +6,12 @@ coverage/
 .env
 .env.*
 !.env.example
+!.env.production.example
+!.env.garage.example
 .svelte-kit/
 build/
 test-results/
 playwright-report/
 /data/
+/backups/
+ops/garage-metrics-token
