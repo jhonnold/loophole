@@ -9,6 +9,7 @@ import {
   FakePuzzleRepository,
   FakeSubmissionRepository,
   FakeTaskRunner,
+  noDailies,
   sequentialIds,
 } from "../test-support/fakes.ts";
 import { RateLimitedError } from "./errors.ts";
@@ -219,6 +220,7 @@ describe("SubmissionManager.complete", () => {
       tasks: new FakeTaskRunner(async () => outcome),
       puzzles,
       submissions: manager,
+      dailies: noDailies,
       clock,
       settings: {
         generateTimeoutMs: 60_000,

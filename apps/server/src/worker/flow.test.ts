@@ -12,6 +12,7 @@ import { JobRunManager } from "../managers/job-run-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { accountDeps } from "../test-support/accounts.ts";
 import { dailyDeps } from "../test-support/daily.ts";
+import { noDailies } from "../test-support/fakes.ts";
 import { sqliteProgress } from "../test-support/progress.ts";
 import { submissionDeps } from "../test-support/submissions.ts";
 
@@ -38,6 +39,7 @@ function setup(verifyTimeoutMs = 10_000) {
     tasks: new ThreadTaskRunner(),
     puzzles,
     submissions,
+    dailies: noDailies,
     clock: systemClock,
     settings: {
       generateTimeoutMs: 10_000,
