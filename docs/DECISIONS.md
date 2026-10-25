@@ -75,3 +75,53 @@ Entry format:
 - **Question:** The base tsconfig loads Bun's types everywhere, so Bun globals would typecheck in core's runtime code. How is that prevented?
 - **Decision:** Core's main tsconfig sets `types: []` and excludes tests and the test-support folder; a second config, `tsconfig.test.json`, checks everything with Bun's types. The package's `typecheck` script runs both.
 - **Reason:** The compiler then rejects `Bun`, `console` and DOM globals in shipped core code, with no extra lint rules.
+
+## 2026-10-25 · WT4 `web-board` · SvelteKit 2, not 3
+- **Question:** Which SvelteKit major should the web app use?
+- **Decision:** `@sveltejs/kit` 2.70.3 with `@sveltejs/adapter-static` 3.0.10, `@sveltejs/vite-plugin-svelte` 7.3.1, Vite 8.3.4 and Svelte 5.57.2.
+- **Reason:** Kit 3.x needs Node 22.17 or later, and the dev host runs Node 20. Kit 2.70 supports Vite 8, Svelte 5 runes and TypeScript 6. Moving to Kit 3 later is a version bump plus its migration notes.
+
+## 2026-10-25 · WT4 `web-board` · Web tests: plain modules under bun, components under Playwright
+- **Question:** The root `bun test` collects every `*.test.ts`, but Bun can't load `.svelte` files or `$lib`/`$app` imports. How are web tests run?
+- **Decision:** Game logic lives in plain TypeScript modules that import only relative paths and `@loophole/core`; their tests run in the root `bun test`. Components are covered by Playwright tests (`*.e2e.ts`), run with `bun run test:e2e`, outside the gate. `@playwright/test` is pinned to 1.62.1 because that release uses the Chromium build already installed on the dev host.
+- **Reason:** One test runner for unit tests, no second config for the gate, and no browser download in CI. The end-to-end tests still cover the 360×560 and 390×664 checks from the design kit.
+
+## 2026-10-25 · WT4 `web-board` · Web app type-checks without Bun types
+- **Question:** The base tsconfig loads Bun's types, which would let Bun globals typecheck in browser code.
+- **Decision:** The web app's main tsconfig sets `types: []` and leaves out tests and test helpers; `tsconfig.test.json` adds Bun's types for them. The `typecheck` script runs `svelte-check` with the first and `tsc` with the second.
+- **Reason:** Same approach as the core package: a stray `Bun.` in app code fails the typecheck.
+
+## 2026-10-25 · WT4 `web-board` · Biome lints Svelte files but doesn't format them
+- **Question:** Should Biome cover `.svelte` files?
+- **Decision:** `html.experimentalFullSupportEnabled` is on, so Biome lints `.svelte` files with the template in view (no false "unused" reports for variables used in markup). Its HTML formatter stays off, so `.svelte` files are not formatted.
+- **Reason:** Biome 2.6's Svelte formatter is experimental and rewrites markup whitespace; linting with full support works without false positives.
+
+## 2026-10-25 · WT4 `web-board` · Self-hosted fonts
+- **Question:** Load Zen Maru Gothic and Zen Kaku Gothic New from Google Fonts or self-host them?
+- **Decision:** Self-host with the `@fontsource` packages (Kaku 400/500/700, Maru 700/900).
+- **Reason:** No request to a third party on every visit, and the end-to-end tests work offline. The build carries about 20 MB of font subsets, but each browser downloads only the `unicode-range` subsets a page uses.
+
+## 2026-10-25 · WT4 `web-board` · Tap, drag and keyboard input
+- **Question:** How exactly do tap, drag and the keyboard cursor behave (FR-13, NFR-5)?
+- **Decision:** A press that moves less than max(8 px, a quarter cell) is a tap: on release, the edge whose diamond holds the press point cycles line → cross → empty. A longer move is a drag stroke that follows the dots nearest the pointer and marks the edge between each pair of consecutive dots; it erases lines if its first edge was a line and draws lines otherwise (drawing over crosses). A stroke is one undo step. Only one pointer is tracked; pinch-zoom comes with the large-grid work. The keyboard cursor moves along rows that alternate between horizontal and vertical edges: left and right stay in the row, up and down step to the next row on the left side of the column. Space or Enter cycles, X crosses, Backspace or Delete empties; Z and Y (or Ctrl/⌘+Z, Ctrl/⌘+Shift+Z, Ctrl+Y) undo and redo, P pauses.
+- **Reason:** Dot-to-dot strokes ignore finger wobble across neighbouring diamonds, and erasing from a line makes mistakes easy to fix with the same gesture. Every edge is reachable with the arrow keys, and each key does what the Desktop artboard lists.
+
+## 2026-10-25 · WT4 `web-board` · Board size
+- **Question:** How big are cells on each screen?
+- **Decision:** The board fits the space under the header: cells up to 58 px (the Desktop artboard), at least 44 px on touch screens and 24 px with a mouse. The board never gets wider than the screen (NFR-2): a 10×10 on a 360 px phone gets 30 px cells until pinch-zoom arrives. On phones the board's size depends only on the viewport, not on the notes under it, so it doesn't jump while you play. Phones narrower than 380 px use a 14 px gutter so a 7×7 keeps 44 px cells, as on the Small artboard.
+- **Reason:** Follows the design kit's sizes; the 44 px minimum for wide boards on small phones needs zoom and pan, which is the next web phase.
+
+## 2026-10-25 · WT4 `web-board` · Timer, pause and guest progress
+- **Question:** When does the clock run, and what is saved for guests (FR-14, FR-21)?
+- **Decision:** The clock starts when the puzzle opens, stops on pause and on solve, and pauses (hiding the board) when the tab is hidden. Guest progress is saved in `localStorage` under `loophole:progress:<puzzle id>` as `{v: 1, edges, elapsedMs, solved}`, with edges in the wire format's edge-state encoding, after every move, pause, solve, tab hide and page exit. Undo history is not saved. A solved puzzle opens solved and locked, with a "Start over" button that clears its progress.
+- **Reason:** Leaving the tab shouldn't count as solve time, and a phone may discard a hidden tab without warning. The stored object has a version so a later format (or the sync in FR-21) can tell it apart.
+
+## 2026-10-25 · WT4 `web-board` · Theme details the design kit leaves open
+- **Question:** The kit gives no dark solved wash, and its Night artboard frame has no shadow. How is the theme chosen and stored?
+- **Decision:** In Night the solved wash is shu at 16% opacity and the board frame has no offset shadow. The choice (Paper, Night or System) is stored under `loophole:theme`; no value means follow the system. A small inline script in the page head applies it before first paint.
+- **Reason:** A shu tint keeps the "inside is warm" reading of the Paper wash on a dark sheet, and applying the theme before paint avoids a light flash for dark-mode users.
+
+## 2026-10-25 · WT4 `web-board` · Built-in puzzles and no Hint button yet
+- **Question:** Which puzzles does the app ship before the server exists, and what goes in the tool tray?
+- **Decision:** Three fixtures in wire format: a 5×5 made for this phase, the 7×7 from the Play artboard and the 10×10 from the Night and Desktop artboards. Each has one solution, checked by a search before they were added. Their solutions live only in the test helpers. The tray has Undo, Redo and Clear; the Hint button arrives with hints.
+- **Reason:** Real unique puzzles at the kit's sizes exercise the same paths as served ones, and a Hint button that does nothing would mislead.

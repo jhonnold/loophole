@@ -4,7 +4,7 @@ Loophole is a web app for Slitherlink, the Japanese loop puzzle: draw one closed
 
 ## Status
 
-Early development. The repo has the build tooling, the local dev services, the design kit, and the start of the puzzle engine: the grid model, the wire format, rule checks for play, a brute-force solution counter for tests, and a seeded random number generator. The solver, generator, server and web app are being built in phases; each phase's plan is in [`docs/plans/`](docs/plans/).
+Early development. The repo has the build tooling, the local dev services, the design kit, the start of the puzzle engine (the grid model, the wire format, rule checks for play, a brute-force solution counter for tests, and a seeded random number generator) and a first web app. The web app plays a few built-in puzzles on phones and desktops: tap or drag to draw, keyboard play, undo and redo, a pausable timer, error highlighting, solve detection, light and dark themes, and progress saved in the browser. The solver, generator and server are being built in phases; each phase's plan is in [`docs/plans/`](docs/plans/).
 
 ## Quickstart
 
@@ -18,6 +18,26 @@ Install dependencies and run the full check (lint, typecheck, tests):
 ```sh
 bun install
 bun run check
+```
+
+### Web app
+
+```sh
+bun run dev:web
+```
+
+Then open http://localhost:5173. Puzzles come from a few built-in fixtures until the server exists. `bun run --cwd apps/web build` writes the static site to `apps/web/build/`; `bun run --cwd apps/web preview` serves that build.
+
+The end-to-end tests drive the built app in Chromium at the design kit's phone sizes (360×560 and 390×664) and on a desktop. They are not part of `bun run check`. The first time, install the browser:
+
+```sh
+cd apps/web && bunx playwright install chromium
+```
+
+Then run them from the repo root:
+
+```sh
+bun run test:e2e
 ```
 
 ### Local services
@@ -49,12 +69,15 @@ All of these credentials are for local development only. `docker compose down` s
 | `bun run format` | Apply Biome fixes |
 | `bun run typecheck` | Run each workspace's `typecheck` script |
 | `bun run test` | Run all tests with `bun test` |
+| `bun run dev:web` | Start the web app's dev server on port 5173 |
+| `bun run test:e2e` | Build the web app and run its Playwright tests |
 
 ## Repository layout
 
 ```
 packages/core      Puzzle engine shared by server and web
-apps/              Server and web app (coming in later phases)
+apps/web           Player web app (SvelteKit, single-page)
+apps/              The server comes in a later phase
 infra/garage/      Garage config for local development
 scripts/           Dev helper scripts
 docs/PRD.md        Product requirements

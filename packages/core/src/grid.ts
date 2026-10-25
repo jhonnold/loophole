@@ -144,3 +144,18 @@ export function edgeCoords(grid: Grid, edge: number): EdgeCoords {
   const v = edge - grid.hEdgeCount;
   return { horizontal: false, row: Math.floor(v / (grid.width + 1)), col: v % (grid.width + 1) };
 }
+
+export interface Coords {
+  readonly row: number;
+  readonly col: number;
+}
+
+/** Row and column of a cell; inverts `cellIndex`. */
+export function cellCoords(grid: Grid, cell: number): Coords {
+  return { row: Math.floor(cell / grid.width), col: cell % grid.width };
+}
+
+/** Row and column of a dot; inverts `dotIndex`. */
+export function dotCoords(grid: Grid, dot: number): Coords {
+  return { row: Math.floor(dot / (grid.width + 1)), col: dot % (grid.width + 1) };
+}

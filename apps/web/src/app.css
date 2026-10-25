@@ -1,0 +1,120 @@
+/* Design tokens from docs/design/README.md. Paper (light) is the default; Night (dark) applies when
+   the user picks it, or when they follow the system and the system is dark. */
+:root {
+  color-scheme: light;
+  --ground: #f4efe3;
+  --sheet: #fffdf8;
+  --ink: #1e1c19;
+  --ink-soft: #5b554b;
+  --pencil: #8c8476;
+  --hairline: #ddd3c0;
+  --shu: #c23b22;
+  --ai: #2e4c8a;
+  --ai-wash: rgb(46 76 138 / 0.12);
+  --solved-wash: #f8e1e6;
+  --disabled: #a69e90;
+  --on-ink: #fffdf8;
+  --frame-shadow: var(--ink);
+  --font-ui: "Zen Kaku Gothic New", system-ui, sans-serif;
+  --font-display: "Zen Maru Gothic", "Zen Kaku Gothic New", system-ui, sans-serif;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: #111827;
+  --sheet: #1a2438;
+  --ink: #ece4d3;
+  --ink-soft: #a7afbf;
+  --pencil: #6f7a8f;
+  --hairline: #2c3850;
+  --shu: #f2785e;
+  --ai: #8fb1f0;
+  --ai-wash: rgb(143 177 240 / 0.16);
+  --solved-wash: rgb(242 120 94 / 0.16);
+  --disabled: #5e6880;
+  --on-ink: #111827;
+  --frame-shadow: transparent;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: #111827;
+    --sheet: #1a2438;
+    --ink: #ece4d3;
+    --ink-soft: #a7afbf;
+    --pencil: #6f7a8f;
+    --hairline: #2c3850;
+    --shu: #f2785e;
+    --ai: #8fb1f0;
+    --ai-wash: rgb(143 177 240 / 0.16);
+    --solved-wash: rgb(242 120 94 / 0.16);
+    --disabled: #5e6880;
+    --on-ink: #111827;
+    --frame-shadow: transparent;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* No pull-to-refresh or scroll chaining while drawing on a phone. */
+  overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.4;
+  -webkit-tap-highlight-color: transparent;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--ai);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  touch-action: manipulation;
+}
+
+kbd {
+  font-family: inherit;
+  font-size: 12px;
+  padding: 1px 6px;
+  border: 1.5px solid var(--hairline);
+  border-radius: 4px;
+  color: var(--ink-soft);
+}
+
+:focus-visible {
+  outline: 3px solid var(--ai);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
