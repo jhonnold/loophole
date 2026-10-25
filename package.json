@@ -14,7 +14,8 @@
     "test": "bun test",
     "check": "bun run lint && bun run typecheck && bun run test",
     "dev:web": "bun run --cwd apps/web dev",
-    "test:e2e": "bun run --cwd apps/web test:e2e"
+    "test:e2e": "bun run --cwd apps/web test:e2e",
+    "test:perf": "bun run --cwd apps/web test:perf"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.3",
