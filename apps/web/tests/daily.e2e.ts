@@ -276,9 +276,14 @@ test.describe("leaderboard page (FR-23)", () => {
     await page.getByRole("button", { name: "All time" }).click();
     await page.getByRole("button", { name: "Today", exact: true }).click();
     await expect(page.getByRole("listitem").filter({ hasText: "tsuru" })).toBeVisible();
+    const late = page.waitForResponse("**/api/leaderboards/areas/**");
     release();
-    await expect.poll(() => answered).toBe(true);
-    await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 300)));
+    await late;
+    expect(answered).toBe(true);
+    // Let the page handle the late answer (two frames) before checking it was ignored.
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    );
     await expect(page.getByText("49 cells · today")).toBeVisible();
     await expect(page.getByText("slowpoke")).toHaveCount(0);
   });
