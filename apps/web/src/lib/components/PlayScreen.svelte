@@ -8,6 +8,7 @@
     createBoard,
     type EdgeChange,
     hasMarks,
+    type Move,
     redo,
     undo,
   } from "../game/board.ts";
@@ -95,8 +96,16 @@
     save();
   }
 
+  // The move the last edit made, while it is still on top of history. A drag stroke's later steps
+  // join the stroke's move only while it is still there; an undo or redo in the middle of a stroke
+  // starts a new step instead, so one undo never removes the stroke and an earlier move together.
+  let lastEdit: Move | undefined;
+
   function edit(changes: EdgeChange[], merge: boolean) {
-    if (!locked) update(applyChanges(board, changes, merge));
+    if (locked) return;
+    const join = merge && board.past.at(-1) === lastEdit;
+    update(applyChanges(board, changes, join));
+    lastEdit = board.past.at(-1);
   }
 
   function setPaused(value: boolean) {

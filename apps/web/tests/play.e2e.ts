@@ -1,4 +1,4 @@
-import { createGrid, hEdgeIndex, vEdgeIndex } from "@loophole/core";
+import { createGrid, dotIndex, hEdgeIndex, vEdgeIndex } from "@loophole/core";
 import { expect, test } from "@playwright/test";
 import { FIXTURE_SOLUTIONS } from "../src/lib/test-support/solutions.ts";
 import { crosses, dotPoints, edgePoint, lines, scrollsSideways, touchDrag } from "./board.ts";
@@ -138,6 +138,31 @@ test.describe("desktop keyboard (NFR-5)", () => {
     await expect(crosses(page)).toHaveCount(0);
     await page.keyboard.press("p");
     await expect(page.getByText("一時停止")).toBeVisible();
+  });
+
+  test("undo in the middle of a drag keeps the stroke apart from earlier moves (FR-13, FR-14)", async ({
+    page,
+  }) => {
+    await page.goto("/play/small-7");
+    const dots = await dotPoints(page);
+    const dot = (row: number, col: number) => dots[dotIndex(grid7, row, col)];
+    const tap = await edgePoint(page, grid7, hEdgeIndex(grid7, 6, 0));
+    await page.mouse.click(tap.x, tap.y);
+    await expect(lines(page)).toHaveCount(1);
+    await page.mouse.move(dot(0, 0).x, dot(0, 0).y);
+    await page.mouse.down();
+    await page.mouse.move(dot(0, 1).x, dot(0, 1).y);
+    await page.mouse.move(dot(0, 2).x, dot(0, 2).y);
+    await expect(lines(page)).toHaveCount(3);
+    // Undo while the button is still held: removes the stroke so far.
+    await page.keyboard.press("z");
+    await expect(lines(page)).toHaveCount(1);
+    await page.mouse.move(dot(0, 3).x, dot(0, 3).y);
+    await page.mouse.up();
+    await expect(lines(page)).toHaveCount(2);
+    // The last step of the stroke is its own undo step, so one undo leaves the tapped line.
+    await page.keyboard.press("z");
+    await expect(lines(page)).toHaveCount(1);
   });
 
   test("tabbing to the board shows the edge cursor (NFR-5)", async ({ page }) => {
