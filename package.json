@@ -16,6 +16,7 @@
     "dev:web": "bun run --cwd apps/web dev",
     "test:e2e": "bun run --cwd apps/web test:e2e",
     "test:perf": "bun run --cwd apps/web test:perf",
+    "test:e2e:auth": "bun run --cwd apps/web test:e2e:auth",
     "dev:api": "bun --watch apps/server/src/api/main.ts",
     "dev:worker": "bun --watch apps/server/src/worker/main.ts",
     "gen:api": "bun apps/server/scripts/gen-api.ts",
