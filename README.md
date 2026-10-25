@@ -44,7 +44,7 @@ They serve the build on port 4173; set `E2E_PORT` to use another, for example wh
 
 They include accessibility checks (axe-core's WCAG 2.2 A and AA rules, contrast among them) on the main screens in both themes, and CI runs them too.
 
-`bun run test:perf` runs the frame-time checks for drawing and zooming large boards, with the CPU slowed to stand in for a mid-range phone, and the time to first interaction on a phone with a slow network (PRD §10). They are kept apart because their timings depend on the machine; run them on an idle host. A puzzle and the home page take their first input in about 1.6 s there, under the 2 s target, because only the fonts' Latin subsets hold up the first paint (`docs/DECISIONS.md`, "Time to first interaction").
+`bun run test:perf` runs the frame-time checks for drawing and zooming large boards, with the CPU slowed to stand in for a mid-range phone, and the time to first interaction on a phone with a slow network (PRD §10). They are kept apart because their timings depend on the machine; run them on an idle host. A puzzle takes its first move in about 1.2 s there, and Home, once its session and today's set have answered, in about 1.9 s, under the 2 s target; only the fonts' Latin subsets hold up the first paint (`docs/DECISIONS.md`, "Time to first interaction").
 
 ### Local services
 
