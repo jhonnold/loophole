@@ -206,6 +206,35 @@ test.describe("Solved screen (Solved artboard, FR-23, FR-24)", () => {
     await page.getByRole("button", { name: "Play again, unranked" }).click();
     await expect(page.getByText("Playing again for practice")).toBeVisible();
   });
+
+  test("share copies the result when the phone cannot share it, and says so", async ({ page }) => {
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.addInitScript(() => Object.defineProperty(navigator, "share", { value: undefined }));
+    await mockDailyApi(page, {
+      user: true,
+      attempt: attempt({ status: "finished", elapsedMs: 198_000, ranked: true, rank: 214 }),
+      progress: SOLUTION,
+    });
+    await page.goto(`/daily/${TODAY}/7`);
+    await page.getByRole("button", { name: "Share result" }).click();
+    await expect(page.getByRole("status")).toHaveText("Result copied.");
+  });
+
+  test("share hands the result to the phone's share sheet and says it was shared", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "share", { value: async () => {}, configurable: true });
+    });
+    await mockDailyApi(page, {
+      user: true,
+      attempt: attempt({ status: "finished", elapsedMs: 198_000, ranked: true, rank: 214 }),
+      progress: SOLUTION,
+    });
+    await page.goto(`/daily/${TODAY}/7`);
+    await page.getByRole("button", { name: "Share result" }).click();
+    await expect(page.getByRole("status")).toHaveText("Result shared.");
+  });
 });
 
 test.describe("leaderboard page (FR-23)", () => {

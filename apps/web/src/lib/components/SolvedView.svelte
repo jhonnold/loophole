@@ -27,7 +27,8 @@
   let edges: Uint8Array | null = $state.raw(null);
   let board = $state<Leaderboard | null | undefined>(undefined);
   let best: number | null = $state(null);
-  let shared = $state(false);
+  // What the share button did last: "Result copied." or "Result shared." (empty if nothing was sent).
+  let shareNote = $state("");
 
   const nextSize = $derived(DAILY_SIZES[DAILY_SIZES.indexOf(size) + 1]);
   const note = $derived(
@@ -58,11 +59,15 @@
   async function share() {
     const text = shareText(sizeName(size), size, shortDay(day), attempt);
     try {
-      if (navigator.share) await navigator.share({ text });
-      else await navigator.clipboard.writeText(text);
-      shared = true;
+      if (navigator.share) {
+        await navigator.share({ text });
+        shareNote = "Result shared.";
+      } else {
+        await navigator.clipboard.writeText(text);
+        shareNote = "Result copied.";
+      }
     } catch {
-      shared = false;
+      shareNote = "";
     }
   }
 </script>
@@ -80,7 +85,7 @@
       <span class="subtitle">{entry.subtitle}</span>
     </div>
     <button type="button" class="round" onclick={share}>
-      <span class="visually-hidden">{shared ? "Result copied" : "Share result"}</span>
+      <span class="visually-hidden">{shareNote || "Share result"}</span>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" /></svg>
     </button>
   </header>
@@ -92,7 +97,7 @@
         <span class="kanji" aria-hidden="true">完</span><span class="word" aria-hidden="true">SOLVED</span>
       </div>
       <p class="note">{note}</p>
-      {#if shared}<p class="note" role="status">Result copied.</p>{/if}
+      {#if shareNote}<p class="note" role="status">{shareNote}</p>{/if}
     </div>
   </div>
 
