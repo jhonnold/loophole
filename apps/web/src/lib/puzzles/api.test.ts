@@ -47,6 +47,11 @@ describe("apiSource", () => {
     expect(await apiSource(client).get("nope")).toBeNull();
   });
 
+  test("an id the API rejects as malformed is not found", async () => {
+    const { client } = clientFor({ "/api/puzzles/p1": [400, { title: "Invalid request" }] });
+    expect(await apiSource(client).get("p1")).toBeNull();
+  });
+
   test("other failures throw", async () => {
     const error: [number, unknown] = [500, { title: "Internal server error" }];
     const { client } = clientFor({ "/api/puzzles": error, "/api/puzzles/p1": error });

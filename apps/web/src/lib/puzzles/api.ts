@@ -29,7 +29,8 @@ export function apiSource(client: ApiClient): PuzzleSource {
       const { data, response } = await client.GET("/api/puzzles/{id}", {
         params: { path: { id } },
       });
-      if (response.status === 404) return null;
+      // A 400 means the id is malformed (say, over 64 characters), so no puzzle has it.
+      if (response.status === 404 || response.status === 400) return null;
       if (data === undefined)
         throw new Error(`Could not load puzzle ${id} (HTTP ${response.status})`);
       const { width, height } = data.puzzle;
