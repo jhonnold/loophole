@@ -5,3 +5,35 @@ export class QueueFullError extends Error {
     this.name = "QueueFullError";
   }
 }
+
+/** The email and password don't match an account. Says nothing about which one was wrong. */
+export class InvalidCredentialsError extends Error {
+  constructor() {
+    super("The email or password is wrong.");
+    this.name = "InvalidCredentialsError";
+  }
+}
+
+/** The sign-up form's CAPTCHA token was refused. */
+export class CaptchaFailedError extends Error {
+  constructor() {
+    super("The CAPTCHA check failed. Try again.");
+    this.name = "CaptchaFailedError";
+  }
+}
+
+/** An email verification or password reset link is unknown, used or expired. */
+export class InvalidTokenError extends Error {
+  constructor() {
+    super("This link is invalid or has expired.");
+    this.name = "InvalidTokenError";
+  }
+}
+
+/** Too many attempts for this account or address; try again after `retryAfterMs`. */
+export class RateLimitedError extends Error {
+  constructor(readonly retryAfterMs: number) {
+    super("Too many attempts. Try again later.");
+    this.name = "RateLimitedError";
+  }
+}

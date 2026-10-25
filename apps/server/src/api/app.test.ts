@@ -10,6 +10,7 @@ import { SqlitePuzzleRepository } from "../adapters/db/puzzle-repository.ts";
 import { HintManager } from "../managers/hint-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
+import { accountDeps } from "../test-support/accounts.ts";
 import { FakeClock, sequentialIds } from "../test-support/fakes.ts";
 import { createApp } from "./app.ts";
 import type { Problem } from "./problem.ts";
@@ -35,6 +36,7 @@ function setup(options: { webDir?: string; maxQueued?: number } = {}) {
   const app = createApp({
     puzzles,
     jobs,
+    ...accountDeps(db, clock),
     hints: new HintManager({ puzzles }),
     webDir: options.webDir,
   });
@@ -155,6 +157,16 @@ describe("POST /api/puzzles/{id}/hint", () => {
   test("is 404 for an unknown puzzle", async () => {
     const { app } = setup();
     await expectProblem(await app.request("/api/puzzles/nope/hint", postJson({ edges: "" })), 404);
+  });
+
+  test("refuses a POST from another site (CSRF protection)", async () => {
+    const { app, savePuzzle } = setup();
+    const id = await savePuzzle();
+    const res = await app.request(`/api/puzzles/${id}/hint`, {
+      ...postJson({ edges: "000000000000" }),
+      headers: { "Content-Type": "application/json", "Sec-Fetch-Site": "cross-site" },
+    });
+    await expectProblem(res, 403);
   });
 });
 

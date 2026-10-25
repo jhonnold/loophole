@@ -95,3 +95,36 @@ export type TaskOutcome =
   | { readonly status: "done"; readonly output: TaskOutput }
   | { readonly status: "failed"; readonly error: string }
   | { readonly status: "timeout" };
+
+/** A registered player (PRD §5). Holds only what NFR-6 allows: the email and the password hash. */
+export interface UserRecord {
+  readonly id: string;
+  /** Trimmed and lower-cased; unique. */
+  readonly email: string;
+  /** argon2id, in PHC string format. */
+  readonly passwordHash: string;
+  /** When the email was confirmed, or null while it is unverified. */
+  readonly emailVerifiedAt: number | null;
+  /** Set only by the admin script (`bun run admin`), for unpublishing and system health. */
+  readonly isAdmin: boolean;
+  readonly createdAt: number;
+}
+
+/** A login session. The cookie holds the token; only its hash is stored. */
+export interface SessionRecord {
+  readonly tokenHash: string;
+  readonly userId: string;
+  readonly createdAt: number;
+  readonly expiresAt: number;
+}
+
+export type AccountTokenPurpose = "verify-email" | "reset-password";
+
+/** A single-use token mailed to a user. Only its hash is stored. */
+export interface AccountTokenRecord {
+  readonly tokenHash: string;
+  readonly userId: string;
+  readonly purpose: AccountTokenPurpose;
+  readonly createdAt: number;
+  readonly expiresAt: number;
+}

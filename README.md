@@ -4,7 +4,7 @@ Loophole is a web app for Slitherlink, the Japanese loop puzzle: draw one closed
 
 ## Status
 
-Early development. The repo has the build tooling, the local dev services, the design kit, the puzzle engine (the grid model, the wire format, rule checks for play, a brute-force solution counter for tests, a seeded random number generator, a rule-based solver that records each deduction for hints, a verifier that says whether a puzzle has one solution, none, several, or could not be decided in time, and a generator that makes a puzzle with exactly one solution from a seed) and a first web app. The web app plays a few built-in puzzles on phones and desktops: tap or drag to draw, keyboard play, undo and redo, a pausable timer, error highlighting, solve detection, light and dark themes, and progress saved in the browser. A Hint button (or H) shows the next forced deduction from the player's board, with the rule's name, a one-line explanation and its pattern drawn small, or points out a mark that doesn't fit; using one marks the attempt as assisted. Boards too big for the screen zoom and pan (pinch, wheel or the zoom buttons) with an overview map, and boards over 30×30 draw on a canvas. The server has its foundation: an HTTP API that serves puzzles, gives hints from each puzzle's stored solution and queues generation jobs, and a worker that generates puzzles in the background with progress and a time limit, keeping each solution in blob storage. The web app lists the server's puzzles after its built-in ones. Accounts, daily puzzles and the rest come in later phases; each phase's plan is in [`docs/plans/`](docs/plans/).
+Early development. The repo has the build tooling, the local dev services, the design kit, the puzzle engine (the grid model, the wire format, rule checks for play, a brute-force solution counter for tests, a seeded random number generator, a rule-based solver that records each deduction for hints, a verifier that says whether a puzzle has one solution, none, several, or could not be decided in time, and a generator that makes a puzzle with exactly one solution from a seed) and a first web app. The web app plays a few built-in puzzles on phones and desktops: tap or drag to draw, keyboard play, undo and redo, a pausable timer, error highlighting, solve detection, light and dark themes, and progress saved in the browser. A Hint button (or H) shows the next forced deduction from the player's board, with the rule's name, a one-line explanation and its pattern drawn small, or points out a mark that doesn't fit; using one marks the attempt as assisted. Boards too big for the screen zoom and pan (pinch, wheel or the zoom buttons) with an overview map, and boards over 30×30 draw on a canvas. The server has its foundation: an HTTP API that serves puzzles, gives hints from each puzzle's stored solution and queues generation jobs, and a worker that generates puzzles in the background with progress and a time limit, keeping each solution in blob storage. The web app lists the server's puzzles after its built-in ones. Players can sign up with an email and password (behind a CAPTCHA, with email confirmation), log in and out, reset a forgotten password and delete their account; guests play exactly as before. Daily puzzles and the rest come in later phases; each phase's plan is in [`docs/plans/`](docs/plans/).
 
 ## Quickstart
 
@@ -58,7 +58,7 @@ The init script is safe to run again. To pick up the dev settings, copy `.env.ex
 | Garage S3 API | http://localhost:3900 | Region `garage`, bucket `loophole-dev`; credentials in `.env.example` |
 | Garage admin API | http://localhost:3903 | `/health`; `/metrics` needs `Authorization: Bearer loophole-dev-metrics-token` |
 | Mailpit SMTP | localhost:1025 | No auth |
-| Mailpit web UI | http://localhost:8025 | Shows captured mail |
+| Mailpit web UI | http://localhost:8025 | Shows captured mail, such as verification and password reset links |
 
 All of these credentials are for local development only. `docker compose down` stops the services. `docker compose down -v` also deletes their data, so run the init script again afterwards.
 
@@ -82,6 +82,23 @@ curl -s -X POST localhost:3000/api/puzzles/<puzzle id>/hint -H 'content-type: ap
 
 The hint takes the player's board in the edge-state encoding (docs/FORMAT.md) and answers with a wrong mark, the next deduction, a line from the solution when no rule applies, or "solved". The API is described in [`openapi.yaml`](openapi.yaml). To serve the built web app from the API as in production, build it (`bun run --cwd apps/web build`) and set `WEB_DIR=apps/web/build` in `.env`.
 
+### Accounts in development
+
+With the API and `bun run dev:web` running, open http://localhost:5173/signup. The sign-up check is Cloudflare Turnstile with Cloudflare's test keys from `.env.example`, so it always passes and the widget says "For testing only". In production, set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` to a real widget's keys (Turnstile's free plan is enough). The API refuses to start with the test secret unless `PUBLIC_URL` is on `localhost` or `127.0.0.1`, and warns while it is in use there. Verification and password reset mail goes to Mailpit: open http://localhost:8025 and follow the link. Links point at `PUBLIC_URL`.
+
+Mail goes over SMTP (the `SMTP_*` settings). Off loopback the connection must upgrade to TLS with STARTTLS, and a server that doesn't offer it is refused. For a relay on a private network that doesn't offer STARTTLS (such as a Docker service named `mailpit`), set `SMTP_REQUIRE_TLS=false`; set it to `true` to require STARTTLS on loopback too.
+
+The session cookie is always `Secure`. Chromium and curl accept it on `http://localhost`, so development needs no HTTPS. In production, serve the site over HTTPS, and set `TRUST_PROXY=true` when a reverse proxy sits in front of the API, so rate limits see each client's own address. Set it only when the API is reachable solely through that proxy (bind `HOST` to loopback or the internal network): otherwise a client can send its own `X-Forwarded-For` and choose its rate-limit address.
+
+There is no admin UI. To make an account an admin (for unpublishing puzzles and the health view in later phases), run from the repo root:
+
+```sh
+bun run admin you@example.com            # grant
+bun run admin you@example.com --revoke   # take away
+```
+
+`bun run test:e2e:auth` builds the web app, starts the API serving it on port 4174 with a fresh database, and goes through sign-up, the emailed link, login and logout in Chromium. It needs Mailpit running and access to challenges.cloudflare.com, and skips itself without them.
+
 ## Scripts
 
 | Command | What it does |
@@ -98,6 +115,8 @@ The hint takes the player's board in the edge-state encoding (docs/FORMAT.md) an
 | `bun run check:api` | Fail if `openapi.yaml` or the API client is out of date (part of the check) |
 | `bun run test:e2e` | Build the web app and run its Playwright tests |
 | `bun run test:perf` | Build the web app and run its frame-time checks |
+| `bun run test:e2e:auth` | Build the web app, serve it from the API and run the account end-to-end test (needs Mailpit) |
+| `bun run admin <email>` | Make an account an admin; `--revoke` takes it away |
 | `bun run --cwd packages/core bench` | Time puzzle verification on 10×10 to 100×100 boards (not part of the check) |
 | `bun run --cwd packages/core bench:generate` | Time puzzle generation on 7×7 to 100×100 boards and measure loop acceptance (not part of the check) |
 

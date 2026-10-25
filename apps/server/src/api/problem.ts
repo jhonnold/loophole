@@ -1,7 +1,7 @@
 import type { z } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import type { ProblemSchema } from "./schemas.ts";
+import { ProblemSchema } from "./schemas.ts";
 
 export type Problem = z.infer<typeof ProblemSchema>;
 
@@ -18,3 +18,9 @@ export function problem<S extends ContentfulStatusCode>(
   const body: Problem = { type: "about:blank", title, status, ...extra };
   return c.json(body, status, { "Content-Type": "application/problem+json" });
 }
+
+/** An error response in a route's OpenAPI definition. */
+export const problemResponse = (description: string) => ({
+  description,
+  content: { "application/problem+json": { schema: ProblemSchema } },
+});
