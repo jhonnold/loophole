@@ -26,6 +26,8 @@ export class SqliteJobQueue implements JobQueue {
   readonly #insert;
   readonly #get;
   readonly #countQueued;
+  readonly #countActive;
+  readonly #listFailed;
   readonly #claim;
   readonly #progress;
   readonly #heartbeat;
@@ -40,6 +42,12 @@ export class SqliteJobQueue implements JobQueue {
     this.#get = db.query<JobRow, { id: string }>("SELECT * FROM jobs WHERE id = $id");
     this.#countQueued = db.query<{ n: number }, []>(
       "SELECT count(*) AS n FROM jobs WHERE status = 'queued'",
+    );
+    this.#countActive = db.query<{ status: JobStatus; n: number; oldest: number }, []>(
+      "SELECT status, count(*) AS n, min(created_at) AS oldest FROM jobs WHERE status IN ('queued', 'running') GROUP BY status",
+    );
+    this.#listFailed = db.query<JobRow, { limit: number }>(
+      "SELECT * FROM jobs WHERE status IN ('failed', 'timeout') ORDER BY finished_at DESC, rowid DESC LIMIT $limit",
     );
     this.#claim = db.query<JobRow, { worker: string; now: number }>(
       `UPDATE jobs
@@ -100,6 +108,23 @@ export class SqliteJobQueue implements JobQueue {
 
   countQueued(): number {
     return this.#countQueued.get()?.n ?? 0;
+  }
+
+  countActive(): { queued: number; running: number; oldestQueuedAt: number | null } {
+    const counts = { queued: 0, running: 0, oldestQueuedAt: null as number | null };
+    for (const row of this.#countActive.all()) {
+      if (row.status === "queued") {
+        counts.queued = row.n;
+        counts.oldestQueuedAt = row.oldest;
+      } else {
+        counts.running = row.n;
+      }
+    }
+    return counts;
+  }
+
+  listFailed(limit: number): Job[] {
+    return this.#listFailed.all({ limit }).map(fromRow);
   }
 
   claimNext(workerId: string, now: number): Job | null {

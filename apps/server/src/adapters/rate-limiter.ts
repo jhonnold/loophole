@@ -12,15 +12,17 @@ const MAX_KEYS = 100_000;
 
 /**
  * Fixed-window counters in memory. Enough for the single API process; the counts reset when it
- * restarts.
+ * restarts. `onEvict` is called whenever a key is dropped to make room: a sign of a flood.
  */
 export class MemoryRateLimiter implements RateLimiter {
   readonly #clock: Clock;
+  readonly #onEvict: () => void;
   readonly #windows = new Map<string, { start: number; windowMs: number; count: number }>();
   #lastPruneAt = Number.NEGATIVE_INFINITY;
 
-  constructor(clock: Clock) {
+  constructor(clock: Clock, onEvict: () => void = () => {}) {
     this.#clock = clock;
+    this.#onEvict = onEvict;
   }
 
   /** How many keys are being counted. */
@@ -38,7 +40,10 @@ export class MemoryRateLimiter implements RateLimiter {
     if (w === undefined && this.#windows.size >= MAX_KEYS) {
       // Map iterates in insertion order, so the first key is the oldest one held.
       const oldest = this.#windows.keys().next();
-      if (!oldest.done) this.#windows.delete(oldest.value);
+      if (!oldest.done) {
+        this.#windows.delete(oldest.value);
+        this.#onEvict();
+      }
     }
     if (w === undefined || now >= w.start + w.windowMs) {
       w = { start: now, windowMs: rule.windowMs, count: 0 };

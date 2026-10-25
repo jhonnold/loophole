@@ -13,6 +13,7 @@ import type {
   ReportRecord,
   SessionRecord,
   SubmissionRecord,
+  SubmissionVerdict,
   Task,
   TaskOutcome,
   UserRecord,
@@ -114,6 +115,14 @@ export class FakeSubmissionRepository implements SubmissionRepository {
     this.records.set(id, { ...record, ...decision });
     return true;
   }
+
+  countByVerdict(): Partial<Record<SubmissionVerdict, number>> {
+    const counts: Partial<Record<SubmissionVerdict, number>> = {};
+    for (const r of this.records.values()) {
+      if (r.verdict !== null) counts[r.verdict] = (counts[r.verdict] ?? 0) + 1;
+    }
+    return counts;
+  }
 }
 
 /** Reports in an array. `published` says which puzzles count as published for the list. */
@@ -173,6 +182,23 @@ export class FakeJobQueue implements JobQueue {
 
   countQueued(): number {
     return [...this.jobs.values()].filter((j) => j.status === "queued").length;
+  }
+
+  countActive(): { queued: number; running: number; oldestQueuedAt: number | null } {
+    const all = [...this.jobs.values()];
+    const queued = all.filter((j) => j.status === "queued");
+    return {
+      queued: queued.length,
+      running: all.filter((j) => j.status === "running").length,
+      oldestQueuedAt: queued.length === 0 ? null : Math.min(...queued.map((j) => j.createdAt)),
+    };
+  }
+
+  listFailed(limit: number): Job[] {
+    return [...this.jobs.values()]
+      .filter((j) => j.status === "failed" || j.status === "timeout")
+      .sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0))
+      .slice(0, limit);
   }
 
   claimNext(workerId: string, now: number): Job | null {

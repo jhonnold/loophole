@@ -59,6 +59,8 @@ function setup(runner: FakeTaskRunner, settings = SETTINGS) {
   });
   /** Daily generations handed to the scheduler, as `job:day`. */
   const dailies: string[] = [];
+  /** Jobs counted as ended, as `kind:status:seconds`. */
+  const finished: string[] = [];
   const manager = new JobRunManager({
     jobs,
     tasks: runner,
@@ -71,6 +73,9 @@ function setup(runner: FakeTaskRunner, settings = SETTINGS) {
     },
     clock,
     settings,
+    metrics: {
+      jobFinished: (kind, status, seconds) => finished.push(`${kind}:${status}:${seconds}`),
+    },
   });
   const enqueue = (id: string) =>
     jobs.enqueue({
@@ -78,7 +83,7 @@ function setup(runner: FakeTaskRunner, settings = SETTINGS) {
       job: { kind: "generate", input: { width: 2, height: 2, seed: "s" } },
       createdAt: clock.now(),
     });
-  return { clock, jobs, puzzleRepo, blobs, manager, enqueue, dailies };
+  return { clock, jobs, puzzleRepo, blobs, manager, enqueue, dailies, finished };
 }
 
 describe("JobRunManager.runNext", () => {
@@ -148,6 +153,19 @@ describe("JobRunManager.runNext", () => {
     await manager.runNext("w");
     expect(jobs.get("j1")).toMatchObject({ status: "timeout", result: null });
     expect(jobs.get("j1")?.error).toContain("60 s");
+  });
+
+  test("counts each job's end with its kind, status and running time", async () => {
+    let during = () => {};
+    const runner = new FakeTaskRunner(async () => {
+      during();
+      return { status: "timeout" };
+    });
+    const { manager, enqueue, clock, finished } = setup(runner);
+    during = () => clock.advance(2500);
+    enqueue("j1");
+    await manager.runNext("w");
+    expect(finished).toEqual(["generate:timeout:2.5"]);
   });
 
   test("a task error, or a failure storing the result, ends the job as failed", async () => {

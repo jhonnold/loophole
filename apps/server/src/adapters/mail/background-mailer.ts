@@ -4,16 +4,20 @@ import type { Mailer, MailMessage } from "../../ports.ts";
  * Hands mail to `inner` without waiting for it: `send` resolves at once, and a failure is only
  * logged. The API then answers before the SMTP round trip, so neither its timing nor an SMTP error
  * shows whether an email has an account. The log line leaves out the message, which holds a token.
+ * `onFailure` is called for each failure too, so a mail outage shows up in the metrics.
  */
 export class BackgroundMailer implements Mailer {
   readonly #inner: Mailer;
+  readonly #onFailure: () => void;
 
-  constructor(inner: Mailer) {
+  constructor(inner: Mailer, onFailure: () => void = () => {}) {
     this.#inner = inner;
+    this.#onFailure = onFailure;
   }
 
   async send(message: MailMessage): Promise<void> {
     this.#inner.send(message).catch((err: unknown) => {
+      this.#onFailure();
       console.error(`Sending mail failed: ${reason(err)}`);
     });
   }

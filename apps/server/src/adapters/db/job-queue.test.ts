@@ -113,4 +113,21 @@ describe("SqliteJobQueue", () => {
     expect(queue.get("a")?.error).toContain("stopped responding");
     expect(queue.get("b")?.status).toBe("queued");
   });
+
+  test("countActive counts waiting and running jobs; listFailed is newest first", () => {
+    const queue = queueWith("a", "b", "c", "d");
+    expect(queue.countActive()).toEqual({ queued: 4, running: 0, oldestQueuedAt: 100 });
+    queue.claimNext("w", 1);
+    queue.claimNext("w", 1);
+    queue.claimNext("w", 1);
+    expect(queue.countActive()).toEqual({ queued: 1, running: 3, oldestQueuedAt: 103 });
+    queue.finish("a", "w", { status: "failed", error: "boom" }, 5);
+    queue.finish("b", "w", { status: "timeout", error: "too slow" }, 6);
+    queue.finish("c", "w", { status: "done", result: { kind: "generate", puzzleId: "c" } }, 7);
+    expect(queue.countActive()).toEqual({ queued: 1, running: 0, oldestQueuedAt: 103 });
+    expect(queue.listFailed(10).map((j) => j.id)).toEqual(["b", "a"]);
+    expect(queue.listFailed(1).map((j) => j.id)).toEqual(["b"]);
+    queue.claimNext("w", 8);
+    expect(queue.countActive()).toEqual({ queued: 0, running: 1, oldestQueuedAt: null });
+  });
 });

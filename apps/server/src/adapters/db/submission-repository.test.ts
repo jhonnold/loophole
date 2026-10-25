@@ -62,6 +62,16 @@ describe("SqliteSubmissionRepository", () => {
     expect(repo.get("a")?.verdict).toBe("multiple");
   });
 
+  test("countByVerdict counts decided submissions only", () => {
+    const { repo } = setup();
+    for (const id of ["a", "b", "c", "d"]) repo.insert(record(id, "u1", 1));
+    const rejected = { status: "rejected", puzzleId: null, decidedAt: 9 } as const;
+    repo.decide("a", { ...rejected, verdict: "unknown" });
+    repo.decide("b", { ...rejected, verdict: "unknown" });
+    repo.decide("c", { ...rejected, verdict: "multiple" });
+    expect(repo.countByVerdict()).toEqual({ unknown: 2, multiple: 1 });
+  });
+
   test("deleting the account deletes its submissions", () => {
     const { db, repo } = setup();
     repo.insert(record("a", "u1", 1));

@@ -22,12 +22,15 @@ test("counts each key on its own", () => {
 });
 
 test("at 100,000 keys, a new key evicts the oldest one instead of being refused", () => {
-  const limiter = new MemoryRateLimiter(new FakeClock(0));
+  let evictions = 0;
+  const limiter = new MemoryRateLimiter(new FakeClock(0), () => evictions++);
   for (let i = 0; i < 100_000; i++) limiter.hit(`k${i}`, RULE);
+  expect(evictions).toBe(0);
   limiter.hit("k0", RULE);
   limiter.hit("k0", RULE); // k0 is now at its limit of 3
   expect(limiter.hit("k0", RULE).allowed).toBe(false);
   expect(limiter.hit("new", RULE)).toEqual({ allowed: true });
+  expect(evictions).toBe(1);
   expect(limiter.size).toBe(100_000);
   expect(limiter.hit("k0", RULE)).toEqual({ allowed: true }); // k0 was the oldest, so it's gone
 });
