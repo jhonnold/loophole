@@ -1,4 +1,5 @@
 import { expect } from "@playwright/test";
+import { E2E_AUTH_PORT } from "./ports.ts";
 
 const MAILPIT_API = "http://127.0.0.1:8025/api/v1";
 
@@ -34,7 +35,8 @@ export async function mailedLink(to: string): Promise<string> {
         ).json()) as {
           Text: string;
         };
-        link = message.Text.match(/http:\/\/localhost:4174(\/\S+#token=\S+)/)?.[1] ?? "";
+        const pattern = new RegExp(`http://localhost:${E2E_AUTH_PORT}(/\\S+#token=\\S+)`);
+        link = message.Text.match(pattern)?.[1] ?? "";
         return link;
       },
       { timeout: 10_000 },

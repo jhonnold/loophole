@@ -18,7 +18,9 @@
         <span>Loophole</span>
       </a>
       <nav class="main" aria-label="Main">
+        <a href="/" aria-current={page.url.pathname === "/" ? "page" : undefined}>Today</a>
         <a href="/create" aria-current={page.url.pathname === "/create" ? "page" : undefined}>Create</a>
+        <a href="/leaderboard" aria-current={page.url.pathname === "/leaderboard" ? "page" : undefined}>Ranks</a>
       </nav>
     </div>
     <nav class="nav">
@@ -50,6 +52,14 @@
     max-width: 1280px;
   }
 
+  /* The editor's page has 24px gutters from 900px up; its header lines up with them. */
+  @media (min-width: 900px) {
+    .top-inner.wide {
+      padding-left: 24px;
+      padding-right: 24px;
+    }
+  }
+
   .brand {
     display: flex;
     align-items: center;
@@ -62,8 +72,14 @@
 
   .start {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 16px;
+    gap: 0 16px;
+  }
+
+  .main {
+    display: flex;
+    gap: 4px;
   }
 
   /* Main navigation (Editor artboard): the current page is underlined in shu. */

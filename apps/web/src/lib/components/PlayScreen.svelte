@@ -1,6 +1,7 @@
 <script lang="ts">
   import { analyzeBoard } from "@loophole/core";
   import { onDestroy, onMount, tick } from "svelte";
+  import type { RankedPlay } from "../daily/view.ts";
   import {
     applyChanges,
     type Board,
@@ -43,9 +44,14 @@
 
   interface Props {
     entry: PuzzleEntry;
+    /**
+     * Set for a ranked daily attempt: the clock counts from the attempt's start on the server and
+     * never pauses, solving calls `onsolve`, and there is no Start over.
+     */
+    ranked?: RankedPlay;
   }
 
-  let { entry }: Props = $props();
+  let { entry, ranked }: Props = $props();
 
   const puzzle = $derived(entry.puzzle);
   const grid = $derived(puzzle.grid);
@@ -83,6 +89,7 @@
   const messages = $derived(solved ? [] : violationMessages(analysis.violations));
   const clock = $derived(formatClock(elapsed(watch, now)));
   const locked = $derived(paused || solved || !ready);
+  const assistedLabel = $derived(ranked ? "Hint used · unranked" : "Hint used");
 
   // Board sizing. On phones the stage holds just the board, and an empty spacer under the notes
   // takes the rest of the height, so stage + spacer is the room the board may use; that sum does not
@@ -175,7 +182,8 @@
     hintOpen = false;
     assisted = saved?.assisted ?? false;
     now = performance.now();
-    watch = createStopwatch(saved?.elapsedMs ?? 0);
+    // The ranked clock keeps running from the attempt's start.
+    if (!ranked) watch = createStopwatch(saved?.elapsedMs ?? 0);
     const done = analyzeBoard(puzzle, board.edges).solved;
     if (done) paused = false;
     else if (!paused) watch = start(watch, now);
@@ -239,7 +247,8 @@
   });
 
   function setPaused(value: boolean) {
-    if (!ready || solved || value === paused) return;
+    // A ranked attempt's clock never stops, so it has no pause.
+    if (!ready || solved || value === paused || ranked) return;
     paused = value;
     const t = performance.now();
     watch = value ? stop(watch, t) : start(watch, t);
@@ -288,8 +297,10 @@
   // Solving stops the clock and records the result (FR-17, client side).
   $effect(() => {
     if (solved && isRunning(watch)) {
-      watch = stop(watch, performance.now());
+      const t = performance.now();
+      watch = stop(watch, t);
       save();
+      ranked?.onsolve(board.edges, elapsed(watch, t));
     }
   });
 
@@ -310,9 +321,12 @@
         watch = createStopwatch(saved.elapsedMs);
         assisted = saved.assisted;
       }
+      if (ranked) watch = createStopwatch(ranked.elapsedMs);
       synced = opened.synced;
       now = performance.now();
       if (!analyzeBoard(puzzle, board.edges).solved) watch = start(watch, now);
+      // Solved before the server heard of it (the answer was lost): send it now.
+      else ranked?.onsolve(board.edges, elapsed(watch, now));
       ready = true;
     });
 
@@ -359,14 +373,14 @@
     </div>
     <div class="pill">
       <span class="clock" role="timer">{clock}</span>
-      <PauseButton {paused} disabled={solved} ontoggle={() => setPaused(!paused)} />
+      <PauseButton {paused} disabled={solved || ranked !== undefined} ontoggle={() => setPaused(!paused)} />
     </div>
   </header>
 
   <p class="status">
     <span><b>{analysis.satisfiedClues}</b> of {analysis.clueCount} clues satisfied</span>
     <!-- One line only: the tag takes the zoom tip's place once a hint is used. -->
-    {#if assisted}<span class="assisted">Hint used</span>
+    {#if assisted}<span class="assisted">{assistedLabel}</span>
     {:else if zoomable}<span>Pinch or use +/− to zoom</span>{/if}
   </p>
 
@@ -414,9 +428,9 @@
           <span class="label">Time</span>
           <span class="big-clock">{clock}</span>
           <span class="soft"><b>{analysis.satisfiedClues}</b> of {analysis.clueCount} clues satisfied</span>
-          {#if assisted}<span class="assisted">Hint used</span>{/if}
+          {#if assisted}<span class="assisted">{assistedLabel}</span>{/if}
         </div>
-        <button type="button" class="outline" disabled={solved} onclick={() => setPaused(!paused)}>
+        <button type="button" class="outline" disabled={solved || ranked !== undefined} onclick={() => setPaused(!paused)}>
           {paused ? "Resume" : "Pause"} <kbd>P</kbd>
         </button>
       </div>
@@ -426,10 +440,10 @@
           <div class="card solved-card">
             <div class="solved-text">
               <span class="solved-title">Solved in {clock}</span>
-              {#if assisted}<span class="assisted">Hint used</span>{/if}
-              <span class="soft">{synced ? "Saved to your account." : "Saved on this device."}</span>
+              {#if assisted}<span class="assisted">{assistedLabel}</span>{/if}
+              <span class="soft">{ranked ? ranked.status : synced ? "Saved to your account." : "Saved on this device."}</span>
             </div>
-            <button type="button" class="primary" onclick={startOver}>Start over</button>
+            {#if !ranked}<button type="button" class="primary" onclick={startOver}>Start over</button>{/if}
           </div>
         {:else if hint !== null && hintOpen && !paused}
           <HintCard {grid} view={hint} onapply={applyHint} onlater={closeHint} />
