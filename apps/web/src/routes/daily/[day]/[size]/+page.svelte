@@ -21,7 +21,8 @@
   let starting = $state(false);
   let startError = $state("");
   let rankedStatus = $state("Checking your solve…");
-  let sending = false;
+  // The puzzle whose solve is being sent, if any.
+  let sendingFor: string | null = null;
   // Stops a send still retrying when the page goes away; the solve stays on the device.
   const controller = new AbortController();
   onDestroy(() => controller.abort());
@@ -83,13 +84,17 @@
   }
 
   async function send(id: string, puzzleId: string, solve: { edges: string; elapsedMs: number } | null) {
-    if (sending) return;
-    sending = true;
-    rankedStatus = "Checking your solve…";
+    if (sendingFor === puzzleId) return;
+    sendingFor = puzzleId;
+    // The page may have moved on to another size (Next) while this send retries: only the puzzle on
+    // screen takes its status and attempt; the solve itself stays on the device until sent.
+    const shown = () => data.entry?.id === puzzleId;
+    if (shown()) rankedStatus = "Checking your solve…";
     const outcome = await finisherFor(id).send(puzzleId, solve, controller.signal, () => {
-      rankedStatus = "Couldn't reach the server. Your solve is saved here and will be sent again.";
+      if (shown()) rankedStatus = "Couldn't reach the server. Your solve is saved here and will be sent again.";
     });
-    sending = false;
+    if (sendingFor === puzzleId) sendingFor = null;
+    if (!shown()) return;
     if (outcome.kind === "done") attempt = outcome.attempt;
     else if (outcome.kind === "failed") rankedStatus = outcome.message;
   }
