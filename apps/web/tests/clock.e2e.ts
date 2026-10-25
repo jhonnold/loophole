@@ -1,5 +1,5 @@
 import { createGrid, hEdgeIndex } from "@loophole/core";
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, test } from "@playwright/test";
 import { FIXTURE_SOLUTIONS } from "../src/lib/test-support/solutions.ts";
 import { board, edgePoint, lines } from "./board.ts";
 
@@ -8,29 +8,41 @@ import { board, edgePoint, lines } from "./board.ts";
 
 const grid7 = createGrid(7, 7);
 
+/** Seconds on the clock's "mm:ss" text. */
+function toSeconds(text: string | null): number {
+  const [minutes, seconds] = (text ?? "0:0").split(":").map(Number);
+  return minutes * 60 + seconds;
+}
+
+function readSeconds(clock: Locator): Promise<number> {
+  return clock.textContent().then(toSeconds);
+}
+
 test.use({ viewport: { width: 390, height: 664 }, hasTouch: true, isMobile: true });
 
 test("the clock stops on pause and on solve, and a solved board takes no input", async ({
   page,
 }) => {
+  // Real time also passes after install(), so every check compares with a reading taken just before.
   await page.clock.install();
   await page.goto("/play/small-7");
   await expect(board(page)).toHaveAttribute("tabindex", "0");
   const clock = page.getByRole("timer").first();
-  await expect(clock).toHaveText("00:00");
+  const started = await readSeconds(clock);
 
   await page.clock.runFor(5_000);
-  await expect(clock).toHaveText("00:05");
+  await expect.poll(() => readSeconds(clock)).toBeGreaterThanOrEqual(started + 5);
 
   // Paused: a minute passes, the clock doesn't move.
   await page.getByRole("button", { name: "Pause" }).first().click();
   await expect(board(page)).toHaveCount(0);
+  const paused = await clock.textContent();
   await page.clock.runFor(60_000);
-  await expect(clock).toHaveText("00:05");
+  await expect(clock).toHaveText(paused ?? "");
   await page.getByRole("button", { name: "Resume" }).first().click();
   await expect(board(page)).toBeVisible();
   await page.clock.runFor(2_000);
-  await expect(clock).toHaveText("00:07");
+  await expect.poll(() => readSeconds(clock)).toBeGreaterThanOrEqual(toSeconds(paused) + 2);
 
   // Solved: the clock stops at the solve.
   const solution = FIXTURE_SOLUTIONS["small-7"];
