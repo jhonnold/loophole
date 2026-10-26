@@ -8,10 +8,12 @@
     width: number;
     height: number;
     name: string;
+    /** The level the puzzle was made at, e.g. "Hard"; none for puzzles not made at a level. */
+    level?: string;
     status: CoverStatus;
   }
 
-  let { href, width, height, name, status }: Props = $props();
+  let { href, width, height, name, level, status }: Props = $props();
 
   // The dot paper gets finer for bigger boards (Home artboard: 12px, then 8px and 5px).
   const dots = $derived(width >= 40 ? 5 : width >= 20 ? 8 : 12);
@@ -29,7 +31,10 @@
 >
   <span class="badge">{width}×{height}</span>
   <span class="kana">スリザーリンク</span>
-  <span class="name">{name}</span>
+  <span class="title">
+    <span class="name">{name}</span>
+    {#if level !== undefined}<span class="level">{level}</span>{/if}
+  </span>
   <span class="paper" aria-hidden="true"></span>
   <span class="status">
     {#if status.kind === "solved"}
@@ -78,11 +83,28 @@
     letter-spacing: 0.08em;
   }
 
+  .title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+  }
+
   .name {
     font-family: var(--font-display);
     font-weight: 900;
     font-size: 24px;
     line-height: 1;
+  }
+
+  /* The level as a small ink-outlined tag beside the name: a word, never a colour alone (NFR-5). */
+  .level {
+    padding: 1px 7px;
+    border: 1.5px solid #1e1c19;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.4;
   }
 
   .paper {

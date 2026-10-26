@@ -5,8 +5,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** The daily size classes, smallest first. */
 export const DAILY_SIZES = [7, 10, 20, 40];
 
-/** Display names of the daily size classes (Home artboard). */
-const SIZE_NAMES: Record<number, string> = { 7: "Small", 10: "Medium", 20: "Large", 40: "Giant" };
+/**
+ * Display names of the daily size classes (Home artboard). The artboard's "Medium" for 10×10 is
+ * "Regular" here, since Medium is also a level (DECISIONS, WT21).
+ */
+const SIZE_NAMES: Record<number, string> = { 7: "Small", 10: "Regular", 20: "Large", 40: "Giant" };
 
 /** "Small" for 7, … ; "15×15" for a size without a name. */
 export function sizeName(size: number): string {

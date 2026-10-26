@@ -15,7 +15,7 @@ import {
 
 describe("daily names and dates", () => {
   test("size classes have the Home artboard's names and cover tints", () => {
-    expect([7, 10, 20, 40].map(sizeName)).toEqual(["Small", "Medium", "Large", "Giant"]);
+    expect([7, 10, 20, 40].map(sizeName)).toEqual(["Small", "Regular", "Large", "Giant"]);
     expect(sizeName(15)).toBe("15×15");
     expect([7, 10, 20, 40].map(coverTint)).toEqual(["#F2C4CE", "#E8DFC4", "#C8DAE6", "#D5E3C2"]);
   });

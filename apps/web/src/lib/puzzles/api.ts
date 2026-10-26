@@ -13,6 +13,8 @@ function summary(p: Schemas["PuzzleSummary"]): PuzzleSummary {
     width: p.width,
     height: p.height,
     origin: p.origin,
+    // Player-made puzzles count as hard on the server, but weren't made at a level.
+    level: p.origin === "generated" ? p.level : undefined,
   };
 }
 

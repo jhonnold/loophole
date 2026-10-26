@@ -30,7 +30,7 @@ export const FIXTURES: readonly FixtureRecord[] = [
   },
   {
     id: "medium-10",
-    name: "Medium",
+    name: "Regular",
     subtitle: "Practice · 練習",
     wire: {
       v: 1,

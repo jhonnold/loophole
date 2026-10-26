@@ -34,7 +34,7 @@
     stop,
   } from "../game/timer.ts";
   import { clampView, type View, viewLayout, zoomLimits } from "../game/viewport.ts";
-  import { type PuzzleEntry, puzzleSource, puzzleTitle } from "../puzzles/index.ts";
+  import { type PuzzleEntry, puzzleSource, puzzleSubtitle, puzzleTitle } from "../puzzles/index.ts";
   import { openSaves, type PuzzleSaves } from "../sync/index.ts";
   import BoardView from "./BoardView.svelte";
   import HintCard from "./HintCard.svelte";
@@ -368,7 +368,7 @@
     </a>
     <div class="titles">
       <h1>{puzzleTitle(entry)}</h1>
-      <span class="subtitle">{entry.subtitle}</span>
+      <span class="subtitle">{puzzleSubtitle(entry)}</span>
       <span class="subtitle count"><b>{analysis.satisfiedClues}</b> of {analysis.clueCount} clues</span>
     </div>
     <div class="pill">

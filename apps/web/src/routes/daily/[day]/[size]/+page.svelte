@@ -10,6 +10,7 @@
   import { sizeName } from "$lib/daily/days.ts";
   import { daily, finisherFor } from "$lib/daily/index.ts";
   import { dailyMode } from "$lib/daily/view.ts";
+  import { puzzleSubtitle } from "$lib/puzzles/index.ts";
   import { openSaves } from "$lib/sync/index.ts";
   import type { PageProps } from "./$types";
 
@@ -137,7 +138,7 @@
 {:else if mode.kind === "gate"}
   <SiteHeader />
   <main class="page">
-    <p class="eyebrow">{data.entry.subtitle}</p>
+    <p class="eyebrow">{puzzleSubtitle(data.entry)}</p>
     <h1>{name}</h1>
     <div class="card">
       <h2>Ranked solve</h2>

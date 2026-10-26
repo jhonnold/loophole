@@ -5,7 +5,7 @@
   import { daily } from "../daily/index.ts";
   import { shareText } from "../daily/view.ts";
   import { formatClock } from "../game/timer.ts";
-  import type { PuzzleEntry } from "../puzzles/index.ts";
+  import { type PuzzleEntry, puzzleSubtitle } from "../puzzles/index.ts";
   import { openSaves } from "../sync/index.ts";
   import LeaderboardCard from "./LeaderboardCard.svelte";
   import SolvedBoard from "./SolvedBoard.svelte";
@@ -82,7 +82,7 @@
     </a>
     <div class="titles">
       <h1>{entry.name} · {size}×{size}</h1>
-      <span class="subtitle">{entry.subtitle}</span>
+      <span class="subtitle">{puzzleSubtitle(entry)}</span>
     </div>
     <button type="button" class="round" onclick={share}>
       <span class="visually-hidden">{shareNote || "Share result"}</span>

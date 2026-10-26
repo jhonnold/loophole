@@ -1,10 +1,11 @@
 <script lang="ts">
   import type { Schemas } from "@loophole/api-client";
-  import { createGrid } from "@loophole/core";
+  import { createGrid, type Level } from "@loophole/core";
   import { onMount } from "svelte";
   import { auth } from "$lib/auth/index.ts";
   import BookCover from "$lib/components/BookCover.svelte";
   import GuestImport from "$lib/components/GuestImport.svelte";
+  import NewPuzzle from "$lib/components/NewPuzzle.svelte";
   import SiteHeader from "$lib/components/SiteHeader.svelte";
   import StreakCard from "$lib/components/StreakCard.svelte";
   import type { DailySet, DailySummary } from "$lib/daily/api.ts";
@@ -21,6 +22,7 @@
   import { daily } from "$lib/daily/index.ts";
   import { type CoverStatus, coverStatus } from "$lib/daily/view.ts";
   import { formatClock } from "$lib/game/timer.ts";
+  import { levelName } from "$lib/puzzles/index.ts";
   import { inProgress, localProgress } from "$lib/sync/index.ts";
   import type { PageProps } from "./$types";
 
@@ -38,7 +40,7 @@
   let fetchedAt = 0;
 
   const day = $derived(today?.day ?? utcDay(now));
-  const dailyCovers: { size: number; puzzleId: string | null }[] = $derived(
+  const dailyCovers: { size: number; level?: Level; puzzleId: string | null }[] = $derived(
     today?.puzzles ?? DAILY_SIZES.map((size) => ({ size, puzzleId: null })),
   );
   const msLeft = $derived(today ? Math.max(0, Date.parse(today.nextAt) - now) : msToNextDay(now));
@@ -144,6 +146,7 @@
             width={p.size}
             height={p.size}
             name={sizeName(p.size)}
+            level={p.level === undefined ? undefined : levelName(p.level)}
             status={dailyStatuses[p.size] ?? coverStatus({ size: p.size, ready: p.puzzleId !== null })}
           />
         </li>
@@ -177,6 +180,7 @@
       <h2 id="practice-h">Practice <span class="jp">練習</span></h2>
       <span class="soft">fresh, proven unique</span>
     </div>
+    <NewPuzzle />
     <ul class="covers">
       {#each data.puzzles as p (p.id)}
         <li>
@@ -185,6 +189,7 @@
             width={p.width}
             height={p.height}
             name={p.name}
+            level={p.level === undefined ? undefined : levelName(p.level)}
             status={statuses[p.id] ?? coverStatus({ size: p.width, ready: true })}
           />
         </li>
