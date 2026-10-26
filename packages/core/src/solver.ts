@@ -20,6 +20,11 @@ export interface SolveOptions {
    * A difficulty level can leave groups out; deductions are sound either way.
    */
   readonly rules?: readonly RuleGroup[];
+  /**
+   * Record steps. Default true. Without them `steps` comes back empty and `maxSteps` does nothing,
+   * and solving is faster; generation's clue removal tests read only the status and edges.
+   */
+  readonly steps?: boolean;
   /** Stop after recording this many steps. Default no limit. */
   readonly maxSteps?: number;
   /** Stop after this many milliseconds, measured with `now`. Default no limit. */
@@ -49,9 +54,12 @@ export function solve(puzzle: Puzzle, options: SolveOptions = {}): SolveResult {
     Number.POSITIVE_INFINITY,
   );
   const rules = options.rules ?? RULE_GROUPS;
-  const engine = new Engine(puzzle, budget, rules.includes("corners"));
+  const engine = new Engine(puzzle, budget, {
+    corners: rules.includes("corners"),
+    colouring: rules.includes("colouring"),
+  });
   const steps: Step[] = [];
-  engine.steps = steps;
+  engine.steps = options.steps === false ? null : steps;
   engine.maxSteps = options.maxSteps ?? Number.POSITIVE_INFINITY;
   let status: SolveStatus;
   try {

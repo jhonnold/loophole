@@ -202,6 +202,10 @@ components:
                 - three-diagonal-one
                 - corner-chain
                 - parity
+                - colour-1
+                - colour-2
+                - colour-3
+                - colour-chain
                 - lookahead
             changes:
               type: array

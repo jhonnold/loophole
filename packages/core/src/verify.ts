@@ -53,7 +53,9 @@ export function verify(puzzle: Puzzle, options: VerifyOptions = {}): VerifyResul
     start + (options.timeLimitMs ?? DEFAULT_VERIFY_TIME_LIMIT_MS),
     options.maxNodes ?? Number.POSITIVE_INFINITY,
   );
-  const engine = new Engine(puzzle, budget);
+  // Colouring after lookahead at the root: no steps are read here, and it saves a colouring pass
+  // before every lookahead deduction (DECISIONS, WT17).
+  const engine = new Engine(puzzle, budget, { colourLast: true });
   const solutions: Uint8Array[] = [];
   let status: VerifyStatus;
   try {

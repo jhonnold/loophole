@@ -184,4 +184,34 @@ export const RULE_PATTERNS: Readonly<Partial<Record<RuleId, RulePattern>>> = {
     cells: [a.cell(0, 0), a.cell(0, 1)],
     ghostLines: [a.v(0, 1)],
   })),
+  // Colouring. The cells above and below the 1 are both outside (their outer sides are crossed),
+  // and at most one cell beside a 1 differs from it, so neither does: both sides there are crossed.
+  "colour-1": pattern(3, 3, "....1....", (a) => ({
+    crosses: [a.h(0, 1), a.h(3, 1)],
+    cells: [a.cell(0, 1), a.cell(1, 1), a.cell(2, 1)],
+    ghostCrosses: [a.h(1, 1), a.h(2, 1)],
+  })),
+  // The cells left and right of the 2 are both outside. If the 2 is inside, both those sides are
+  // lines and the cells above and below are inside like it; if outside, those two differ from it.
+  // Either way they are inside, so their outer sides are lines.
+  "colour-2": pattern(3, 3, "....2....", (a) => ({
+    crosses: [a.v(1, 0), a.v(1, 3)],
+    cells: [a.cell(1, 0), a.cell(1, 1), a.cell(1, 2)],
+    ghostLines: [a.h(0, 1), a.h(3, 1)],
+  })),
+  // The cells above and below the 3 are both outside, and at most one cell beside a 3 is on its
+  // side, so neither is: both sides there are lines.
+  "colour-3": pattern(3, 3, "....3....", (a) => ({
+    crosses: [a.h(0, 1), a.h(3, 1)],
+    cells: [a.cell(0, 1), a.cell(1, 1), a.cell(2, 1)],
+    ghostLines: [a.h(1, 1), a.h(2, 1)],
+  })),
+  // A position the solver reaches. The 3s' corners put both 3s inside. The left 2 then has inside
+  // cells above and below it and the outside on its left, so the cell on its right is outside; the
+  // right 2 sits between two outside cells, so the cells above and below it are inside.
+  "colour-chain": pattern(3, 3, "3..2.23..", (a) => ({
+    lines: [a.h(0, 0), a.v(0, 0), a.h(3, 0), a.v(2, 0)],
+    cells: [a.cell(0, 2), a.cell(1, 0), a.cell(1, 2)],
+    ghostLines: [a.h(0, 2)],
+  })),
 };

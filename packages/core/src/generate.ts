@@ -9,7 +9,7 @@ import { type SolveResult, solve } from "./solver.ts";
  * same version (PRD FR-10). Bump it whenever any output changes, including through a change to the
  * solver's rules, which decide which clues can go.
  */
-export const GENERATOR_VERSION = "4";
+export const GENERATOR_VERSION = "5";
 
 /**
  * Clue removal tests run block by block; a block is at most this many cells on a side. Each block's
@@ -27,8 +27,8 @@ const MAX_ATTEMPTS = 100;
  */
 type RuleSolver = (puzzle: Puzzle, initial?: Uint8Array) => SolveResult;
 
-/** Every rule, lookahead included. */
-const ALL_RULES: RuleSolver = (puzzle, initial) => solve(puzzle, { initial });
+/** Every rule, lookahead included. Records no steps: the tests read only the status and edges. */
+const ALL_RULES: RuleSolver = (puzzle, initial) => solve(puzzle, { initial, steps: false });
 
 export interface GenerateProgress {
   /** Clue removal tests done so far. */
@@ -109,13 +109,13 @@ export function generate(options: GenerateOptions): GenerateResult {
     const work: Puzzle = { grid, clues };
     if (ALL_RULES(work).status !== "solved") continue;
     const checks = removeClues(work, rng, ALL_RULES, onProgress);
-    const { result, restored } = restoreClues(work, full, rng, ALL_RULES);
+    const restored = restoreClues(work, full, rng, ALL_RULES);
     let clueCount = 0;
     for (const k of clues) if (k !== NO_CLUE) clueCount++;
     return {
       puzzle: createPuzzle(width, height, clues, { seed, meta }),
       solution,
-      solve: result,
+      solve: solve(work),
       stats: { attempts, clueCount, checks, restored },
     };
   }
@@ -199,19 +199,15 @@ function hiddenBase(
 /**
  * Step 4: solve from scratch; while stuck, put back removed clues of cells next to an open edge
  * (or, if there are none, any removed clues), keeping each round's picks spread out. Terminates
- * because each round puts back at least one clue and the full clue set solves.
+ * because each round puts back at least one clue and the full clue set solves. Returns how many it
+ * put back.
  */
-function restoreClues(
-  puzzle: Puzzle,
-  full: Int8Array,
-  rng: Rng,
-  rules: RuleSolver,
-): { result: SolveResult; restored: number } {
+function restoreClues(puzzle: Puzzle, full: Int8Array, rng: Rng, rules: RuleSolver): number {
   const { grid, clues } = puzzle;
   let restored = 0;
   for (;;) {
     const result = rules(puzzle);
-    if (result.status === "solved") return { result, restored };
+    if (result.status === "solved") return restored;
     const removed: number[] = [];
     const nearOpen: number[] = [];
     for (let i = 0; i < grid.cellCount; i++) {

@@ -33,8 +33,9 @@ describe("verify", () => {
   });
 
   test("searches when the rules get stuck", () => {
-    // Unique (checked by brute force), but the rules alone get stuck.
-    const result = verify(puzzle(1, 4, ".22."));
+    // clue-gaps-5-3#13 from the WT14 corpus: unique, but the rules alone get stuck. Since WT17's
+    // colouring the rules solve every unique puzzle of up to 3×3 cells.
+    const result = verify(puzzle(5, 5, "..2..1.22..22..21..1.2110"));
     expect(result.status).toBe("unique");
     expect(result.stats.nodes).toBeGreaterThan(0);
   });

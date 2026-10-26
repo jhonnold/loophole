@@ -11,8 +11,9 @@
  * 2. the 3s patterns, which depend only on the clues and are applied once
  * 3. corners (optional): for every corner of a 1, 2 or 3, which pairs of states its two sides
  *    there can still take, narrowed at the clue and at the dot in turn (a worklist)
- * 4. inside/outside parity, a union-find over cells (global), then a connectivity check that
- *    only detects contradictions (global)
+ * 4. inside/outside parity, a union-find over cells (global); when it decides nothing,
+ *    colouring (optional): the relations each 1, 2 or 3 forces among its neighbours' sides, added
+ *    to the same union-find (global); then a connectivity check that only detects contradictions
  * 5. lookahead: assume an edge, run tier 1, and take the opposite on a contradiction
  * After any change the engine goes back to tier 1, so steps come out roughly easiest first.
  */
@@ -104,6 +105,20 @@ function dotCells(grid: Grid): Int32Array {
   return t;
 }
 
+export interface EngineOptions {
+  /** Run the corner rules (rule group "corners"). Default true. */
+  readonly corners?: boolean;
+  /** Run the colouring rule (rule group "colouring"). Default true. */
+  readonly colouring?: boolean;
+  /**
+   * Run colouring only once lookahead finds nothing, instead of right after parity. Default false.
+   * The fixpoint is the same and only the order of steps changes (hints would prefer lookahead to
+   * colouring); the verifier, which reads no steps, saves a colouring pass before each lookahead
+   * deduction.
+   */
+  readonly colourLast?: boolean;
+}
+
 export class Engine {
   readonly grid: Grid;
   readonly clues: Int8Array;
@@ -136,6 +151,42 @@ export class Engine {
   private readonly ufParent: Int32Array;
   private readonly ufParity: Uint8Array;
   private ufFound = 0;
+  /**
+   * Colouring. These arrays are allocated on the first colouring pass (`initColour`), so a puzzle
+   * the earlier tiers finish pays nothing. Once a pass adds its first relation, each union-find
+   * set's nodes form a ring (`ufNext`) with the set's size at its root (`ufSize`), so a new
+   * relation can find the clue cells and edges beside the smaller of the two sets it joins.
+   */
+  private ufNext = new Int32Array(0);
+  private ufSize = new Int32Array(0);
+  /** Cells with a 1, 2 or 3, in index order: the cells the colouring rule looks at. */
+  private colourCells = new Int32Array(0);
+  /** Of those, the ones on the board's edge: the cells beside the outside node. */
+  private borderColourCells = new Int32Array(0);
+  /** The edges on the board's border: the outside node's edges. */
+  private borderEdges = new Int32Array(0);
+  private colourQueue = new Int32Array(0);
+  private inColourQueue = new Uint8Array(0);
+  private colourHead = 0;
+  private colourLen = 0;
+  /** `colourCell`'s scratch: its five nodes, their roots and parities, each one's set's first. */
+  private readonly cNode = new Int32Array(5);
+  private readonly cRoot = new Int32Array(5);
+  private readonly cPar = new Uint8Array(5);
+  private readonly cRep = new Int8Array(5);
+  /** `colourCell`'s scratch: the fitting candidates (at most 6, for a 2). */
+  private readonly cFit = new Int32Array(6);
+  /**
+   * While steps are recorded: each relation the colouring rule added in the current pass (its two
+   * nodes, its clue cell, and the node pairs whose relations it used), for the steps' reasons.
+   */
+  private readonly colourRecs: ColourRec[] = [];
+  /** Edges the current colouring pass has set. */
+  private colourSet = 0;
+  /** While steps are recorded: in the pass's first round, which adds one deciding relation. */
+  private single = false;
+  /** Whether `ufNext` and `ufSize` describe the current union-find (see `buildRings`). */
+  private rings = false;
   private readonly seen: Uint8Array;
   private readonly order: Int32Array;
   private readonly stack: Int32Array;
@@ -163,12 +214,18 @@ export class Engine {
    */
   private readonly cornerWhy: (readonly number[] | undefined)[] = [];
 
+  private readonly cornersOn: boolean;
+  private readonly colourOn: boolean;
+  private readonly colourLast: boolean;
+
   constructor(
     puzzle: Puzzle,
     private readonly budget: Budget,
-    /** Run the corner rules (rule group "corners"). */
-    private readonly cornersOn = true,
+    options: EngineOptions = {},
   ) {
+    this.cornersOn = options.corners ?? true;
+    this.colourOn = options.colouring ?? true;
+    this.colourLast = options.colourLast ?? false;
     const grid = puzzle.grid;
     this.grid = grid;
     this.clues = puzzle.clues;
@@ -210,8 +267,9 @@ export class Engine {
   }
 
   /**
-   * Tiers 1, 3 (when the corners group is on), 4 and (optionally) 5 until nothing changes. False on
-   * a contradiction. Checks the time budget on every pass, since each parity pass costs O(edges).
+   * Tiers 1, 3 (when the corners group is on), 4 (colouring when that group is on) and (optionally)
+   * 5 until nothing changes. False on a contradiction. Checks the time budget on every pass, since
+   * each parity pass costs O(edges).
    */
   propagate(lookahead: boolean): boolean {
     for (;;) {
@@ -226,11 +284,23 @@ export class Engine {
       const p = this.parity();
       if (p < 0) return false;
       if (p > 0) continue;
+      // Colouring works on the union-find parity just built; nothing below changes it.
+      const last = this.colourLast && lookahead;
+      if (this.colourOn && !last) {
+        const c = this.colour();
+        if (c < 0) return false;
+        if (c > 0) continue;
+      }
       if (!this.connected()) return false;
       if (!lookahead) return true;
       const q = this.lookahead();
       if (q < 0) return false;
       if (q > 0) continue;
+      if (this.colourOn && last) {
+        const c = this.colour();
+        if (c < 0) return false;
+        if (c > 0) continue;
+      }
       return true;
     }
   }
@@ -854,6 +924,375 @@ export class Engine {
     return root;
   }
 
+  // --- tier 4b: colouring -------------------------------------------------------------------
+
+  /**
+   * Colouring, run on parity's union-find when parity decides nothing. Every cell is inside or
+   * outside the loop, everything beyond the border is outside, and a clue k has exactly k of its
+   * four neighbours on the other side from it. `colourCell` adds every relation a clue forces among
+   * its cell and the cell's neighbours, and each new relation decides the open edges between the
+   * two sets it joins, one step per edge. A cell is looked at again when a new relation joins two
+   * sets it has nodes in. Returns the number of edges set, or -1 on a contradiction.
+   */
+  private colour(): number {
+    if (this.ufNext.length === 0) this.initColour();
+    const { colourCells } = this;
+    const recording = this.steps !== null;
+    this.rings = false;
+    this.colourSet = 0;
+    if (recording) {
+      this.colourRecs.length = 0;
+      // A hint names the simplest deduction: first a clue whose own relation decides an edge on
+      // the union-find as parity built it, and only then relations that chain through others.
+      this.single = true;
+      for (let x = 0; x < colourCells.length && this.colourSet === 0; x++) {
+        if (!this.colourCell(colourCells[x])) {
+          this.single = false;
+          return -1;
+        }
+      }
+      this.single = false;
+      // Cells its joins queued stay queued: the next pass queues every cell again, and the queue
+      // holds none twice (`inColourQueue`), so leaving them costs nothing and changes no step.
+      if (this.colourSet > 0) return this.colourSet;
+    }
+    for (let x = 0; x < colourCells.length; x++) this.queueColour(colourCells[x]);
+    while (this.colourLen > 0) {
+      const ok = this.colourCell(this.dequeueColour());
+      // While steps are recorded, stop at the first cell that decides an edge, so the cheaper
+      // rules (parity first) follow it up before the next colouring step.
+      if (!ok || (recording && this.colourSet > 0)) {
+        while (this.colourLen > 0) this.dequeueColour();
+        if (!ok) return -1;
+      }
+    }
+    return this.colourSet;
+  }
+
+  /** Allocates the colouring arrays (see `ufNext`). */
+  private initColour(): void {
+    const { grid, clues } = this;
+    const C = grid.cellCount;
+    const cells: number[] = [];
+    const border: number[] = [];
+    for (let i = 0; i < C; i++) {
+      if (clues[i] < 1 || clues[i] > 3) continue;
+      cells.push(i);
+      const r = Math.floor(i / grid.width);
+      const c = i % grid.width;
+      if (r === 0 || c === 0 || r === grid.height - 1 || c === grid.width - 1) border.push(i);
+    }
+    const edges: number[] = [];
+    for (let e = 0; e < grid.edgeCount; e++) {
+      if (grid.edgeCells[e * 2] === NONE || grid.edgeCells[e * 2 + 1] === NONE) edges.push(e);
+    }
+    this.colourCells = Int32Array.from(cells);
+    this.borderColourCells = Int32Array.from(border);
+    this.borderEdges = Int32Array.from(edges);
+    this.ufNext = new Int32Array(C + 1);
+    this.ufSize = new Int32Array(C + 1);
+    this.colourQueue = new Int32Array(C);
+    this.inColourQueue = new Uint8Array(C);
+  }
+
+  /**
+   * The colouring rule at clue cell `i`. Node 0 is the cell and node j + 1 the node across its side
+   * j (0 top, 1 right, 2 bottom, 3 left). A candidate is a set of k sides, k the clue: neighbour j
+   * is on the other side from the cell exactly when side j is in it. Keeps the candidates that fit
+   * the relations known among the five nodes and adds each relation between two of them (in
+   * different sets) that is the same in all of those. False on a contradiction: no candidate fits,
+   * or an edge the new relations decide breaks a rule.
+   */
+  private colourCell(i: number): boolean {
+    const { grid, edges, cNode, cRoot, cPar, cRep, cFit } = this;
+    const base = i * 4;
+    // All four sides known: the cell is linked to every neighbour already, nothing to add.
+    if (
+      edges[grid.cellEdges[base]] !== Unknown &&
+      edges[grid.cellEdges[base + 1]] !== Unknown &&
+      edges[grid.cellEdges[base + 2]] !== Unknown &&
+      edges[grid.cellEdges[base + 3]] !== Unknown
+    ) {
+      return true;
+    }
+    cNode[0] = i;
+    for (let j = 0; j < 4; j++) cNode[j + 1] = across(grid, i, j);
+    // Bit t of `known`: node t shares a set with an earlier node, the first of which is cRep[t].
+    let known = 0;
+    for (let t = 0; t < 5; t++) {
+      cRoot[t] = this.ufFind(cNode[t]);
+      cPar[t] = this.ufFound;
+      cRep[t] = t;
+      for (let s = 0; s < t; s++) {
+        if (cRoot[s] === cRoot[t]) {
+          cRep[t] = s;
+          known |= 1 << t;
+          break;
+        }
+      }
+    }
+    // Nothing known among the five: every candidate fits, and no relation holds in all of them.
+    if (known === 0) return true;
+    const k = this.clues[i];
+    // Each fitting candidate as `col`: bit t set when node t is on the other side from the cell.
+    let fits = 0;
+    for (const m of CELL_CONFIGS[k]) {
+      const col = m << 1;
+      if (this.colourFits(col, known)) cFit[fits++] = col;
+    }
+    if (fits === 0) return false;
+    for (let a = 0; a < 5; a++) {
+      for (let b = a + 1; b < 5; b++) {
+        if (cRoot[a] === cRoot[b]) continue;
+        const x = ((cFit[0] >> a) ^ (cFit[0] >> b)) & 1;
+        let holds = true;
+        for (let q = 1; q < fits && holds; q++) {
+          holds = (((cFit[q] >> a) ^ (cFit[q] >> b)) & 1) === x;
+        }
+        if (!holds) continue;
+        // The first pass while recording adds only a relation that decides an edge, and one.
+        if (this.single && (this.colourSet > 0 || !this.decidesEdge(a, b))) continue;
+        if (!this.colourJoin(i, known, a, b, x)) return false;
+      }
+    }
+    return true;
+  }
+
+  /** Whether an open edge joins the sets of nodes a and b of the current cell (which differ). */
+  private decidesEdge(a: number, b: number): boolean {
+    const { grid, edges, ufNext, ufSize, cNode } = this;
+    let small = this.ufFind(cNode[a]);
+    let large = this.ufFind(cNode[b]);
+    if (small === large) return false;
+    if (!this.rings) this.buildRings();
+    if (ufSize[small] > ufSize[large]) {
+      const t = small;
+      small = large;
+      large = t;
+    }
+    const C = grid.cellCount;
+    let n = small;
+    do {
+      const list = n === C ? this.borderEdges : grid.cellEdges;
+      const from = n === C ? 0 : n * 4;
+      const to = n === C ? list.length : from + 4;
+      for (let x = from; x < to; x++) {
+        const e = list[x];
+        if (edges[e] !== Unknown) continue;
+        const s = sideNode(grid, e, 0);
+        if (this.ufFind(s === n ? sideNode(grid, e, 1) : s) === large) return true;
+      }
+      n = ufNext[n];
+    } while (n !== small);
+    return false;
+  }
+
+  /** True when candidate `col` fits the relation of each node in `known` to its set's first. */
+  private colourFits(col: number, known: number): boolean {
+    const { cRep, cPar } = this;
+    for (let t = 1; t < 5; t++) {
+      if (!(known & (1 << t))) continue;
+      const s = cRep[t];
+      if ((((col >> t) ^ (col >> s)) & 1) !== (cPar[t] ^ cPar[s])) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Adds "nodes a and b of cell i are on different sides exactly when x is 1" to the union-find
+   * (nothing when an earlier relation of the same cell put them in one set). Then, for each node of
+   * the smaller of the two sets, decides its open edges to the other set and queues the clue cells
+   * at or beside it: every cell with nodes in both sets has one there. False on a contradiction.
+   */
+  private colourJoin(i: number, known: number, a: number, b: number, x: number): boolean {
+    const { ufParent, ufParity, ufSize, ufNext, cNode } = this;
+    let small = this.ufFind(cNode[a]);
+    const pa = this.ufFound;
+    let large = this.ufFind(cNode[b]);
+    const pb = this.ufFound;
+    if (small === large) return true;
+    if (!this.rings) this.buildRings();
+    if (ufSize[small] > ufSize[large]) {
+      const t = small;
+      small = large;
+      large = t;
+    }
+    ufParent[small] = large;
+    ufParity[small] = pa ^ pb ^ x;
+    if (this.steps !== null) {
+      const deps = this.colourDeps(this.clues[i], known, a, b, x);
+      this.colourRecs.push({ u: cNode[a], v: cNode[b], cell: i, deps });
+    }
+    let n = small;
+    do {
+      this.queueAround(n);
+      if (!this.colourEdges(n, large)) return false;
+      n = ufNext[n];
+    } while (n !== small);
+    this.joinRings(small, large);
+    return true;
+  }
+
+  /**
+   * Decides the open edges between node `n` and the nodes of the set with root `large`, which a
+   * colouring relation has just joined to n's set (while steps are recorded, only the pass's first
+   * edge: the next parity pass decides the rest, as `parity` steps). False when one breaks a rule.
+   */
+  private colourEdges(n: number, large: number): boolean {
+    const { grid, edges } = this;
+    const C = grid.cellCount;
+    const list = n === C ? this.borderEdges : grid.cellEdges;
+    const from = n === C ? 0 : n * 4;
+    const to = n === C ? list.length : from + 4;
+    for (let x = from; x < to; x++) {
+      if (this.steps !== null && this.colourSet > 0) return true;
+      const e = list[x];
+      if (edges[e] !== Unknown) continue;
+      const a = sideNode(grid, e, 0);
+      const other = a === n ? sideNode(grid, e, 1) : a;
+      if (this.ufFind(other) !== large) continue;
+      const po = this.ufFound;
+      this.ufFind(n);
+      const state = this.ufFound !== po ? Line : Cross;
+      if (this.recording()) {
+        // The pass's only edge while steps are recorded, so the forest is built once a pass.
+        const why = colourReason(this.colourForest(), this.colourRecs, n, other);
+        // The edge's cells too, unless they hold a clue the reason does not use.
+        const cells = new Set(why);
+        if (n !== C && this.clues[n] === NO_CLUE) cells.add(n);
+        if (other !== C && this.clues[other] === NO_CLUE) cells.add(other);
+        this.begin(
+          why.length === 1 ? COLOUR_RULE[this.clues[why[0]]] : "colour-chain",
+          [...cells].sort((p, q) => p - q),
+          [],
+        );
+      }
+      if (!this.assign(e, state)) return false;
+      this.commit();
+      this.colourSet++;
+    }
+    return true;
+  }
+
+  /** Puts each union-find set's nodes in a ring, with the set's size at its root. */
+  private buildRings(): void {
+    const { ufNext, ufSize } = this;
+    const n = this.grid.cellCount + 1;
+    for (let x = 0; x < n; x++) {
+      ufNext[x] = x;
+      ufSize[x] = 1;
+    }
+    for (let x = 0; x < n; x++) {
+      const r = this.ufFind(x);
+      if (r === x) continue;
+      ufNext[x] = ufNext[r];
+      ufNext[r] = x;
+      ufSize[r]++;
+    }
+    this.rings = true;
+  }
+
+  /** Merges the node rings of roots `a` and `b` into b's. */
+  private joinRings(a: number, b: number): void {
+    const { ufNext, ufSize } = this;
+    ufSize[b] += ufSize[a];
+    const t = ufNext[a];
+    ufNext[a] = ufNext[b];
+    ufNext[b] = t;
+  }
+
+  /**
+   * For a step's reason: the node pairs whose known relations the relation between nodes a and b
+   * rests on. Starts from every known one and drops each that every fitting candidate keeps a and b
+   * related by x without.
+   */
+  private colourDeps(k: number, known: number, a: number, b: number, x: number): number[] {
+    let need = known;
+    for (let t = 1; t < 5; t++) {
+      const fewer = need & ~(1 << t);
+      if (fewer !== need && this.colourHolds(k, fewer, a, b, x)) need = fewer;
+    }
+    const deps: number[] = [];
+    for (let t = 1; t < 5; t++) {
+      if (need & (1 << t)) deps.push(this.cNode[this.cRep[t]], this.cNode[t]);
+    }
+    return deps;
+  }
+
+  /** True when every candidate for a clue k that fits `known` has nodes a and b related by x. */
+  private colourHolds(k: number, known: number, a: number, b: number, x: number): boolean {
+    for (const m of CELL_CONFIGS[k]) {
+      const col = m << 1;
+      if (this.colourFits(col, known) && (((col >> a) ^ (col >> b)) & 1) !== x) return false;
+    }
+    return true;
+  }
+
+  /**
+   * The links behind the current union-find, for colouring steps' reasons: a spanning forest of the
+   * known edges, then the colouring relations in the order they were added. Each of those joined
+   * two sets, so the links still form a forest, and the path between two linked nodes is a chain of
+   * relations from one to the other.
+   */
+  private colourForest(): Forest {
+    const { grid, edges } = this;
+    const n = grid.cellCount + 1;
+    const parent = Int32Array.from({ length: n }, (_, x) => x);
+    const root = (x: number): number => {
+      let r = x;
+      while (parent[r] !== r) r = parent[r];
+      parent[x] = r;
+      return r;
+    };
+    const forest: Forest = { head: new Int32Array(n).fill(NONE), next: [], to: [], rec: [] };
+    const link = (u: number, v: number, rec: number) => {
+      const a = root(u);
+      const b = root(v);
+      if (a === b) return;
+      parent[a] = b;
+      addLink(forest, u, v, rec);
+    };
+    for (let e = 0; e < grid.edgeCount; e++) {
+      if (edges[e] !== Unknown) link(sideNode(grid, e, 0), sideNode(grid, e, 1), NONE);
+    }
+    for (let x = 0; x < this.colourRecs.length; x++) {
+      link(this.colourRecs[x].u, this.colourRecs[x].v, x);
+    }
+    return forest;
+  }
+
+  /** Queues the clue cells 1–3 at or beside node `n` (the border cells for the outside node). */
+  private queueAround(n: number): void {
+    const C = this.grid.cellCount;
+    if (n === C) {
+      for (let x = 0; x < this.borderColourCells.length; x++) {
+        this.queueColour(this.borderColourCells[x]);
+      }
+      return;
+    }
+    this.queueColour(n);
+    for (let j = 0; j < 4; j++) {
+      const m = across(this.grid, n, j);
+      if (m !== C) this.queueColour(m);
+    }
+  }
+
+  private queueColour(i: number): void {
+    const k = this.clues[i];
+    if (k < 1 || k > 3 || this.inColourQueue[i]) return;
+    this.inColourQueue[i] = 1;
+    this.colourQueue[(this.colourHead + this.colourLen) % this.colourQueue.length] = i;
+    this.colourLen++;
+  }
+
+  private dequeueColour(): number {
+    const i = this.colourQueue[this.colourHead];
+    this.colourHead = (this.colourHead + 1) % this.colourQueue.length;
+    this.colourLen--;
+    this.inColourQueue[i] = 0;
+    return i;
+  }
+
   /**
    * False when the loop cannot be one piece: walking from a line along edges that are not crossed
    * must reach every other line and an open side of every clue above 0. Does nothing before the
@@ -1036,6 +1475,88 @@ export class Engine {
   private clearQueue(): void {
     while (this.qLen > 0) this.dequeue();
   }
+}
+
+/** The node across side `j` (0 top, 1 right, 2 bottom, 3 left) of cell `i`: a cell, or outside. */
+function across(grid: Grid, i: number, j: number): number {
+  return sideNode(grid, grid.cellEdges[i * 4 + j], j === 1 || j === 2 ? 1 : 0);
+}
+
+/** The rule a colouring step resting on one clue is named by, indexed by that clue. */
+const COLOUR_RULE: readonly RuleId[] = ["colour-chain", "colour-1", "colour-2", "colour-3"];
+
+/** A relation the colouring rule added: its two nodes, its clue cell, the node pairs it used. */
+interface ColourRec {
+  readonly u: number;
+  readonly v: number;
+  readonly cell: number;
+  readonly deps: readonly number[];
+}
+
+/**
+ * Links over union-find nodes: for each node a list (`head`, then `next`) of links to `to`, made
+ * by colouring relation `rec`, or NONE for a known edge. Link l and l ^ 1 are the two directions.
+ */
+interface Forest {
+  readonly head: Int32Array;
+  readonly next: number[];
+  readonly to: number[];
+  readonly rec: number[];
+}
+
+/** Adds a link between nodes `u` and `v`, made by colouring relation `rec` (NONE: a known edge). */
+function addLink(f: Forest, u: number, v: number, rec: number): void {
+  for (const [p, q] of [
+    [u, v],
+    [v, u],
+  ]) {
+    f.next.push(f.head[p]);
+    f.to.push(q);
+    f.rec.push(rec);
+    f.head[p] = f.to.length - 1;
+  }
+}
+
+/** The colouring relations on the forest path between nodes `a` and `b`, which are linked. */
+function forestPath(f: Forest, a: number, b: number): number[] {
+  const via = new Map<number, number>([[a, NONE]]);
+  const queue = [a];
+  for (let h = 0; h < queue.length && !via.has(b); h++) {
+    for (let l = f.head[queue[h]]; l !== NONE; l = f.next[l]) {
+      const v = f.to[l];
+      if (via.has(v)) continue;
+      via.set(v, l);
+      queue.push(v);
+    }
+  }
+  const recs: number[] = [];
+  for (let v = b; v !== a; ) {
+    const l = via.get(v) as number;
+    if (f.rec[l] !== NONE) recs.push(f.rec[l]);
+    v = f.to[l ^ 1];
+  }
+  return recs;
+}
+
+/**
+ * The clue cells a colouring step that links nodes `a` and `b` rests on: the cells of the colouring
+ * relations on the path between them and, in turn, of the relations each of those used. Sorted.
+ */
+function colourReason(f: Forest, recs: readonly ColourRec[], a: number, b: number): number[] {
+  const cells = new Set<number>();
+  const seen = new Set<number>();
+  const pairs = [a, b];
+  while (pairs.length > 0) {
+    const v = pairs.pop() as number;
+    const u = pairs.pop() as number;
+    for (const r of forestPath(f, u, v)) {
+      if (seen.has(r)) continue;
+      seen.add(r);
+      cells.add(recs[r].cell);
+      pairs.push(...recs[r].deps);
+    }
+  }
+  return [...cells].sort((p, q) => p - q);
 }
 
 /** Edges row by row: horizontal edges of row r left to right, then the vertical edges below them. */
