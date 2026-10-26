@@ -16,18 +16,23 @@
  * Everything is seeded and uses node budgets, never time, so every run prints the same numbers
  * apart from the times. Takes about 3 minutes.
  *
- * `--rules=<groups>` (comma-separated `RULE_GROUPS`, empty for none) and `--no-lookahead` measure
- * the rule solver with fewer rules. The puzzles are still generated with every rule, so with either
- * flag the solver floor starts from the full clue set instead of the generated puzzle.
+ * `--level=<easy|medium|hard>` generates the puzzles at that level (default `DEFAULT_LEVEL`, hard)
+ * and measures them with its rules; below hard, `removable` counts the clues the level put back on
+ * purpose (`LEVEL_SETTINGS.minClueShare`), so the solver floor is the line to read.
+ * `--rules=<groups>` (comma-separated `RULE_GROUPS`, empty for none; with parity) and
+ * `--no-lookahead` measure the rule solver with other rules than the level's. The puzzles are still
+ * generated with the level's rules, so with either flag the solver floor starts from the full clue
+ * set instead of the generated puzzle.
  *
- * `--write-corpus` also rewrites `src/test-support/clue-gaps.json`: the first gap cases from the
- * smallest sizes, each the generated puzzle without that clue plus the edges the solver decided
- * before it got stuck. `clue-gaps.test.ts` checks them. The committed file is the WT14 baseline;
- * later work keeps it as it is, since rewriting it after the generator or the rules change gives
- * different boards.
+ * `--write-corpus` (default level only) also rewrites `src/test-support/clue-gaps.json`: the first
+ * gap cases from the smallest sizes, each the generated puzzle without that clue plus the edges the
+ * solver decided before it got stuck. `clue-gaps.test.ts` checks them. The committed file is the
+ * WT14 baseline; later work keeps it as it is, since rewriting it after the generator or the rules
+ * change gives different boards.
  */
 import { encodeEdges, serializePuzzle } from "../src/format.ts";
 import { generate } from "../src/generate.ts";
+import { DEFAULT_LEVEL, isLevel, LEVEL_SETTINGS, LEVELS } from "../src/level.ts";
 import { createPuzzle, deriveClues, NO_CLUE, type Puzzle } from "../src/puzzle.ts";
 import { createRng } from "../src/rng.ts";
 import { RULE_GROUPS, type RuleGroup } from "../src/rules.ts";
@@ -49,14 +54,22 @@ const CORPUS_SIZES = [5, 7, 10];
 const CORPUS_PER_PUZZLE = 2;
 const CORPUS_FILE = new URL("../src/test-support/clue-gaps.json", import.meta.url);
 
+const level =
+  process.argv.find((a) => a.startsWith("--level="))?.slice("--level=".length) ?? DEFAULT_LEVEL;
+if (!isLevel(level)) throw new Error(`unknown level ${level} (one of ${LEVELS.join(", ")})`);
 const rulesArg = process.argv.find((a) => a.startsWith("--rules="))?.slice("--rules=".length);
 const rules = rulesArg?.split(",").filter((g) => g !== "") as RuleGroup[] | undefined;
 for (const g of rules ?? []) {
   if (!(RULE_GROUPS as readonly string[]).includes(g)) throw new Error(`unknown rule group ${g}`);
 }
-const options: SolveOptions = { rules, lookahead: !process.argv.includes("--no-lookahead") };
-/** Fewer rules than `generate` used: the floor then starts from the full clue set. */
-const fewerRules = rules !== undefined || !options.lookahead;
+const noLookahead = process.argv.includes("--no-lookahead");
+const options: SolveOptions = {
+  rules: rules ?? LEVEL_SETTINGS[level].rules,
+  parity: rules !== undefined || LEVEL_SETTINGS[level].parity,
+  lookahead: !noLookahead && LEVEL_SETTINGS[level].lookahead,
+};
+/** Other rules than `generate` used: the floor then starts from the full clue set. */
+const fewerRules = rules !== undefined || noLookahead;
 
 /** The one place the harness runs the rule solver, with the rules the flags chose. */
 function runRules(puzzle: Puzzle): SolveResult {
@@ -88,6 +101,9 @@ function greedyFloor(puzzle: Puzzle, seed: string, keeps: (p: Puzzle) => boolean
 }
 
 const writeCorpus = process.argv.includes("--write-corpus");
+if (writeCorpus && level !== DEFAULT_LEVEL) {
+  throw new Error(`--write-corpus takes puzzles of the default level (${DEFAULT_LEVEL}) only`);
+}
 const corpus: ClueGapEntry[] = [];
 const pct = (n: number, of: number) => `${((100 * n) / of).toFixed(1)}%`;
 
@@ -103,7 +119,7 @@ for (const [size, count, withVerifyFloor] of SIZES) {
   let sizeCorpus = 0;
   for (let n = 0; n < count; n++) {
     const seed = `clue-gaps-${size}-${n}`;
-    const { puzzle, solution, stats } = generate({ width: size, height: size, seed });
+    const { puzzle, solution, stats } = generate({ width: size, height: size, seed, level });
     const { grid } = puzzle;
     cells += grid.cellCount;
     restored += stats.restored;
@@ -157,7 +173,7 @@ for (const [size, count, withVerifyFloor] of SIZES) {
   }
   const seconds = ((performance.now() - t0) / 1000).toFixed(1);
   console.log(
-    `clue-gaps ${size}×${size}: n=${count} clues=${pct(kept, cells)} restored=${pct(restored, cells)} ` +
+    `clue-gaps ${level} ${size}×${size}: n=${count} clues=${pct(kept, cells)} restored=${pct(restored, cells)} ` +
       `removable=${pct(classes.removable, kept)} gap=${pct(classes.gap, kept)} ` +
       `needed=${pct(classes.needed, kept)} unknown=${classes.unknown} ` +
       `solver-floor=${pct(solverFloor, cells)} ` +

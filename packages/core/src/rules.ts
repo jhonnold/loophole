@@ -40,7 +40,8 @@ export type RuleId = (typeof RULE_IDS)[number];
 
 /**
  * Groups of rules that `solve` can leave out (`SolveOptions.rules`), so a difficulty level can use
- * a smaller set. The rules outside every group always run; lookahead has its own option.
+ * a smaller set. The rules outside every group always run, apart from parity and lookahead, which
+ * have their own options.
  */
 export const RULE_GROUPS = ["corners", "colouring", "connectivity"] as const;
 

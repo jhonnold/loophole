@@ -24,6 +24,12 @@ export interface SolveOptions {
    */
   readonly rules?: readonly RuleGroup[];
   /**
+   * Use the inside/outside parity rule. Default true. The colouring group works on what parity
+   * builds and the connectivity group assumes parity has settled the edges between two faces, so
+   * `parity: false` with colouring or connectivity among `rules` throws `RangeError`.
+   */
+  readonly parity?: boolean;
+  /**
    * Record steps. Default true. Without them `steps` comes back empty and `maxSteps` does nothing,
    * and solving is faster; generation's clue removal tests read only the status and edges.
    */
@@ -61,6 +67,7 @@ export function solve(puzzle: Puzzle, options: SolveOptions = {}): SolveResult {
     corners: rules.includes("corners"),
     colouring: rules.includes("colouring"),
     connectivity: rules.includes("connectivity"),
+    parity: options.parity ?? true,
   });
   const steps: Step[] = [];
   engine.steps = options.steps === false ? null : steps;

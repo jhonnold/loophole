@@ -44,6 +44,13 @@ A puzzle is a JSON object:
 
 Lengths are counted in UTF-16 code units (JavaScript string length).
 
+`meta` keys the core writes and reads (others are kept as they are):
+
+| Key | Meaning |
+|---|---|
+| `generator` | The generator version (`GENERATOR_VERSION`) of a generated puzzle. |
+| `level` | The difficulty level a generated puzzle was made at, `easy` or `medium`. Left out at the default level, `hard`. A puzzle without it, or with a value that names no level, counts as `hard` (`puzzleLevel`), and its hints use every rule. |
+
 A reader rejects a puzzle that breaks any rule, including one with a field not listed above. The error names the field (`width`, `clues`, `meta.title`) and says what was expected.
 
 **Canonical form.** Writers emit the fields in the order of the table, leave out absent optional fields, sort `meta` keys by UTF-16 code unit (JavaScript keeps integer-like keys first, in numeric order), and add no whitespace. `serializePuzzleJson` produces this form, so equal puzzles give identical text.

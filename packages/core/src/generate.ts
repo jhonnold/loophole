@@ -1,5 +1,6 @@
 import { EdgeState, type Grid } from "./grid.ts";
-import { generateLoop, LOOP_THRESHOLDS, type LoopThresholds } from "./loop.ts";
+import { DEFAULT_LEVEL, isLevel, LEVEL_SETTINGS, LEVELS, type Level } from "./level.ts";
+import { generateLoop, LOOP_THRESHOLDS, type LoopThresholds, thresholdCount } from "./loop.ts";
 import { createPuzzle, deriveClues, NO_CLUE, type Puzzle } from "./puzzle.ts";
 import { createRng, type Rng } from "./rng.ts";
 import { type SolveResult, solve } from "./solver.ts";
@@ -23,12 +24,10 @@ const MAX_ATTEMPTS = 100;
 
 /**
  * Solves `puzzle` from `initial` (every edge unknown when left out). Generation judges every clue
- * removal by one of these, so the rules it allows decide which clues can go.
+ * removal by one of these, so the rules it allows (the level's) decide which clues can go. Records
+ * no steps: the tests read only the status and edges.
  */
 type RuleSolver = (puzzle: Puzzle, initial?: Uint8Array) => SolveResult;
-
-/** Every rule, lookahead included. Records no steps: the tests read only the status and edges. */
-const ALL_RULES: RuleSolver = (puzzle, initial) => solve(puzzle, { initial, steps: false });
 
 export interface GenerateProgress {
   /** Clue removal tests done so far. */
@@ -45,6 +44,13 @@ export interface GenerateOptions {
   /** Default `LOOP_THRESHOLDS`. */
   readonly thresholds?: LoopThresholds;
   /**
+   * Difficulty, default `DEFAULT_LEVEL`: the rules that judge every clue removal and solve the
+   * result, and the share of cells that keep a clue (`LEVEL_SETTINGS`). A board whose loops the
+   * level's rules cannot solve even with every clue (1×1 below hard; 2×2 and some 2×3 at easy) gets
+   * the next level up, and `puzzle.meta.level` says so.
+   */
+  readonly level?: Level;
+  /**
    * Called after every clue removal test. Purely informational: it does not change the result.
    * Throw from it to stop generation; the error propagates out of `generate`.
    */
@@ -52,7 +58,7 @@ export interface GenerateOptions {
 }
 
 export interface GenerateStats {
-  /** Loops made, counting rejected ones. 1 unless a loop was rejected. */
+  /** Loops made at the puzzle's level, counting rejected ones. 1 unless a loop was rejected. */
   readonly attempts: number;
   readonly clueCount: number;
   /** Clue removal tests made. */
@@ -62,11 +68,17 @@ export interface GenerateStats {
 }
 
 export interface GenerateResult {
-  /** Has `seed` and `meta.generator` = `GENERATOR_VERSION`. */
+  /**
+   * Has `seed`, `meta.generator` = `GENERATOR_VERSION` and, below `DEFAULT_LEVEL`, `meta.level`
+   * (`puzzleLevel` reads it).
+   */
   readonly puzzle: Puzzle;
   /** The only solution, as edge states (`Line` and `Cross`). */
   readonly solution: Uint8Array;
-  /** `solve(puzzle)` from an empty board: status `solved`, steps for hints (FR-6). */
+  /**
+   * `solve(puzzle)` with the level's rules from an empty board: status `solved`, steps for hints
+   * (FR-6).
+   */
   readonly solve: SolveResult;
   readonly stats: GenerateStats;
 }
@@ -80,13 +92,15 @@ export interface GenerateResult {
  *    try a new loop, with one more cell added after shaping than the last.
  * 3. In a seeded order, block by block, remove each clue if the rules still solve the whole puzzle
  *    without it (`removeClues`).
- * 4. Solve the whole puzzle from scratch. While it gets stuck, put back removed clues next to the
+ * 4. Put back removed clues, chosen at random, until the level's share of cells has one
+ *    (`addClues`; easier levels keep more clues).
+ * 5. Solve the whole puzzle from scratch. While it gets stuck, put back removed clues next to the
  *    open edges, spread out, and solve again. A safeguard: step 3's tests reach the same end as
  *    solving from scratch, so this has not been needed in the benchmarks.
  *
- * The result is solved by the rules alone, which proves it has one solution (PRD §9). Uses only the
- * seeded generator and no clock, so it is deterministic. Throws `RangeError` for a bad size, seed or
- * thresholds.
+ * "The rules" are the level's (`LEVEL_SETTINGS`). The result is solved by them alone, which proves
+ * it has one solution (PRD §9). Uses only the seeded generator and no clock, so it is
+ * deterministic. Throws `RangeError` for a bad size, seed, thresholds or level.
  */
 export function generate(options: GenerateOptions): GenerateResult {
   const { width, height, seed, onProgress } = options;
@@ -98,28 +112,57 @@ export function generate(options: GenerateOptions): GenerateResult {
       throw new RangeError(`thresholds.${name} must be from 0 to 1, got ${share}`);
     }
   }
-  const meta = { generator: GENERATOR_VERSION };
+  const level = options.level ?? DEFAULT_LEVEL;
+  if (!isLevel(level)) {
+    throw new RangeError(`level must be one of ${LEVELS.join(", ")}, got ${String(level)}`);
+  }
   // Checks the size and seed before any work.
-  const grid = createPuzzle(width, height, undefined, { seed, meta }).grid;
+  const grid = createPuzzle(width, height, undefined, { seed }).grid;
+  for (let i = LEVELS.indexOf(level); i < LEVELS.length; i++) {
+    const result = generateAt(grid, seed, LEVELS[i], thresholds, onProgress);
+    if (result !== null) return result;
+  }
+  throw new Error(`no usable loop after ${MAX_ATTEMPTS} attempts`);
+}
+
+/**
+ * `generate` at one level, from a fresh seeded generator: null when the level's rules solve no
+ * loop's full clue set in `MAX_ATTEMPTS` loops.
+ */
+function generateAt(
+  grid: Grid,
+  seed: string,
+  level: Level,
+  thresholds: LoopThresholds,
+  onProgress: GenerateOptions["onProgress"],
+): GenerateResult | null {
+  // The rest is the level's rule set, as `solve` takes it.
+  const { minClueShare, ...ruleSet } = LEVEL_SETTINGS[level];
+  const rules: RuleSolver = (puzzle, initial) =>
+    solve(puzzle, { ...ruleSet, initial, steps: false });
+  // The default level leaves `meta.level` out, so its puzzles are the ones made before levels.
+  const meta: Record<string, string> = { generator: GENERATOR_VERSION };
+  if (level !== DEFAULT_LEVEL) meta.level = level;
   const rng = createRng(seed);
   for (let attempts = 1; attempts <= MAX_ATTEMPTS; attempts++) {
     const solution = generateLoop(grid, rng, thresholds, attempts - 1);
     const full = deriveClues(grid, solution).map((k) => (k === 4 ? NO_CLUE : k));
     const clues = full.slice();
     const work: Puzzle = { grid, clues };
-    if (ALL_RULES(work).status !== "solved") continue;
-    const checks = removeClues(work, rng, ALL_RULES, onProgress);
-    const restored = restoreClues(work, full, rng, ALL_RULES);
+    if (rules(work).status !== "solved") continue;
+    const checks = removeClues(work, rng, rules, onProgress);
+    addClues(work, full, rng, minClueShare);
+    const restored = restoreClues(work, full, rng, rules);
     let clueCount = 0;
     for (const k of clues) if (k !== NO_CLUE) clueCount++;
     return {
-      puzzle: createPuzzle(width, height, clues, { seed, meta }),
+      puzzle: createPuzzle(grid.width, grid.height, clues, { seed, meta }),
       solution,
-      solve: solve(work),
+      solve: solve(work, ruleSet),
       stats: { attempts, clueCount, checks, restored },
     };
   }
-  throw new Error(`no usable loop after ${MAX_ATTEMPTS} attempts`);
+  return null;
 }
 
 /**
@@ -197,7 +240,27 @@ function hiddenBase(
 }
 
 /**
- * Step 4: solve from scratch; while stuck, put back removed clues of cells next to an open edge
+ * Step 4: puts back removed clues (in `full`, not in `puzzle.clues`), in a seeded random order,
+ * until at least `share` of the cells have a clue or none is left. Draws nothing from `rng` when
+ * `share` is 0, so the default level's puzzles are the same as before levels.
+ */
+function addClues(puzzle: Puzzle, full: Int8Array, rng: Rng, share: number): void {
+  if (share === 0) return;
+  const { clues } = puzzle;
+  const removed: number[] = [];
+  let count = 0;
+  for (let i = 0; i < clues.length; i++) {
+    if (clues[i] !== NO_CLUE) count++;
+    else if (full[i] !== NO_CLUE) removed.push(i);
+  }
+  const want = Math.min(removed.length, thresholdCount(share, clues.length) - count);
+  if (want <= 0) return;
+  shuffle(removed, rng);
+  for (let n = 0; n < want; n++) clues[removed[n]] = full[removed[n]];
+}
+
+/**
+ * Step 5: solve from scratch; while stuck, put back removed clues of cells next to an open edge
  * (or, if there are none, any removed clues), keeping each round's picks spread out. Terminates
  * because each round puts back at least one clue and the full clue set solves. Returns how many it
  * put back.

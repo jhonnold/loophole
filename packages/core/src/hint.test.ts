@@ -3,13 +3,39 @@ import fc from "fast-check";
 import { analyzeBoard } from "./analyze.ts";
 import { countSolutions } from "./bruteforce.ts";
 import { decodeEdges, parsePuzzle } from "./format.ts";
+import { generate } from "./generate.ts";
 import { EdgeState, hEdgeIndex } from "./grid.ts";
 import { findHint } from "./hint.ts";
+import type { Puzzle } from "./puzzle.ts";
+import type { RuleId } from "./rules.ts";
 import { solve } from "./solver.ts";
 import { arbPuzzleWithSolution } from "./test-support/arbitraries.ts";
+import { levelRuleIds } from "./test-support/levels.ts";
 
 function puzzle(width: number, height: number, clues: string) {
   return parsePuzzle({ v: 1, width, height, clues });
+}
+
+/** Takes every hint from an empty board to the end: the rules the steps named, and the reveals. */
+function hintWalk(p: Puzzle, solution: Uint8Array): { rules: Set<RuleId>; reveals: number } {
+  const board = new Uint8Array(p.grid.edgeCount);
+  const rules = new Set<RuleId>();
+  let reveals = 0;
+  // Each hint decides at least one edge; the cap turns a regression into a failure, not a hang.
+  for (let n = 0; n <= p.grid.edgeCount; n++) {
+    const hint = findHint(p, solution, board);
+    if (hint.kind === "solved") return { rules, reveals };
+    if (hint.kind === "step") {
+      rules.add(hint.step.rule);
+      for (const { edge, state } of hint.step.changes) board[edge] = state;
+    } else if (hint.kind === "reveal") {
+      reveals++;
+      board[hint.edge] = EdgeState.Line;
+    } else {
+      throw new Error(`unexpected ${hint.kind}`);
+    }
+  }
+  throw new Error("the hints did not reach the solution");
 }
 
 describe("findHint", () => {
@@ -98,6 +124,31 @@ describe("findHint", () => {
     let t = 0;
     const late = findHint(p, full.edges, board, { timeLimitMs: 500, now: () => (t += 1000) });
     expect(late.kind).toBe("reveal");
+  });
+
+  test("uses only the rules of the puzzle's level", () => {
+    // The default level's 10×10 "golden" puzzle needs corner rules and lookahead. Labelled easy, its
+    // hints may use only the rules every level has, and reveal lines where those get stuck.
+    const { puzzle: hard, solution } = generate({ width: 10, height: 10, seed: "golden" });
+    const easy = levelRuleIds("easy");
+    const fromHard = hintWalk(hard, solution);
+    expect(fromHard.reveals).toBe(0);
+    expect(fromHard.rules.has("lookahead")).toBe(true);
+    expect([...fromHard.rules].some((rule) => rule !== "lookahead" && !easy.has(rule))).toBe(true);
+    const labelled = { ...hard, meta: { ...hard.meta, level: "easy" } };
+    const fromLabelled = hintWalk(labelled, solution);
+    expect([...fromLabelled.rules].filter((rule) => !easy.has(rule))).toEqual([]);
+    expect(fromLabelled.reveals).toBeGreaterThan(0);
+  });
+
+  test("an easy or medium puzzle's hints reach the solution with its own rules", () => {
+    for (const level of ["easy", "medium"] as const) {
+      const { puzzle: p, solution } = generate({ width: 10, height: 10, seed: "hints", level });
+      const walk = hintWalk(p, solution);
+      expect(walk.reveals).toBe(0);
+      const allowed = levelRuleIds(level);
+      expect([...walk.rules].filter((rule) => !allowed.has(rule))).toEqual([]);
+    }
   });
 
   test("rejects boards of the wrong size", () => {

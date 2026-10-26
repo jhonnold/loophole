@@ -11,7 +11,7 @@
  * 2. the 3s patterns, which depend only on the clues and are applied once
  * 3. corners (optional): for every corner of a 1, 2 or 3, which pairs of states its two sides
  *    there can still take, narrowed at the clue and at the dot in turn (a worklist)
- * 4. inside/outside parity, a union-find over cells (global); when it decides nothing,
+ * 4. inside/outside parity (optional), a union-find over cells (global); when it decides nothing,
  *    colouring (optional): the relations each 1, 2 or 3 forces among its neighbours' sides, added
  *    to the same union-find (global); then connectivity (optional): the loop is one cycle, so it
  *    stays inside one block of the edges that are not crossed, and it uses both or neither of two
@@ -132,6 +132,12 @@ export interface EngineOptions {
   readonly corners?: boolean;
   /** Run the colouring rule (rule group "colouring"). Default true. */
   readonly colouring?: boolean;
+  /**
+   * Run the parity tier. Default true. Colouring works on parity's union-find, and the connectivity
+   * rule `two-exits` assumes parity has settled the edges between two faces, so leaving parity out
+   * with either on throws `RangeError`.
+   */
+  readonly parity?: boolean;
   /**
    * Run colouring only once lookahead finds nothing, instead of right after parity. Default false.
    * The fixpoint is the same and only the order of steps changes (hints would prefer lookahead to
@@ -304,6 +310,7 @@ export class Engine {
 
   private readonly cornersOn: boolean;
   private readonly colourOn: boolean;
+  private readonly parityOn: boolean;
   private readonly colourLast: boolean;
   private connectOn: boolean;
   private probeCorners: boolean;
@@ -315,8 +322,12 @@ export class Engine {
   ) {
     this.cornersOn = options.corners ?? true;
     this.colourOn = options.colouring ?? true;
+    this.parityOn = options.parity ?? true;
     this.colourLast = options.colourLast ?? false;
     this.connectOn = options.connectivity ?? true;
+    if (!this.parityOn && (this.colourOn || this.connectOn)) {
+      throw new RangeError("the colouring and connectivity groups need parity");
+    }
     this.probeCorners = options.probeCorners ?? false;
     const grid = puzzle.grid;
     this.grid = grid;
@@ -378,9 +389,11 @@ export class Engine {
         if (c < 0) return false;
         if (c > 0) continue;
       }
-      const p = this.parity();
-      if (p < 0) return false;
-      if (p > 0) continue;
+      if (this.parityOn) {
+        const p = this.parity();
+        if (p < 0) return false;
+        if (p > 0) continue;
+      }
       // Colouring works on the union-find parity just built; nothing below changes it.
       const last = this.colourLast && lookahead;
       if (this.colourOn && !last) {

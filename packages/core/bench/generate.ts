@@ -6,14 +6,20 @@
  *    and the share of loops that meet the default thresholds (PRD §10, target ≥ 95%).
  * 2. Generation time per size (NFR-1: p95 under 10 s up to 30×30 and under 30 s at 40×40),
  *    first-attempt rate (loops whose full clue set the rules solve), clue density, clues put back
- *    by the safeguard, and `verify` on every result. 100×100 takes 6 to 18 minutes a puzzle (WT18:
- *    374 to 1 047 s for seeds `bench-0` to `bench-2`, next to other jobs).
- * Pass `--quick` to skip 100×100.
+ *    by the safeguard, the share of the hint steps (the result's solve) from each rule group, from
+ *    parity, lookahead and the rules that always run (`other`), and `verify` on every result.
+ *    100×100 takes 4 to 18 minutes a puzzle at the hard level (WT18: 374 to 1 047 s for seeds
+ *    `bench-0` to `bench-2`, next to other jobs; WT20: `bench-0` 233 s), about 25 s at easy and
+ *    70 s at medium.
+ * Pass `--quick` to skip 100×100, and `--level=<easy|medium|hard>` to generate at that level
+ * (default `DEFAULT_LEVEL`, hard).
  */
 import { generate } from "../src/generate.ts";
 import { createGrid } from "../src/grid.ts";
+import { DEFAULT_LEVEL, isLevel, LEVELS } from "../src/level.ts";
 import { generateLoop, LOOP_THRESHOLDS, loopShape, thresholdCount } from "../src/loop.ts";
 import { createRng } from "../src/rng.ts";
+import { GROUP_RULES, RULE_GROUPS, type RuleId } from "../src/rules.ts";
 import { loopCoverage } from "../src/test-support/loops.ts";
 import { verify } from "../src/verify.ts";
 
@@ -22,6 +28,16 @@ function percentile(sorted: number[], p: number): number {
 }
 
 const quick = process.argv.includes("--quick");
+const level =
+  process.argv.find((a) => a.startsWith("--level="))?.slice("--level=".length) ?? DEFAULT_LEVEL;
+if (!isLevel(level)) throw new Error(`unknown level ${level} (one of ${LEVELS.join(", ")})`);
+/** A hint step's kind: its rule group, `parity`, `lookahead` or `other` (rules that always run). */
+const stepKind = new Map<RuleId, string>([
+  ["parity", "parity"],
+  ["lookahead", "lookahead"],
+]);
+for (const g of RULE_GROUPS) for (const id of GROUP_RULES[g]) stepKind.set(id, g);
+const STEP_KINDS = ["other", "parity", ...RULE_GROUPS, "lookahead"];
 
 const LOOP_SIZES: [number, number, number][] = [
   [1, 1, 200],
@@ -81,22 +97,31 @@ for (const [size, count] of GEN_SIZES) {
   let firstAttempt = 0;
   let clues = 0;
   let restored = 0;
+  const steps: Record<string, number> = {};
+  let stepCount = 0;
   for (let n = 0; n < count; n++) {
     const t0 = performance.now();
-    const r = generate({ width: size, height: size, seed: `bench-${n}` });
+    const r = generate({ width: size, height: size, seed: `bench-${n}`, level });
     times.push(performance.now() - t0);
     if (r.stats.attempts === 1) firstAttempt++;
     clues += r.stats.clueCount;
     restored += r.stats.restored;
+    for (const { rule } of r.solve.steps) {
+      const kind = stepKind.get(rule) ?? "other";
+      steps[kind] = (steps[kind] ?? 0) + 1;
+      stepCount++;
+    }
     const status = verify(r.puzzle).status;
     statuses[status] = (statuses[status] ?? 0) + 1;
   }
   times.sort((a, b) => a - b);
   const cells = count * size * size;
+  const mix = STEP_KINDS.map((k) => `${k}=${((100 * (steps[k] ?? 0)) / stepCount).toFixed(1)}%`);
   console.log(
-    `generate ${size}×${size}: n=${count} median=${percentile(times, 0.5).toFixed(0)}ms ` +
+    `generate ${level} ${size}×${size}: n=${count} median=${percentile(times, 0.5).toFixed(0)}ms ` +
       `p95=${percentile(times, 0.95).toFixed(0)}ms max=${times[times.length - 1].toFixed(0)}ms ` +
       `first-attempt=${((100 * firstAttempt) / count).toFixed(0)}% clues=${((100 * clues) / cells).toFixed(1)}% ` +
-      `restored=${((100 * restored) / cells).toFixed(1)}% verify=${JSON.stringify(statuses)}`,
+      `restored=${((100 * restored) / cells).toFixed(1)}% steps: ${mix.join(" ")} ` +
+      `verify=${JSON.stringify(statuses)}`,
   );
 }
