@@ -184,21 +184,16 @@ function removeClues(
   return done;
 }
 
-/** The edges `rules` decide from `initial` with the clues of `cells` hidden. Restores the clues. */
+/** The edges `rules` decide from `initial` with the clues of `cells` hidden. */
 function hiddenBase(
   puzzle: Puzzle,
   rules: RuleSolver,
   cells: number[],
   initial: Uint8Array,
 ): Uint8Array {
-  const { clues } = puzzle;
-  const kept = cells.map((i) => clues[i]);
+  const clues = puzzle.clues.slice();
   for (const i of cells) clues[i] = NO_CLUE;
-  const { edges } = rules(puzzle, initial);
-  cells.forEach((i, n) => {
-    clues[i] = kept[n];
-  });
-  return edges;
+  return rules({ grid: puzzle.grid, clues }, initial).edges;
 }
 
 /**
