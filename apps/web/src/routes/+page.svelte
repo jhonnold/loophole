@@ -22,7 +22,6 @@
   import { daily } from "$lib/daily/index.ts";
   import { type CoverStatus, coverStatus } from "$lib/daily/view.ts";
   import { formatClock } from "$lib/game/timer.ts";
-  import { levelName } from "$lib/puzzles/index.ts";
   import { inProgress, localProgress } from "$lib/sync/index.ts";
   import type { PageProps } from "./$types";
 
@@ -146,7 +145,7 @@
             width={p.size}
             height={p.size}
             name={sizeName(p.size)}
-            level={p.level === undefined ? undefined : levelName(p.level)}
+            level={p.level}
             status={dailyStatuses[p.size] ?? coverStatus({ size: p.size, ready: p.puzzleId !== null })}
           />
         </li>
@@ -189,7 +188,7 @@
             width={p.width}
             height={p.height}
             name={p.name}
-            level={p.level === undefined ? undefined : levelName(p.level)}
+            level={p.level}
             status={statuses[p.id] ?? coverStatus({ size: p.width, ready: true })}
           />
         </li>

@@ -1,6 +1,8 @@
 <script lang="ts">
+  import type { Level } from "@loophole/core";
   import { coverTint } from "../daily/days.ts";
   import type { CoverStatus } from "../daily/view.ts";
+  import { levelName } from "../puzzles/source.ts";
 
   interface Props {
     /** Where the cover goes; null for a puzzle that can't be opened yet. */
@@ -8,8 +10,8 @@
     width: number;
     height: number;
     name: string;
-    /** The level the puzzle was made at, e.g. "Hard"; none for puzzles not made at a level. */
-    level?: string;
+    /** The level the puzzle was made at; none for puzzles not made at a level. */
+    level?: Level;
     status: CoverStatus;
   }
 
@@ -33,7 +35,7 @@
   <span class="kana">スリザーリンク</span>
   <span class="title">
     <span class="name">{name}</span>
-    {#if level !== undefined}<span class="level">{level}</span>{/if}
+    {#if level !== undefined}<span class="level">{levelName(level)}</span>{/if}
   </span>
   <span class="paper" aria-hidden="true"></span>
   <span class="status">
