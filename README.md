@@ -232,7 +232,7 @@ Or stop Garage and archive the `garage-data` and `garage-meta` volumes. `infra/g
 | `./scripts/test-under-load.sh [copies] [rounds]` | Run `bun test` several times at once to shake out timing-sensitive tests |
 | `./scripts/backup-sqlite.sh [folder]` | Back up the SQLite database (see Backups) |
 | `bun run --cwd packages/core bench` | Time puzzle verification on 10×10 to 100×100 boards (not part of the check) |
-| `bun run --cwd packages/core bench:generate` | Time puzzle generation on 7×7 to 100×100 boards and measure loop acceptance (not part of the check) |
+| `bun run --cwd packages/core bench:generate` | Time puzzle generation on 7×7 to 100×100 boards and measure loop shape and acceptance (not part of the check) |
 
 ## Repository layout
 
