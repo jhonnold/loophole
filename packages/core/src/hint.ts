@@ -1,5 +1,6 @@
 import { analyzeBoard } from "./analyze.ts";
 import { EdgeState, type Grid } from "./grid.ts";
+import { LEVEL_SETTINGS, puzzleLevel } from "./level.ts";
 import type { Puzzle } from "./puzzle.ts";
 import type { Step } from "./rules.ts";
 import { solve } from "./solver.ts";
@@ -10,7 +11,8 @@ import { solve } from "./solver.ts";
  * - `mistake`: `edge` is marked differently from the solution (the lowest such edge); `count` is how
  *   many marks are wrong in all. Mistakes come first, because deductions from a board with a wrong
  *   mark would not make sense to the player.
- * - `step`: the next deduction from the player's board, as the rule solver records it.
+ * - `step`: the next deduction from the player's board, as the rule solver records it with the
+ *   rules of the puzzle's level (`puzzleLevel`), so an easy puzzle's hints name only easy rules.
  * - `reveal`: no rule applies, so `edge` is one line of the solution, preferably one that extends a
  *   line already on the board.
  */
@@ -60,7 +62,15 @@ export function findHint(
 
   // Every mark agrees with the solution, so the solver's deductions from the board are sound. A
   // solve stopped by the time limit has no step and falls through to a revealed line.
-  const result = solve(puzzle, { ...options, initial: board, maxSteps: 1 });
+  const { rules, parity, lookahead } = LEVEL_SETTINGS[puzzleLevel(puzzle)];
+  const result = solve(puzzle, {
+    ...options,
+    rules,
+    parity,
+    lookahead,
+    initial: board,
+    maxSteps: 1,
+  });
   const step = result.steps[0];
   if (step !== undefined) return { kind: "step", step };
   return { kind: "reveal", edge: revealEdge(grid, solution, board) };
