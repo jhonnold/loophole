@@ -208,14 +208,15 @@ export class Engine {
   private readonly seen: Uint8Array;
   private readonly order: Int32Array;
   private readonly stack: Int32Array;
+  /** Edges `connected` treats as crossed: the group `twoExits` is checking. */
+  private readonly inGroup: Uint8Array;
   private lookCursor = 0;
   /**
    * Connectivity scratch, allocated on the first connectivity pass (`initConnect`). Blocks: the
    * DFS's discovery times, low points, next `dotEdges` slot, tree edge in and stack of dots, the
    * stack of edges, and each edge's block. Two exits: the faces' union-find, each group's edges
    * as a list (`groupFirst`, `groupNext`, `groupLast`, `groupSize`), the hash table from a pair
-   * of faces to its group, each dot's piece, the edges of the group being checked and a count
-   * per dot.
+   * of faces to its group, each dot's piece and a count per dot.
    */
   private bcDisc = NO_INT32;
   private bcLow = NO_INT32;
@@ -232,9 +233,8 @@ export class Engine {
   private hashKey = NO_INT32;
   private hashGroup = NO_INT32;
   private piece = NO_INT32;
-  private inGroup = NO_UINT8;
   private dotTally = NO_UINT8;
-  /** While steps are recorded: why the last group `groupFeasible` turned down could not be crossed. */
+  /** While steps are recorded: why `connected` last failed (a group `twoExits` cannot cross). */
   private exitCells: readonly number[] = NO_NUMBERS;
   private exitDots: readonly number[] = NO_NUMBERS;
   /**
@@ -292,6 +292,7 @@ export class Engine {
     this.ufParity = new Uint8Array(grid.cellCount + 1);
     this.seen = new Uint8Array(grid.dotCount);
     this.stack = new Int32Array(grid.dotCount);
+    this.inGroup = new Uint8Array(grid.edgeCount);
     this.order = readingOrder(grid);
   }
 
@@ -1357,12 +1358,15 @@ export class Engine {
   }
 
   /**
-   * False when the loop cannot be one piece: walking from a line along edges that are not crossed
-   * must reach every other line and an open side of every clue above 0. Does nothing before the
-   * first line is drawn (a clue's sides can then lie in different regions).
+   * False when the loop cannot be one piece: walking from a line along edges that are neither
+   * crossed nor in `inGroup` (a group `twoExits` tries crossed) must reach every other line and
+   * such a side of every clue above 0. Does nothing before the first line is drawn (a clue's sides
+   * can then lie in different regions). While steps are recorded, a false leaves the reason in
+   * `exitCells` and `exitDots`: the first line's dot and the dot of a line it did not reach, or
+   * that first dot and a clue it did not reach.
    */
   private connected(): boolean {
-    const { grid, edges, clues, seen, stack } = this;
+    const { grid, edges, clues, seen, stack, inGroup } = this;
     const first = edges.indexOf(Line);
     if (first < 0) return true;
     const seed = grid.edgeDots[first * 2];
@@ -1374,25 +1378,35 @@ export class Engine {
       const d = stack[--top];
       for (let j = 0; j < 4; j++) {
         const e = grid.dotEdges[d * 4 + j];
-        if (e === NONE || edges[e] === Cross) continue;
-        const o = grid.edgeDots[e * 2] === d ? grid.edgeDots[e * 2 + 1] : grid.edgeDots[e * 2];
+        if (e === NONE || edges[e] === Cross || inGroup[e]) continue;
+        const o = otherDot(grid, e, d);
         if (!seen[o]) {
           seen[o] = 1;
           stack[top++] = o;
         }
       }
     }
-    for (let e = 0; e < grid.edgeCount; e++) {
-      if (edges[e] === Line && !seen[grid.edgeDots[e * 2]]) return false;
+    for (let e = first + 1; e < grid.edgeCount; e++) {
+      if (edges[e] !== Line || seen[grid.edgeDots[e * 2]]) continue;
+      if (this.steps !== null) {
+        this.exitCells = [];
+        this.exitDots = [seed, grid.edgeDots[e * 2]].sort((a, b) => a - b);
+      }
+      return false;
     }
     for (let i = 0; i < grid.cellCount; i++) {
       if (clues[i] <= 0) continue;
       let reached = false;
       for (let j = 0; j < 4 && !reached; j++) {
         const e = grid.cellEdges[i * 4 + j];
-        reached = edges[e] !== Cross && seen[grid.edgeDots[e * 2]] === 1;
+        reached = edges[e] !== Cross && !inGroup[e] && seen[grid.edgeDots[e * 2]] === 1;
       }
-      if (!reached) return false;
+      if (reached) continue;
+      if (this.steps !== null) {
+        this.exitCells = [i];
+        this.exitDots = [seed];
+      }
+      return false;
     }
     return true;
   }
@@ -1457,7 +1471,6 @@ export class Engine {
     this.hashKey = new Int32Array(table);
     this.hashGroup = new Int32Array(table);
     this.piece = new Int32Array(D);
-    this.inGroup = new Uint8Array(E);
     this.dotTally = new Uint8Array(D);
   }
 
@@ -1651,14 +1664,13 @@ export class Engine {
     }
     let set = 0;
     for (let g = 0; g < groups; g++) {
-      if (groupSize[g] < 2 || this.isChain(g)) continue;
-      const group: number[] = [];
-      for (let e = groupFirst[g]; e !== NONE; e = groupNext[e]) group.push(e);
-      if (this.groupFeasible(group)) continue;
+      if (groupSize[g] < 2 || this.isChain(g) || this.groupFeasible(g)) continue;
       if (this.recording()) this.begin("two-exits", this.exitCells, this.exitDots);
-      for (const e of group) if (!this.assign(e, Line)) return -1;
+      for (let e = groupFirst[g]; e !== NONE; e = groupNext[e]) {
+        if (!this.assign(e, Line)) return -1;
+      }
       this.commit();
-      set += group.length;
+      set += groupSize[g];
       // While steps are recorded, one step a pass, so the cheaper rules follow it up first.
       if (this.steps !== null) return set;
     }
@@ -1675,16 +1687,14 @@ export class Engine {
   }
 
   /**
-   * Whether, with every edge of `group` crossed, one piece of the graph holds every line and a side
-   * that is not crossed of every clue above 0. When not, and steps are recorded, leaves the reason
-   * in `exitCells` and `exitDots`: a dot of a line in each of two pieces, or a dot of a line and a
-   * clue with no side in that line's piece.
+   * Whether `connected` still holds with every edge of group g crossed. When not, and steps are
+   * recorded, its reason is left in `exitCells` and `exitDots`.
    */
-  private groupFeasible(group: readonly number[]): boolean {
-    const { inGroup } = this;
-    for (const e of group) inGroup[e] = 1;
-    const ok = this.piecesFeasible();
-    for (const e of group) inGroup[e] = 0;
+  private groupFeasible(g: number): boolean {
+    const { inGroup, groupFirst, groupNext } = this;
+    for (let e = groupFirst[g]; e !== NONE; e = groupNext[e]) inGroup[e] = 1;
+    const ok = this.connected();
+    for (let e = groupFirst[g]; e !== NONE; e = groupNext[e]) inGroup[e] = 0;
     return ok;
   }
 
@@ -1726,56 +1736,6 @@ export class Engine {
       if (e !== NONE && this.edges[e] !== Cross) n++;
     }
     return n;
-  }
-
-  /**
-   * The general case: walks the piece of the first line over edges that are neither crossed nor in
-   * the group (marked in `inGroup`), then checks it holds every line and a side of every clue
-   * above 0.
-   */
-  private piecesFeasible(): boolean {
-    const { grid, edges, clues, piece, inGroup, bcDots: stack } = this;
-    const first = edges.indexOf(Line);
-    const start = grid.edgeDots[first * 2];
-    piece.fill(0);
-    let top = 0;
-    stack[top++] = start;
-    piece[start] = 1;
-    while (top > 0) {
-      const d = stack[--top];
-      for (let j = 0; j < 4; j++) {
-        const e = grid.dotEdges[d * 4 + j];
-        if (e === NONE || edges[e] === Cross || inGroup[e]) continue;
-        const o = otherDot(grid, e, d);
-        if (piece[o] === 0) {
-          piece[o] = 1;
-          stack[top++] = o;
-        }
-      }
-    }
-    for (let e = first + 1; e < grid.edgeCount; e++) {
-      if (edges[e] !== Line || piece[grid.edgeDots[e * 2]] === 1) continue;
-      if (this.steps !== null) {
-        this.exitCells = [];
-        this.exitDots = [start, grid.edgeDots[e * 2]].sort((a, b) => a - b);
-      }
-      return false;
-    }
-    for (let i = 0; i < grid.cellCount; i++) {
-      if (clues[i] <= 0) continue;
-      let reached = false;
-      for (let j = 0; j < 4 && !reached; j++) {
-        const e = grid.cellEdges[i * 4 + j];
-        reached = edges[e] !== Cross && !inGroup[e] && piece[grid.edgeDots[e * 2]] === 1;
-      }
-      if (reached) continue;
-      if (this.steps !== null) {
-        this.exitCells = [i];
-        this.exitDots = [start];
-      }
-      return false;
-    }
-    return true;
   }
 
   // --- tier 5: lookahead --------------------------------------------------------------------
