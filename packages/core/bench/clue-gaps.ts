@@ -38,8 +38,6 @@ const SIZES: [number, number, boolean][] = [
   [15, 10, true],
   [20, 10, false],
 ];
-/** Deterministic verification: a node budget and no time limit (DECISIONS, WT2). */
-const VERIFY_OPTIONS = CLUE_GAP_VERIFY_OPTIONS;
 /** Corpus: gap cases per size, from these sizes, at most this many from one puzzle. */
 const CORPUS_PER_SIZE = 12;
 const CORPUS_SIZES = [5, 7, 10];
@@ -108,7 +106,8 @@ for (const [size, count, withVerifyFloor] of SIZES) {
       clues[i] = NO_CLUE;
       // The rules are sound, so a puzzle they solve has one solution: verify only when stuck.
       const result = runRules(without);
-      const status = result.status === "solved" ? "solved" : verify(without, VERIFY_OPTIONS).status;
+      const status =
+        result.status === "solved" ? "solved" : verify(without, CLUE_GAP_VERIFY_OPTIONS).status;
       if (status === "solved") classes.removable++;
       else if (status === "unique") {
         classes.gap++;
@@ -136,7 +135,7 @@ for (const [size, count, withVerifyFloor] of SIZES) {
     solverFloor += greedyFloor(puzzle, `${seed}/floor`, (p) => runRules(p).status === "solved");
     if (withVerifyFloor) {
       verifyFloor += greedyFloor(puzzle, `${seed}/floor`, (p) => {
-        const status = verify(p, VERIFY_OPTIONS).status;
+        const status = verify(p, CLUE_GAP_VERIFY_OPTIONS).status;
         if (status === "unknown") floorUnknown++;
         return status === "unique";
       });
