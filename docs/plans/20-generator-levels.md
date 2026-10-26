@@ -12,7 +12,7 @@ Branch `feat/generator-levels`, worktree `/home/jhonnold/projects/loophole-wt/ge
 | `medium` | `corners` | yes | no | 0.45 | + inside/outside parity and the corner rules (line into a 1's/3's corner, a 2 passes it on, 2 in a corner, 1s side by side, 3 diagonal to a 1, corner chains) |
 | `hard` (default) | `corners`, `colouring`, `connectivity` (= `RULE_GROUPS`) | yes | yes | 0 | everything: today's output, byte-identical |
 
-0. **`solve(puzzle, { parity: false })`.** Parity is outside every rule group, so a new option (default true) makes the engine skip the parity tier (`Engine` option `parity`, one `if` in `propagate`). Colouring works on parity's union-find, so colouring without parity throws `RangeError` (in the `Engine` constructor, hence from `solve`). Soundness without parity is added to the brute-force agreement tests.
+0. **`solve(puzzle, { parity: false })`.** Parity is outside every rule group, so a new option (default true) makes the engine skip the parity tier (`Engine` option `parity`, one `if` in `propagate`). Colouring works on parity's union-find, and connectivity's `two-exits` assumes parity has settled the edges between two faces, so either without parity throws `RangeError` (in the `Engine` constructor, hence from `solve`; connectivity added after plan review 2). Soundness without parity is added to the brute-force agreement tests.
 1. **A level is two knobs.** (a) The solver rule set (groups, parity, lookahead) used for the full-clue check, every removal test, the restore safeguard and the final (recorded) solve, so a level-L puzzle is solved from empty by L's rules (which proves it unique). (b) A clue floor: after removal, put back removed clues in a seeded random order until `minClueShare` of the cells have one (`addClues`).
 2. **Default level = hard = today.** `meta.level` is left out at the default level and `addClues` draws nothing when the share is 0, so the default output is byte-identical (puzzle, solution, steps, stats) and `GENERATOR_VERSION` stays `"6"`; existing goldens unchanged.
 3. **`meta.level`** (`easy` / `medium`) on puzzles below the default; `puzzleLevel(puzzle)` reads it (absent or unknown → hard). Documented in `docs/FORMAT.md`.
@@ -131,10 +131,10 @@ Hard's line equals WT17/18's numbers (removable 0.0%, gap 0.2 / 0.8 / 2.2 / 1.6 
 
 | File | Change |
 |---|---|
-| `packages/core/src/engine.ts` | `EngineOptions.parity` (default true); `RangeError` when colouring is on without it; `propagate` skips `parity()` without it |
+| `packages/core/src/engine.ts` | `EngineOptions.parity` (default true); `RangeError` when colouring or connectivity is on without it; `propagate` skips `parity()` without it |
 | `packages/core/src/solver.ts` | `SolveOptions.parity` (default true), passed to the engine |
-| `packages/core/src/solver.test.ts` | parity left out: no `parity` step, same edges with and without steps, `RangeError` with colouring |
-| `packages/core/src/agreement.test.ts` | brute-force agreement also with `{ rules: [], parity: false, lookahead: false }` (easy) and `{ rules: ["corners", "connectivity"], parity: false }`, and same status without steps |
+| `packages/core/src/solver.test.ts` | parity left out: no `parity` step, same edges with and without steps, `RangeError` with colouring or connectivity |
+| `packages/core/src/agreement.test.ts` | brute-force agreement also with `{ rules: [], parity: false, lookahead: false }` (easy) and `{ rules: ["corners"], parity: false }`, and same status without steps |
 | `packages/core/src/level.ts` (new) | `LEVELS`, `Level`, `DEFAULT_LEVEL`, `LevelSettings`, `LEVEL_SETTINGS`, `isLevel`, `puzzleLevel` |
 | `packages/core/src/level.test.ts` (new) | level table invariants, `puzzleLevel` |
 | `packages/core/src/test-support/levels.ts` (new) | `levelRuleIds(level)`: rule ids a level's solve can record (tests only) |
@@ -166,7 +166,7 @@ export function isLevel(value: unknown): value is Level;
 export function puzzleLevel(puzzle: Puzzle): Level; // meta.level if it names a level, else DEFAULT_LEVEL
 
 // solver.ts
-export interface SolveOptions { …; readonly parity?: boolean } // default true; false + colouring group → RangeError
+export interface SolveOptions { …; readonly parity?: boolean } // default true; false + colouring or connectivity group → RangeError
 
 // generate.ts
 export interface GenerateOptions { …; readonly level?: Level } // RangeError for a value not in LEVELS
@@ -217,7 +217,7 @@ addClues(puzzle, full, rng, share):
 ## Rules for the implementer
 
 - Mode EXECUTE; follow the steps in order. Prefix commands with `export PATH="$HOME/.bun/bin:$PATH";`. Work in `/home/jhonnold/projects/loophole-wt/generator-levels`; run `bun install --frozen-lockfile` first if `node_modules` is missing. Do not clone the repo (`/tmp` is a small tmpfs); scratch goes in your scratchpad.
-- The code below is exact: it was applied to this worktree, formatted with Biome, and `bun run check` passed (857 pass, 3 skip; on main, step 1 alone: 845 pass; steps 1–2: 855). The planner's full diff is `/tmp/claude-1000/-home-jhonnold-projects-loophole/a34715f6-7810-5a69-ba81-edd46bda034d/scratchpad/generator-levels/wt20-final.diff`; a step may be applied with `git apply --include='<path>' …/wt20-final.diff` for its own paths, but commit per step. New files are given in full; edits to existing files as unified diffs against main (`d77a339`).
+- The code below is exact: it was applied to this worktree, formatted with Biome, and `bun run check` passed (857 pass, 3 skip; on main, step 1 alone: 845 pass; steps 1–2: 855). The planner's full diff is `/tmp/claude-1000/-home-jhonnold-projects-loophole/a34715f6-7810-5a69-ba81-edd46bda034d/scratchpad/generator-levels/wt20-final.diff`; a step may be applied with `git apply --include='<path>' …/wt20-final.diff` for its own paths, but commit per step. New files are given in full; edits to existing files as unified diffs against main (`d77a339`). What was built differs from these blocks in three ways: connectivity without parity throws like colouring (plan review 2), so the engine guard, the `SolveOptions`/`EngineOptions`/`LevelSettings` comments, the solver test, a separate level-table test and the agreement set (`{ rules: ["corners"], parity: false }`) follow suit, and `bun run check` has 858 pass; after the code review, `generate` and `findHint` pass a level's settings less `minClueShare` to `solve` as one object; and `bench:generate` counts parity steps in their own column instead of `other`.
 - If a golden or digest differs, you did not copy something exactly: fix the code, never the expected value. The default level's goldens must pass **unchanged**; `GENERATOR_VERSION` stays `"6"`.
 - No `console`, `Date`, `performance` or Bun APIs in `packages/core/src/` outside tests and `test-support`.
 - Run `bun run format` after editing, then `bun run check`; commit at each boundary with the given conventional-commit message. Do not push.
@@ -915,7 +915,7 @@ Test cases added (all deterministic except the fast-check property, which shrink
 | `a board too small for a level's rules gets the next level up` | 1×1 easy/medium = default puzzle; 2×2 easy = medium puzzle | FR-7 |
 | rejects test | `level: "expert"` → `RangeError` before any progress call | FR-7 |
 
-`level.test.ts`: hard is every group, parity, lookahead, share 0; each easier level's groups ⊆ the next's, parity ⇒ next has parity, lookahead ⇒ next has lookahead, share strictly larger; no level has colouring without parity; `puzzleLevel` for each level, absent, unknown and empty values.
+`level.test.ts`: hard is every group, parity, lookahead, share 0; each easier level's groups ⊆ the next's, parity ⇒ next has parity, lookahead ⇒ next has lookahead, share strictly larger; no level has colouring or connectivity without parity (its own test); `puzzleLevel` for each level, absent, unknown and empty values.
 
 Verify: `bun run format && bun run check` (855 pass, 3 skip).
 
@@ -1370,7 +1370,7 @@ Commit: `docs: WT20 difficulty levels (DECISIONS, PRD, FORMAT, README)`
 6. **FR-6 / FR-12:** `findHint` uses only the puzzle's level's rules (tested both ways); hints for hard/unlabelled puzzles unchanged.
 7. **NFR-1:** generation p95 at every level within budget (≤ 2.7 s at 30×30, ≤ 8.9 s at 40×40; 100×100 easy 23 s, medium 68 s, hard 233 s for `bench-0`).
 8. **Docs:** 2 DECISIONS entries, PRD FR-3/FR-7/FR-12/§14 Q1, FORMAT, README, core AGENTS; `bench:generate`/`bench:clue-gaps` take `--level=`.
-9. **FR-3 / FR-5:** `solve(…, { parity: false })` is sound (brute-force agreement with easy's rule set and with corners + connectivity without parity) and refuses colouring without parity (`RangeError`).
+9. **FR-3 / FR-5:** `solve(…, { parity: false })` is sound (brute-force agreement with easy's rule set and with corners alone without parity) and refuses colouring or connectivity without parity (`RangeError`).
 
 ## Assumptions and open questions (resolved by assumption; the orchestrator may override)
 
