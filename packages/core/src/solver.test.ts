@@ -99,7 +99,8 @@ describe("solve: each rule", () => {
     [1, 3, ".2.", 0, { rule: "colour-2", changes: "0:1", cells: [0, 1], dots: [] }],
     [1, 4, ".32.", 0, { rule: "colour-3", changes: "8:1", cells: [1], dots: [] }],
     [3, 3, "3..2.23..", 2, { rule: "colour-chain", changes: "2:1", cells: [2, 3, 5], dots: [] }],
-    // Connectivity (WT18): for each, the smallest puzzle, then the fewest clues, where it fires.
+    // Connectivity (WT18): for each, the smallest puzzle with one solution, then the fewest clues,
+    // where it fires (two-exits fires on 1×5 "..2.." too, which has several).
     [1, 5, ".3.1.", 4, { rule: "unreachable", changes: "4:2 5:2 14:2 15:2", cells: [], dots: [] }],
     [2, 4, "1....3.2", 6, { rule: "cut-off", changes: "1:2 3:2 11:2 12:2", cells: [], dots: [4] }],
     [1, 5, ".3.3.", 4, { rule: "two-exits", changes: "10:1 11:1", cells: [], dots: [2, 6] }],
