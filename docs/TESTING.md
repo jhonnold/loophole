@@ -49,6 +49,8 @@ Server tests follow its layers:
 - Managers are tested with the fakes in the server's test support (clock, puzzle repository, job queue, task runner) and the in-memory blob store, so they run without a database or threads.
 - SQLite repositories and the job queue are tested on in-memory databases (`openDatabase(":memory:")`), which run the real migrations. The claim race test and the concurrent-open test use a database file shared by several child processes (`Bun.spawn`), as the API and the worker share one; threads would not do (`docs/DECISIONS.md`, "Concurrent-open tests use processes").
 - Routes are tested through Hono's `app.request` over real managers and in-memory adapters, with no server listening.
+- A migration that changes existing rows gets a test that builds the schema before it from the numbered files, adds rows as the older code wrote them, then migrates (`migrations.test.ts`).
+- The worker loop's shutdown (stop claiming, drain, then cancel) is tested with a scripted job runner; the thread runner's cancel stops a real 100×100 generation.
 - The thread task runner is tested with real Bun worker threads, including a 100×100 generation stopped at its time limit.
 - The S3 blob store test runs against Garage when the `S3_*` settings are set (from `.env`) and Garage answers; otherwise it is skipped, as in CI. Start Garage (README, Local services) to run it.
 - The account and session managers run on fakes too (users, sessions, mailed tokens, password hashing, CAPTCHA) with the in-memory mailer and rate limiter. Route tests build the account side with `accountDeps` from the server's test support and pass a client address as `app.request`'s third argument.
