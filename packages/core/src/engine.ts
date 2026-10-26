@@ -241,8 +241,8 @@ export class Engine {
    */
   private readonly reach: Int32Array;
   private walk = 0;
-  /** Cells with a clue above 0, in index order; built on first use (`positiveCells`). */
-  private positive: Int32Array | null = null;
+  /** Cells with a clue above 0, in index order. */
+  private readonly positive: Int32Array;
   private readonly order: Int32Array;
   private readonly stack: Int32Array;
   /** Edges `connected` treats as crossed: the group `twoExits` is checking. */
@@ -334,6 +334,9 @@ export class Engine {
     this.ufParity = new Uint8Array(grid.cellCount + 1);
     this.seen = new Uint8Array(grid.dotCount);
     this.reach = new Int32Array(grid.dotCount);
+    const positive: number[] = [];
+    for (let i = 0; i < grid.cellCount; i++) if (puzzle.clues[i] > 0) positive.push(i);
+    this.positive = Int32Array.from(positive);
     this.stack = new Int32Array(grid.dotCount);
     this.inGroup = new Uint8Array(grid.edgeCount);
     this.order = readingOrder(grid);
@@ -1598,30 +1601,31 @@ export class Engine {
         }
       }
     }
-    let ok = lineEnds === 2 * this.lineCount;
-    const positive = this.positiveCells();
-    for (let x = 0; x < positive.length && ok; x++) {
+    if (lineEnds !== 2 * this.lineCount) {
+      if (this.steps !== null) {
+        let e = first + 1;
+        while (edges[e] !== Line || reach[grid.edgeDots[e * 2]] === walk) e++;
+        this.exitCells = [];
+        this.exitDots = [seed, grid.edgeDots[e * 2]].sort((a, b) => a - b);
+      }
+      return false;
+    }
+    const { positive } = this;
+    for (let x = 0; x < positive.length; x++) {
       const i = positive[x];
       let reached = false;
       for (let j = 0; j < 4 && !reached; j++) {
         const e = grid.cellEdges[i * 4 + j];
         reached = edges[e] !== Cross && !inGroup[e] && reach[grid.edgeDots[e * 2]] === walk;
       }
-      ok = reached;
+      if (reached) continue;
+      if (this.steps !== null) {
+        this.exitCells = [i];
+        this.exitDots = [seed];
+      }
+      return false;
     }
-    if (ok) return true;
-    if (this.steps !== null) this.exitReason(seed, walk);
-    return false;
-  }
-
-  /** The cells with a clue above 0, in index order. */
-  private positiveCells(): Int32Array {
-    if (this.positive === null) {
-      const cells: number[] = [];
-      for (let i = 0; i < this.grid.cellCount; i++) if (this.clues[i] > 0) cells.push(i);
-      this.positive = Int32Array.from(cells);
-    }
-    return this.positive;
+    return true;
   }
 
   /** A new mark for `reach` and `cellMark`; clears them long before the counter could overflow. */
@@ -1632,33 +1636,6 @@ export class Engine {
       this.walk = 0;
     }
     return ++this.walk;
-  }
-
-  /**
-   * Why `connected` just failed, in `exitCells` and `exitDots`: the first line it did not reach
-   * (with the seed's dot), else the first clue it did not reach (with the seed's dot).
-   */
-  private exitReason(seed: number, walk: number): void {
-    const { grid, edges, inGroup, reach } = this;
-    const positive = this.positiveCells();
-    for (let e = 0; e < grid.edgeCount; e++) {
-      if (edges[e] !== Line || reach[grid.edgeDots[e * 2]] === walk) continue;
-      this.exitCells = [];
-      this.exitDots = [seed, grid.edgeDots[e * 2]].sort((a, b) => a - b);
-      return;
-    }
-    for (let x = 0; x < positive.length; x++) {
-      const i = positive[x];
-      let reached = false;
-      for (let j = 0; j < 4 && !reached; j++) {
-        const e = grid.cellEdges[i * 4 + j];
-        reached = edges[e] !== Cross && !inGroup[e] && reach[grid.edgeDots[e * 2]] === walk;
-      }
-      if (reached) continue;
-      this.exitCells = [i];
-      this.exitDots = [seed];
-      return;
-    }
   }
 
   // --- tier 4c: connectivity ---------------------------------------------------------------
@@ -1679,7 +1656,7 @@ export class Engine {
     if (this.blockOf.length === 0) this.initConnect();
     this.blocks();
     const { blockOf } = this;
-    const positive = this.positiveCells();
+    const { positive } = this;
     // Every line in one block: the first line's block holds them all.
     const target = blockOf[edges.indexOf(Line)];
     if (this.blockLines[target] !== this.lineCount) return -1;
@@ -2017,7 +1994,7 @@ export class Engine {
           }
         }
       }
-      return found === this.positiveCells().length;
+      return found === this.positive.length;
     }
     // The loop is in the other piece: no clue above 0 may have all its usable sides here. Such a
     // clue has a side with an end here (a group edge has one), so it is beside one of these dots.
