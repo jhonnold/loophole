@@ -27,8 +27,8 @@ const MAX_ATTEMPTS = 100;
  */
 type RuleSolver = (puzzle: Puzzle, initial?: Uint8Array) => SolveResult;
 
-/** Every rule, lookahead included. */
-const ALL_RULES: RuleSolver = (puzzle, initial) => solve(puzzle, { initial });
+/** Every rule, lookahead included. Records no steps: the tests read only the status and edges. */
+const ALL_RULES: RuleSolver = (puzzle, initial) => solve(puzzle, { initial, steps: false });
 
 export interface GenerateProgress {
   /** Clue removal tests done so far. */
@@ -109,13 +109,13 @@ export function generate(options: GenerateOptions): GenerateResult {
     const work: Puzzle = { grid, clues };
     if (ALL_RULES(work).status !== "solved") continue;
     const checks = removeClues(work, rng, ALL_RULES, onProgress);
-    const { result, restored } = restoreClues(work, full, rng, ALL_RULES);
+    const { restored } = restoreClues(work, full, rng, ALL_RULES);
     let clueCount = 0;
     for (const k of clues) if (k !== NO_CLUE) clueCount++;
     return {
       puzzle: createPuzzle(width, height, clues, { seed, meta }),
       solution,
-      solve: result,
+      solve: solve(work),
       stats: { attempts, clueCount, checks, restored },
     };
   }

@@ -120,6 +120,15 @@ describe("solve: each rule", () => {
     expect(solve(p).steps[0].rule).toBe("corner-chain");
   });
 
+  test("without steps it reaches the same edges and records none", () => {
+    const p = puzzle(3, 3, "0...11.3.");
+    const full = solve(p);
+    const bare = solve(p, { steps: false });
+    expect(bare.status).toBe(full.status);
+    expect(bare.edges).toEqual(full.edges);
+    expect(bare.steps).toEqual([]);
+  });
+
   test("two 3s side by side do not claim their shared side", () => {
     // The only solution is the rectangle around both cells, with the shared side crossed.
     const p = puzzle(2, 1, "33");
