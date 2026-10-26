@@ -7,9 +7,10 @@
  * 2. Generation time per size (NFR-1: p95 under 10 s up to 30×30 and under 30 s at 40×40),
  *    first-attempt rate (loops whose full clue set the rules solve), clue density, clues put back
  *    by the safeguard, the share of the hint steps (the result's solve) from each rule group, from
- *    lookahead and from the rules that always run (`other`), and `verify` on every result. 100×100
- *    takes 4 to 18 minutes a puzzle at the hard level (WT18: 374 to 1 047 s for seeds `bench-0` to
- *    `bench-2`, next to other jobs; WT20: `bench-0` 233 s), about 25 s at easy and 70 s at medium.
+ *    parity, lookahead and the rules that always run (`other`), and `verify` on every result.
+ *    100×100 takes 4 to 18 minutes a puzzle at the hard level (WT18: 374 to 1 047 s for seeds
+ *    `bench-0` to `bench-2`, next to other jobs; WT20: `bench-0` 233 s), about 25 s at easy and
+ *    70 s at medium.
  * Pass `--quick` to skip 100×100, and `--level=<easy|medium|hard>` to generate at that level
  * (default `DEFAULT_LEVEL`, hard).
  */
@@ -30,10 +31,13 @@ const quick = process.argv.includes("--quick");
 const level =
   process.argv.find((a) => a.startsWith("--level="))?.slice("--level=".length) ?? DEFAULT_LEVEL;
 if (!isLevel(level)) throw new Error(`unknown level ${level} (one of ${LEVELS.join(", ")})`);
-/** What a hint step counts as: its rule group, `lookahead`, or `other` (rules that always run). */
-const stepKind = new Map<RuleId, string>([["lookahead", "lookahead"]]);
+/** A hint step's kind: its rule group, `parity`, `lookahead` or `other` (rules that always run). */
+const stepKind = new Map<RuleId, string>([
+  ["parity", "parity"],
+  ["lookahead", "lookahead"],
+]);
 for (const g of RULE_GROUPS) for (const id of GROUP_RULES[g]) stepKind.set(id, g);
-const STEP_KINDS = ["other", ...RULE_GROUPS, "lookahead"];
+const STEP_KINDS = ["other", "parity", ...RULE_GROUPS, "lookahead"];
 
 const LOOP_SIZES: [number, number, number][] = [
   [1, 1, 200],
