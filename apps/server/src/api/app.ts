@@ -19,6 +19,7 @@ import {
   PuzzleNotFoundError,
   QueueFullError,
   RateLimitedError,
+  TooManyPendingJobsError,
   WrongSolutionError,
 } from "../managers/errors.ts";
 import type { HintManager } from "../managers/hint-manager.ts";
@@ -27,6 +28,7 @@ import type { ProgressManager } from "../managers/progress-manager.ts";
 import type { PuzzleManager } from "../managers/puzzle-manager.ts";
 import type { ApiMetrics } from "../ports.ts";
 import { type AccountRouteDeps, registerAccountRoutes, tooManyRequests } from "./accounts.ts";
+import { clientAddress, rateLimitKey } from "./client-address.ts";
 import { sameOriginOnly } from "./csrf.ts";
 import { type DailyRouteDeps, registerDailyRoutes } from "./daily.ts";
 import { type HealthRouteDeps, registerHealthRoutes } from "./health.ts";
@@ -130,7 +132,8 @@ const generateRoute = createRoute({
   method: "post",
   path: "/api/jobs/generate",
   summary: "Queue a puzzle generation",
-  description: "Generation runs in the background; poll the returned job until it is done.",
+  description:
+    "Generation runs in the background; poll the returned job until it is done. Each player (or, for guests, each address) may have a few generations waiting or running at once.",
   request: {
     body: { required: true, content: { "application/json": { schema: GenerateRequestSchema } } },
   },
@@ -143,6 +146,9 @@ const generateRoute = createRoute({
     413: problemResponse("Request body larger than 64 KiB."),
     415: problemResponse("Request body is not JSON."),
     403: problemResponse("Sent from another site (CSRF protection)."),
+    429: problemResponse(
+      "This player or address already has as many generations waiting or running as allowed.",
+    ),
     503: problemResponse("Too many jobs waiting; try again later."),
   },
 });
@@ -214,8 +220,11 @@ export function createApp(deps: AppDeps): OpenAPIHono {
     return c.json(toHintDto(hint), 200);
   });
 
-  app.openapi(generateRoute, (c) => {
-    const job = jobs.enqueueGenerate(c.req.valid("json"));
+  app.openapi(generateRoute, async (c) => {
+    const user = await currentUser(c, deps.sessions);
+    const requester =
+      user === null ? `ip:${rateLimitKey(clientAddress(c, deps.trustProxy))}` : `user:${user.id}`;
+    const job = jobs.enqueueGenerate(c.req.valid("json"), requester);
     c.header("Location", `/api/jobs/${job.id}`);
     return c.json(toJobDto(job), 202);
   });
@@ -245,6 +254,8 @@ export function createApp(deps: AppDeps): OpenAPIHono {
   app.onError((err, c) => {
     if (err instanceof QueueFullError)
       return problem(c, 503, "Queue full", { detail: err.message });
+    if (err instanceof TooManyPendingJobsError)
+      return problem(c, 429, "Too many generations in progress", { detail: err.message });
     if (err instanceof InvalidBoardError)
       return problem(c, 400, "Invalid board", { detail: err.message });
     if (err instanceof PuzzleNotFoundError)

@@ -1,6 +1,8 @@
 import { describe, expect, spyOn, test } from "bun:test";
+import { JOB_PRIORITY } from "../domain.ts";
 import type { StockReport } from "../managers/daily-stock-manager.ts";
-import { runWorkerLoop } from "./loop.ts";
+import type { RunNextOptions } from "../managers/job-run-manager.ts";
+import { runVerifyLane, runWorkerLoop } from "./loop.ts";
 
 /** A scheduler that reports nothing to do. */
 const stocked = { stock: (): StockReport => ({ queued: 0, missingToday: [] }) };
@@ -34,6 +36,7 @@ describe("runWorkerLoop", () => {
       pollMs: 60_000,
       sweepMs: 5_000,
       stockMs: 60_000,
+      drainMs: 60_000,
       now: () => time,
       signal: controller.signal,
     });
@@ -77,6 +80,7 @@ describe("runWorkerLoop", () => {
       pollMs: 60_000,
       sweepMs: 60_000,
       stockMs: 60_000,
+      drainMs: 60_000,
       signal: controller.signal,
     });
     expect(recovered).toBe(1);
@@ -103,6 +107,7 @@ describe("runWorkerLoop", () => {
       pollMs: 1,
       sweepMs: 60_000,
       stockMs: 60_000,
+      drainMs: 60_000,
       signal: controller.signal,
     });
     expect(calls).toBe(2);
@@ -142,6 +147,7 @@ describe("runWorkerLoop", () => {
       pollMs: 1,
       sweepMs: 60_000,
       stockMs: 60_000,
+      drainMs: 60_000,
       now: () => time,
       signal: controller.signal,
     });
@@ -152,5 +158,91 @@ describe("runWorkerLoop", () => {
     expect(error).toHaveBeenCalledWith("Today's daily puzzles are late: 40×40 not generated yet");
     error.mockRestore();
     log.mockRestore();
+  });
+
+  test("on stop it claims nothing more, and stops a job still running after drainMs", async () => {
+    const controller = new AbortController();
+    const seen: RunNextOptions[] = [];
+    let cancelledAfter = -1;
+    const runs = {
+      async runNext(_workerId: string, options: RunNextOptions = {}) {
+        seen.push(options);
+        // A long job: it ends only when the loop cancels it.
+        const started = performance.now();
+        await new Promise<void>((resolve) =>
+          options.cancel?.addEventListener("abort", () => resolve()),
+        );
+        cancelledAfter = performance.now() - started;
+        return true;
+      },
+      recoverStale: () => ({ requeued: 0, lost: 0 }),
+    };
+    setTimeout(() => controller.abort(), 20);
+    await runWorkerLoop({
+      runs,
+      dailies: stocked,
+      workerId: "w",
+      pollMs: 1,
+      sweepMs: 60_000,
+      stockMs: 60_000,
+      drainMs: 50,
+      signal: controller.signal,
+    });
+    // One claim only: after the stop, the loop ended instead of claiming again.
+    expect(seen).toHaveLength(1);
+    expect(seen[0].cancel?.aborted).toBe(true);
+    expect(cancelledAfter).toBeGreaterThanOrEqual(60);
+  });
+
+  test("a job that ends within drainMs of the stop is not cancelled", async () => {
+    const controller = new AbortController();
+    let cancel: AbortSignal | undefined;
+    const runs = {
+      async runNext(_workerId: string, options: RunNextOptions = {}) {
+        cancel = options.cancel;
+        controller.abort();
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return true;
+      },
+      recoverStale: () => ({ requeued: 0, lost: 0 }),
+    };
+    await runWorkerLoop({
+      runs,
+      dailies: stocked,
+      workerId: "w",
+      pollMs: 1,
+      sweepMs: 60_000,
+      stockMs: 60_000,
+      drainMs: 1_000,
+      signal: controller.signal,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(cancel?.aborted).toBe(false);
+  });
+});
+
+describe("runVerifyLane", () => {
+  test("claims only verifications, polls while there are none, and stops like the main loop", async () => {
+    const controller = new AbortController();
+    const calls: { workerId: string; options: RunNextOptions }[] = [];
+    const runs = {
+      async runNext(workerId: string, options: RunNextOptions = {}) {
+        calls.push({ workerId, options });
+        if (calls.length === 3) controller.abort();
+        return calls.length === 1;
+      },
+    };
+    await runVerifyLane({
+      runs,
+      workerId: "w/verify",
+      pollMs: 1,
+      drainMs: 60_000,
+      signal: controller.signal,
+    });
+    expect(calls).toHaveLength(3);
+    for (const call of calls) {
+      expect(call.workerId).toBe("w/verify");
+      expect(call.options.maxPriority).toBe(JOB_PRIORITY.verify);
+    }
   });
 });

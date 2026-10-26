@@ -30,7 +30,13 @@ function setup() {
     clock,
   });
   const queue = new SqliteJobQueue(db);
-  const jobs = new JobManager({ jobs: queue, clock, newId: sequentialIds("j"), maxQueued: 100 });
+  const jobs = new JobManager({
+    jobs: queue,
+    clock,
+    newId: sequentialIds("j"),
+    maxQueued: 100,
+    maxPendingPerRequester: 10,
+  });
   const app = createApp({
     puzzles,
     jobs,

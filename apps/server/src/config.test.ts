@@ -26,6 +26,8 @@ describe("loadConfig", () => {
         secretAccessKey: "secret",
       },
       jobs: { generateTimeoutMs: 1_800_000, verifyTimeoutMs: 45_000 },
+      maxPendingGenerations: 3,
+      drainMs: 60_000,
       publicUrl: "http://localhost:5173",
       trustProxy: false,
       turnstile: {
@@ -56,6 +58,8 @@ describe("loadConfig", () => {
       WEB_DIR: "apps/web/build",
       WORKER_ID: "w1",
       GENERATE_TIMEOUT_MS: "1000",
+      MAX_PENDING_GENERATIONS: "5",
+      WORKER_DRAIN_MS: "30000",
       APP_VERSION: "4f8cb61",
       METRICS_HOST: "0.0.0.0",
       API_METRICS_PORT: "9464",
@@ -67,6 +71,8 @@ describe("loadConfig", () => {
       webDir: "apps/web/build",
       workerId: `w1-${process.pid}`,
       jobs: { generateTimeoutMs: 1000 },
+      maxPendingGenerations: 5,
+      drainMs: 30_000,
       version: "4f8cb61",
       metrics: { host: "0.0.0.0", apiPort: 9464, workerPort: 9465 },
     });

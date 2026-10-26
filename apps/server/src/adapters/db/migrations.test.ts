@@ -48,3 +48,31 @@ describe("007: levels", () => {
     expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
   });
 });
+
+describe("008: job order", () => {
+  test("queued jobs get their priority from their kind and input, and no requester", () => {
+    const db = migratedFrom(8, (db) => {
+      const job = db.query(
+        "INSERT INTO jobs (id, kind, payload, status, created_at) VALUES ($id, $kind, $payload, 'queued', $at)",
+      );
+      job.run({
+        id: "player",
+        kind: "generate",
+        payload: '{"width":5,"height":5,"seed":"s"}',
+        at: 1,
+      });
+      job.run({
+        id: "daily",
+        kind: "generate",
+        payload: '{"width":7,"height":7,"seed":"s","day":"2026-10-26"}',
+        at: 2,
+      });
+      job.run({ id: "verify", kind: "verify", payload: '{"puzzle":{}}', at: 3 });
+    });
+    expect(db.query("SELECT id, priority, requester FROM jobs ORDER BY created_at").all()).toEqual([
+      { id: "player", priority: 2, requester: null },
+      { id: "daily", priority: 1, requester: null },
+      { id: "verify", priority: 0, requester: null },
+    ]);
+  });
+});

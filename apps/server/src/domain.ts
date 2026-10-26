@@ -41,6 +41,13 @@ export type JobKind = "generate" | "verify";
 
 export type JobStatus = "queued" | "running" | "done" | "failed" | "timeout";
 
+/**
+ * The order workers claim queued jobs in, lowest first and oldest first within one (DECISIONS,
+ * WT21 "Worker fairness"): a player's generation, which can take many minutes at 100×100, never
+ * holds up a submission's check or a daily puzzle that is waiting.
+ */
+export const JOB_PRIORITY = { verify: 0, daily: 1, player: 2 } as const;
+
 export interface GenerateInput {
   readonly width: number;
   readonly height: number;
@@ -69,8 +76,15 @@ interface JobBase {
   readonly progress: number;
   readonly result: JobResult | null;
   readonly error: string | null;
-  /** Times the job has been claimed by a worker. */
+  /** Times the job has been claimed by a worker, not counting claims given back at shutdown. */
   readonly attempts: number;
+  /** Claim order (`JOB_PRIORITY`): lower first. */
+  readonly priority: number;
+  /**
+   * Who queued a player's generation (`user:<id>`, or `ip:<address>` for a guest), for the cap per
+   * requester; null for other jobs, and once the job has ended.
+   */
+  readonly requester: string | null;
   readonly claimedBy: string | null;
   /** Milliseconds since the epoch, like every time below. */
   readonly createdAt: number;
@@ -112,11 +126,15 @@ export type TaskOutput =
   | { readonly kind: "generate"; readonly generated: GeneratedPuzzle }
   | { readonly kind: "verify"; readonly verified: VerifyOutcome };
 
-/** How a task ended. `timeout` means the thread was stopped at the time limit. */
+/**
+ * How a task ended. `timeout` means the thread was stopped at the time limit, `cancelled` that it
+ * was stopped because the worker is shutting down.
+ */
 export type TaskOutcome =
   | { readonly status: "done"; readonly output: TaskOutput }
   | { readonly status: "failed"; readonly error: string }
-  | { readonly status: "timeout" };
+  | { readonly status: "timeout" }
+  | { readonly status: "cancelled" };
 
 /** A registered player (PRD §5). Holds only what NFR-6 allows: the email and the password hash. */
 export interface UserRecord {

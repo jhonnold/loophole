@@ -1354,7 +1354,8 @@ paths:
     post:
       summary: Queue a puzzle generation
       description: Generation runs in the background; poll the returned job until it
-        is done.
+        is done. Each player (or, for guests, each address) may have a few
+        generations waiting or running at once.
       requestBody:
         required: true
         content:
@@ -1388,6 +1389,13 @@ paths:
                 $ref: "#/components/schemas/Problem"
         "415":
           description: Request body is not JSON.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "429":
+          description: This player or address already has as many generations waiting or
+            running as allowed.
           content:
             application/problem+json:
               schema:

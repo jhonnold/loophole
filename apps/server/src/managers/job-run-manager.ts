@@ -33,6 +33,17 @@ export interface JobRunManagerDeps {
   readonly metrics?: Pick<WorkerMetrics, "jobFinished" | "jobsLost">;
 }
 
+export interface RunNextOptions {
+  /** Claims only jobs whose priority is at most this (`JOB_PRIORITY`); any job when left out. */
+  readonly maxPriority?: number;
+  /**
+   * Aborted when the worker is shutting down and the job may not run any longer: the task is
+   * stopped and the job given back to the queue for another worker. Nothing is claimed once it
+   * has aborted.
+   */
+  readonly cancel?: AbortSignal;
+}
+
 /** Runs queued jobs, one at a time per worker: claim, run off-thread, store the outcome. */
 export class JobRunManager {
   readonly #deps: JobRunManagerDeps;
@@ -41,10 +52,14 @@ export class JobRunManager {
     this.#deps = deps;
   }
 
-  /** Claims and runs the oldest queued job. Resolves to false when the queue was empty. */
-  async runNext(workerId: string): Promise<boolean> {
+  /**
+   * Claims and runs the next queued job (by priority, then oldest first). Resolves to false when
+   * there was none to claim.
+   */
+  async runNext(workerId: string, options: RunNextOptions = {}): Promise<boolean> {
     const { jobs, tasks, clock, settings } = this.#deps;
-    const job = jobs.claimNext(workerId, clock.now());
+    if (options.cancel?.aborted) return false;
+    const job = jobs.claimNext(workerId, clock.now(), options.maxPriority);
     if (job === null) return false;
     const timeoutMs =
       job.kind === "generate" ? settings.generateTimeoutMs : settings.verifyTimeoutMs;
@@ -63,13 +78,16 @@ export class JobRunManager {
         console.error(`Heartbeat for job ${job.id} failed:`, err);
       }
     }, settings.heartbeatMs);
-    let end: JobEnd;
+    let end: JobEnd | "cancelled";
     try {
       const outcome = await tasks.run(toTask(job), {
         timeoutMs,
         onProgress,
+        signal: options.cancel,
       });
-      if (outcome.status === "done") {
+      if (outcome.status === "cancelled") {
+        end = "cancelled";
+      } else if (outcome.status === "done") {
         end = { status: "done", result: await this.#store(job, outcome.output) };
       } else if (outcome.status === "timeout") {
         end = { status: "timeout", error: `Stopped after the ${timeoutMs / 1000} s time limit.` };
@@ -80,6 +98,13 @@ export class JobRunManager {
       end = { status: "failed", error: err instanceof Error ? err.message : String(err) };
     } finally {
       clearInterval(heartbeat);
+    }
+    if (end === "cancelled") {
+      // The worker is shutting down: the next worker runs the job again from the start.
+      if (jobs.release(job.id, workerId)) {
+        console.warn(`Job ${job.id} stopped at shutdown and given back to the queue`);
+      }
+      return true;
     }
     const finishedAt = clock.now();
     // Counted only when the job really ended here: a job taken back is run again, and counted then.

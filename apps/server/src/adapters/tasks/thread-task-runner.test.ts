@@ -37,6 +37,25 @@ describe("ThreadTaskRunner", () => {
     expect(performance.now() - started).toBeLessThan(2_000);
   });
 
+  test("stops a long generation when its signal aborts (worker shutdown)", async () => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 200);
+    const started = performance.now();
+    const outcome = await runner.run(
+      { kind: "generate", input: { width: 100, height: 100, seed: "shutdown" } },
+      { timeoutMs: 60_000, onProgress: () => {}, signal: controller.signal },
+    );
+    expect(outcome).toEqual({ status: "cancelled" });
+    expect(performance.now() - started).toBeLessThan(2_000);
+    // A signal that has already aborted starts nothing.
+    expect(
+      await runner.run(
+        { kind: "generate", input: { width: 5, height: 5, seed: "s" } },
+        { timeoutMs: 60_000, onProgress: () => {}, signal: controller.signal },
+      ),
+    ).toEqual({ status: "cancelled" });
+  });
+
   test("reports the core's error as failed", async () => {
     const outcome = await runner.run(
       { kind: "generate", input: { width: 0, height: 5, seed: "s" } },

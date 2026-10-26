@@ -36,7 +36,13 @@ function setup() {
   const blobs = new MemoryBlobStore();
   const repo = new FakeSubmissionRepository();
   const puzzles = new PuzzleManager({ puzzles: puzzleRepo, blobs, clock });
-  const jobs = new JobManager({ jobs: queue, clock, newId: sequentialIds("j"), maxQueued: 100 });
+  const jobs = new JobManager({
+    jobs: queue,
+    clock,
+    newId: sequentialIds("j"),
+    maxQueued: 100,
+    maxPendingPerRequester: 10,
+  });
   const manager = new SubmissionManager({
     submissions: repo,
     puzzles,

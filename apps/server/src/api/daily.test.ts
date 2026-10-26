@@ -43,6 +43,7 @@ async function setup() {
     clock,
     newId: sequentialIds("j"),
     maxQueued: 10,
+    maxPendingPerRequester: 10,
   });
   const daily = dailyDeps(db, clock, puzzles);
   await storeDaily(daily.dailyRepo, puzzles, "2026-10-24", "d24");

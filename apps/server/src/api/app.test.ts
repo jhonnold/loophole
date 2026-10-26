@@ -17,10 +17,11 @@ import { sqliteProgress } from "../test-support/progress.ts";
 import { submissionDeps } from "../test-support/submissions.ts";
 import { createApp } from "./app.ts";
 import type { Problem } from "./problem.ts";
+import { SESSION_COOKIE } from "./session-cookie.ts";
 
 const SOLUTION = "112211121121";
 
-function setup(options: { webDir?: string; maxQueued?: number } = {}) {
+function setup(options: { webDir?: string; maxQueued?: number; maxPending?: number } = {}) {
   const db = openDatabase(":memory:");
   const clock = new FakeClock(Date.UTC(2026, 9, 25, 12));
   const repo = new SqlitePuzzleRepository(db);
@@ -35,11 +36,13 @@ function setup(options: { webDir?: string; maxQueued?: number } = {}) {
     clock,
     newId: sequentialIds("j"),
     maxQueued: options.maxQueued ?? 10,
+    maxPendingPerRequester: options.maxPending ?? 10,
   });
+  const accounts = accountDeps(db, clock);
   const app = createApp({
     puzzles,
     jobs,
-    ...accountDeps(db, clock),
+    ...accounts,
     ...dailyDeps(db, clock, puzzles),
     progress: sqliteProgress(db, puzzles, clock),
     health: healthManager(db, clock),
@@ -55,7 +58,19 @@ function setup(options: { webDir?: string; maxQueued?: number } = {}) {
       solution: SOLUTION,
       steps: [],
     });
-  return { app, repo, queue, clock, puzzles, savePuzzle };
+  /** A logged-in user's session cookie. */
+  const logIn = async (id: string) => {
+    accounts.users.insert({
+      id,
+      email: `${id}@example.com`,
+      passwordHash: "h",
+      emailVerifiedAt: null,
+      isAdmin: false,
+      createdAt: clock.now(),
+    });
+    return `${SESSION_COOKIE}=${(await accounts.sessions.create(id)).token}`;
+  };
+  return { app, repo, queue, clock, puzzles, savePuzzle, logIn };
 }
 
 const postJson = (body: unknown) => ({
@@ -219,7 +234,10 @@ describe("jobs", () => {
       startedAt: null,
       finishedAt: null,
     });
-    expect(queue.get("j-1")?.input).toEqual({ width: 10, height: 7, seed: "x", level: "hard" });
+    expect(queue.get("j-1")).toMatchObject({
+      input: { width: 10, height: 7, seed: "x", level: "hard" },
+      requester: "ip:unknown",
+    });
   });
 
   test("POST /api/jobs/generate takes a level (FR-7)", async () => {
@@ -230,6 +248,31 @@ describe("jobs", () => {
     );
     expect(res.status).toBe(202);
     expect(queue.get("j-2")?.input).toMatchObject({ width: 7, height: 7, level: "medium" });
+  });
+
+  test("POST /api/jobs/generate is 429 once a requester has the most generations pending", async () => {
+    const { app, logIn } = setup({ maxPending: 2 });
+    const from = (address: string, cookie?: string) => {
+      const init = postJson({ width: 5, height: 5 });
+      const headers = cookie === undefined ? init.headers : { ...init.headers, Cookie: cookie };
+      return app.request(
+        "/api/jobs/generate",
+        { ...init, headers },
+        {
+          requestIP: () => ({ address }),
+        },
+      );
+    };
+    expect((await from("198.51.100.7")).status).toBe(202);
+    expect((await from("198.51.100.7")).status).toBe(202);
+    const refused = await expectProblem(await from("198.51.100.7"), 429);
+    expect(refused.title).toBe("Too many generations in progress");
+    // Another address, and a logged-in player behind the same address, each have their own cap.
+    expect((await from("203.0.113.9")).status).toBe(202);
+    const cookie = await logIn("u1");
+    expect((await from("198.51.100.7", cookie)).status).toBe(202);
+    expect((await from("198.51.100.7", cookie)).status).toBe(202);
+    await expectProblem(await from("198.51.100.7", cookie), 429);
   });
 
   test("POST /api/jobs/generate validates the body", async () => {

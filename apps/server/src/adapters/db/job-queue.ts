@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { Job, JobResult, JobStatus } from "../../domain.ts";
+import { JOB_PRIORITY, type Job, type JobResult, type JobStatus } from "../../domain.ts";
 import type { JobEnd, JobQueue, NewJob } from "../../ports.ts";
 
 interface JobRow {
@@ -11,6 +11,8 @@ interface JobRow {
   result: string | null;
   error: string | null;
   attempts: number;
+  priority: number;
+  requester: string | null;
   claimed_by: string | null;
   created_at: number;
   started_at: number | null;
@@ -20,28 +22,43 @@ interface JobRow {
 
 /**
  * The jobs table as a queue. `claimNext` is one `UPDATE … RETURNING` statement, so two workers
- * (in any processes) can never claim the same job.
+ * (in any processes) can never claim the same job. Jobs are claimed by priority, then oldest first.
  */
 export class SqliteJobQueue implements JobQueue {
   readonly #insert;
   readonly #get;
   readonly #countQueued;
+  readonly #countPending;
   readonly #countActive;
   readonly #listFailed;
   readonly #claim;
   readonly #progress;
   readonly #heartbeat;
   readonly #finish;
+  readonly #release;
   readonly #requeueStale;
   readonly #failStale;
 
   constructor(db: Database) {
-    this.#insert = db.query<JobRow, { id: string; kind: string; payload: string; now: number }>(
-      "INSERT INTO jobs (id, kind, payload, status, created_at) VALUES ($id, $kind, $payload, 'queued', $now) RETURNING *",
+    this.#insert = db.query<
+      JobRow,
+      {
+        id: string;
+        kind: string;
+        payload: string;
+        priority: number;
+        requester: string | null;
+        now: number;
+      }
+    >(
+      "INSERT INTO jobs (id, kind, payload, status, priority, requester, created_at) VALUES ($id, $kind, $payload, 'queued', $priority, $requester, $now) RETURNING *",
     );
     this.#get = db.query<JobRow, { id: string }>("SELECT * FROM jobs WHERE id = $id");
     this.#countQueued = db.query<{ n: number }, []>(
       "SELECT count(*) AS n FROM jobs WHERE status = 'queued'",
+    );
+    this.#countPending = db.query<{ n: number }, { requester: string }>(
+      "SELECT count(*) AS n FROM jobs WHERE requester = $requester AND status IN ('queued', 'running')",
     );
     this.#countActive = db.query<{ status: JobStatus; n: number; oldest: number }, []>(
       "SELECT status, count(*) AS n, min(created_at) AS oldest FROM jobs WHERE status IN ('queued', 'running') GROUP BY status",
@@ -49,11 +66,14 @@ export class SqliteJobQueue implements JobQueue {
     this.#listFailed = db.query<JobRow, { limit: number }>(
       "SELECT * FROM jobs WHERE status IN ('failed', 'timeout') ORDER BY finished_at DESC, rowid DESC LIMIT $limit",
     );
-    this.#claim = db.query<JobRow, { worker: string; now: number }>(
+    this.#claim = db.query<JobRow, { worker: string; now: number; max: number }>(
       `UPDATE jobs
        SET status = 'running', claimed_by = $worker, attempts = attempts + 1,
            started_at = $now, heartbeat_at = $now, progress = 0
-       WHERE id = (SELECT id FROM jobs WHERE status = 'queued' ORDER BY created_at, rowid LIMIT 1)
+       WHERE id = (
+           SELECT id FROM jobs WHERE status = 'queued' AND priority <= $max
+           ORDER BY priority, created_at, rowid LIMIT 1
+         )
          AND status = 'queued'
        RETURNING *`,
     );
@@ -76,7 +96,12 @@ export class SqliteJobQueue implements JobQueue {
     >(
       `UPDATE jobs
        SET status = $status, result = $result, error = $error, finished_at = $now,
-           progress = CASE WHEN $status = 'done' THEN 1 ELSE progress END
+           progress = CASE WHEN $status = 'done' THEN 1 ELSE progress END, requester = NULL
+       WHERE id = $id AND status = 'running' AND claimed_by = $worker
+       RETURNING id`,
+    );
+    this.#release = db.query<{ id: string }, { id: string; worker: string }>(
+      `UPDATE jobs SET status = 'queued', claimed_by = NULL, progress = 0, attempts = attempts - 1
        WHERE id = $id AND status = 'running' AND claimed_by = $worker
        RETURNING id`,
     );
@@ -85,16 +110,18 @@ export class SqliteJobQueue implements JobQueue {
        WHERE status = 'running' AND heartbeat_at < $before AND attempts < $max`,
     );
     this.#failStale = db.query<void, { before: number; max: number; now: number }>(
-      `UPDATE jobs SET status = 'failed', error = 'The worker running this job stopped responding.', finished_at = $now
+      `UPDATE jobs SET status = 'failed', error = 'The worker running this job stopped responding.', finished_at = $now, requester = NULL
        WHERE status = 'running' AND heartbeat_at < $before AND attempts >= $max`,
     );
   }
 
-  enqueue({ id, job, createdAt }: NewJob): Job {
+  enqueue({ id, job, createdAt, priority = JOB_PRIORITY.player, requester = null }: NewJob): Job {
     const row = this.#insert.get({
       id,
       kind: job.kind,
       payload: JSON.stringify(job.input),
+      priority,
+      requester,
       now: createdAt,
     });
     if (row === null) throw new Error("insert returned no row");
@@ -108,6 +135,10 @@ export class SqliteJobQueue implements JobQueue {
 
   countQueued(): number {
     return this.#countQueued.get()?.n ?? 0;
+  }
+
+  countPending(requester: string): number {
+    return this.#countPending.get({ requester })?.n ?? 0;
   }
 
   countActive(): { queued: number; running: number; oldestQueuedAt: number | null } {
@@ -127,8 +158,8 @@ export class SqliteJobQueue implements JobQueue {
     return this.#listFailed.all({ limit }).map(fromRow);
   }
 
-  claimNext(workerId: string, now: number): Job | null {
-    const row = this.#claim.get({ worker: workerId, now });
+  claimNext(workerId: string, now: number, maxPriority = Number.MAX_SAFE_INTEGER): Job | null {
+    const row = this.#claim.get({ worker: workerId, now, max: maxPriority });
     return row === null ? null : fromRow(row);
   }
 
@@ -153,6 +184,10 @@ export class SqliteJobQueue implements JobQueue {
     return row !== null;
   }
 
+  release(id: string, workerId: string): boolean {
+    return this.#release.get({ id, worker: workerId }) !== null;
+  }
+
   recoverStale(
     staleBefore: number,
     maxAttempts: number,
@@ -172,6 +207,8 @@ function fromRow(row: JobRow): Job {
     result: row.result === null ? null : (JSON.parse(row.result) as JobResult),
     error: row.error,
     attempts: row.attempts,
+    priority: row.priority,
+    requester: row.requester,
     claimedBy: row.claimed_by,
     createdAt: row.created_at,
     startedAt: row.started_at,

@@ -6,6 +6,19 @@ export class QueueFullError extends Error {
   }
 }
 
+/**
+ * The requester already has as many generations queued or running as allowed; one has to finish
+ * first (DECISIONS, WT21 "Worker fairness").
+ */
+export class TooManyPendingJobsError extends Error {
+  constructor(limit: number) {
+    super(
+      `You already have ${limit} puzzles being generated. Wait for one to finish, then try again.`,
+    );
+    this.name = "TooManyPendingJobsError";
+  }
+}
+
 /** The email and password don't match an account. Says nothing about which one was wrong. */
 export class InvalidCredentialsError extends Error {
   constructor() {

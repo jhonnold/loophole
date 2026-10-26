@@ -241,7 +241,7 @@ export interface paths {
         put?: never;
         /**
          * Queue a puzzle generation
-         * @description Generation runs in the background; poll the returned job until it is done.
+         * @description Generation runs in the background; poll the returned job until it is done. Each player (or, for guests, each address) may have a few generations waiting or running at once.
          */
         post: {
             parameters: {
@@ -294,6 +294,15 @@ export interface paths {
                 };
                 /** @description Request body is not JSON. */
                 415: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                /** @description This player or address already has as many generations waiting or running as allowed. */
+                429: {
                     headers: {
                         [name: string]: unknown;
                     };

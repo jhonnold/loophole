@@ -1,5 +1,6 @@
 // Composition root of the job worker process: reads the settings, builds the adapters and
-// managers, and runs jobs until SIGINT or SIGTERM. The job in progress finishes first.
+// managers, and runs jobs until SIGINT or SIGTERM: a job in progress gets WORKER_DRAIN_MS to
+// finish, then is stopped and given back to the queue.
 import { S3BlobStore } from "../adapters/blob/s3-blob-store.ts";
 import { systemClock } from "../adapters/clock.ts";
 import { hmacDailySeeder } from "../adapters/daily-seeds.ts";
@@ -22,7 +23,7 @@ import { JobManager } from "../managers/job-manager.ts";
 import { JobRunManager } from "../managers/job-run-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { SubmissionManager } from "../managers/submission-manager.ts";
-import { runWorkerLoop } from "./loop.ts";
+import { runVerifyLane, runWorkerLoop } from "./loop.ts";
 
 installJsonLogging({ process: "worker" });
 const config = loadConfig(process.env);
@@ -40,6 +41,7 @@ const jobs = new JobManager({
   clock: systemClock,
   newId: () => crypto.randomUUID(),
   maxQueued: config.maxQueuedJobs,
+  maxPendingPerRequester: config.maxPendingGenerations,
 });
 // The worker only decides submissions; queueing them and the per-account limit are the API's.
 const submissionRepo = new SqliteSubmissionRepository(db);
@@ -90,15 +92,17 @@ const metricsServer =
     : serveMetrics(registry, config.metrics.host, config.metrics.workerPort);
 if (metricsServer !== null) console.log(`Worker metrics on ${metricsServer.url}metrics`);
 console.log(`Worker ${config.workerId} polling for jobs`);
-await runWorkerLoop({
-  runs,
-  dailies,
-  workerId: config.workerId,
-  pollMs: config.pollMs,
-  sweepMs: config.jobs.staleMs / 2,
-  stockMs: config.dailies.stockMs,
-  signal: controller.signal,
-});
+const lane = { runs, pollMs: config.pollMs, signal: controller.signal, drainMs: config.drainMs };
+await Promise.all([
+  runWorkerLoop({
+    ...lane,
+    dailies,
+    workerId: config.workerId,
+    sweepMs: config.jobs.staleMs / 2,
+    stockMs: config.dailies.stockMs,
+  }),
+  runVerifyLane({ ...lane, workerId: `${config.workerId}/verify` }),
+]);
 metricsServer?.stop();
 db.close();
 console.log(`Worker ${config.workerId} stopped`);

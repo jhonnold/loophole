@@ -39,7 +39,13 @@ function setup(
   const deps = accountDeps(db, clock);
   const puzzles = new PuzzleManager({ puzzles: new SqlitePuzzleRepository(db), blobs, clock });
   const queue = new SqliteJobQueue(db);
-  const jobs = new JobManager({ jobs: queue, clock, newId: sequentialIds("j"), maxQueued: 10 });
+  const jobs = new JobManager({
+    jobs: queue,
+    clock,
+    newId: sequentialIds("j"),
+    maxQueued: 10,
+    maxPendingPerRequester: 10,
+  });
   const metrics = new RecordingMetrics();
   const app = createApp({
     puzzles,

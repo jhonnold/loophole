@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { JobInput } from "../../domain.ts";
+import { JOB_PRIORITY, type JobInput } from "../../domain.ts";
 import { openDatabase } from "./database.ts";
 import { SqliteJobQueue } from "./job-queue.ts";
 
@@ -29,6 +29,8 @@ describe("SqliteJobQueue", () => {
       result: null,
       error: null,
       attempts: 0,
+      priority: JOB_PRIORITY.player,
+      requester: null,
       claimedBy: null,
       createdAt: 5,
       startedAt: null,
@@ -129,5 +131,56 @@ describe("SqliteJobQueue", () => {
     expect(queue.listFailed(1).map((j) => j.id)).toEqual(["b"]);
     queue.claimNext("w", 8);
     expect(queue.countActive()).toEqual({ queued: 0, running: 1, oldestQueuedAt: null });
+  });
+
+  test("claimNext takes verifications, then daily puzzles, then players' jobs, oldest first in each", () => {
+    const queue = queueWith();
+    const add = (id: string, priority: number, createdAt: number) =>
+      queue.enqueue({ id, job: generate(id), createdAt, priority });
+    add("player-old", JOB_PRIORITY.player, 1);
+    add("daily", JOB_PRIORITY.daily, 2);
+    add("verify-new", JOB_PRIORITY.verify, 4);
+    add("verify-old", JOB_PRIORITY.verify, 3);
+    add("player-new", JOB_PRIORITY.player, 5);
+    const order = [1, 2, 3, 4, 5].map(() => queue.claimNext("w", 10)?.id);
+    expect(order).toEqual(["verify-old", "verify-new", "daily", "player-old", "player-new"]);
+  });
+
+  test("claimNext with maxPriority leaves lower-priority jobs queued", () => {
+    const queue = queueWith("a");
+    queue.enqueue({ id: "v", job: generate("v"), createdAt: 200, priority: JOB_PRIORITY.verify });
+    expect(queue.claimNext("w", 1, JOB_PRIORITY.verify)?.id).toBe("v");
+    expect(queue.claimNext("w", 1, JOB_PRIORITY.verify)).toBeNull();
+    expect(queue.get("a")?.status).toBe("queued");
+  });
+
+  test("countPending counts a requester's waiting and running jobs; an ended job forgets its requester", () => {
+    const queue = queueWith();
+    const add = (id: string, requester: string) =>
+      queue.enqueue({ id, job: generate(id), createdAt: 1, requester });
+    add("a", "ip:1.2.3.4");
+    add("b", "ip:1.2.3.4");
+    add("c", "user:u1");
+    expect(queue.countPending("ip:1.2.3.4")).toBe(2);
+    queue.claimNext("w", 2);
+    expect(queue.countPending("ip:1.2.3.4")).toBe(2);
+    queue.finish("a", "w", { status: "done", result: { kind: "generate", puzzleId: "a" } }, 3);
+    expect(queue.countPending("ip:1.2.3.4")).toBe(1);
+    expect(queue.get("a")?.requester).toBeNull();
+    expect(queue.get("b")?.requester).toBe("ip:1.2.3.4");
+    expect(queue.countPending("user:u1")).toBe(1);
+    expect(queue.countPending("user:nobody")).toBe(0);
+  });
+
+  test("release gives a running job back to the queue without counting the claim", () => {
+    const queue = queueWith("a");
+    queue.claimNext("w1", 1000);
+    expect(queue.release("a", "w2")).toBe(false);
+    expect(queue.release("a", "w1")).toBe(true);
+    expect(queue.get("a")).toMatchObject({ status: "queued", claimedBy: null, attempts: 0 });
+    expect(queue.release("a", "w1")).toBe(false);
+    // The old worker can no longer finish it; the next claim does.
+    expect(queue.finish("a", "w1", { status: "failed", error: "x" }, 1001)).toBe(false);
+    expect(queue.claimNext("w2", 1002)).toMatchObject({ id: "a", claimedBy: "w2", attempts: 1 });
   });
 });

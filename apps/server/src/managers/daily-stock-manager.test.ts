@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { serializePuzzle } from "@loophole/core";
 import { MemoryBlobStore } from "../adapters/blob/memory-blob-store.ts";
-import type { GeneratedPuzzle } from "../domain.ts";
+import { type GeneratedPuzzle, JOB_PRIORITY } from "../domain.ts";
 import { SMALL_DAILY } from "../test-support/daily.ts";
 import {
   FakeClock,
@@ -25,7 +25,13 @@ function setup(daysAhead = 2) {
   const puzzleRepo = new FakePuzzleRepository();
   const puzzles = new PuzzleManager({ puzzles: puzzleRepo, blobs: new MemoryBlobStore(), clock });
   // A tiny queue: the scheduler's jobs must get in even when players have filled it.
-  const jobs = new JobManager({ jobs: queue, clock, newId: sequentialIds("x"), maxQueued: 1 });
+  const jobs = new JobManager({
+    jobs: queue,
+    clock,
+    newId: sequentialIds("x"),
+    maxQueued: 1,
+    maxPendingPerRequester: 10,
+  });
   /** Size classes counted as failed generations. */
   const failures: number[] = [];
   const stock = new DailyStockManager({
@@ -69,6 +75,8 @@ describe("DailyStockManager.stock (FR-22)", () => {
       kind: "generate",
       status: "queued",
       input: { width: 7, height: 7, seed: "2026-10-25/7/0", day: "2026-10-25", level: "hard" },
+      priority: JOB_PRIORITY.daily,
+      requester: null,
     });
     // Each size class at its own level (one level per size, PRD FR-22).
     for (const job of queue.jobs.values()) {
@@ -165,6 +173,7 @@ describe("DailyStockManager.stock (FR-22)", () => {
         clock: first.clock,
         newId: sequentialIds("y"),
         maxQueued: 1,
+        maxPendingPerRequester: 10,
       }),
       puzzles: first.puzzles,
       seeds: fakeSeeds,

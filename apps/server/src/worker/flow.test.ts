@@ -33,6 +33,7 @@ function setup(verifyTimeoutMs = 10_000) {
     clock: systemClock,
     newId: () => crypto.randomUUID(),
     maxQueued: 10,
+    maxPendingPerRequester: 10,
   });
   const { submissions, reports } = submissionDeps(db, systemClock, puzzles, jobs);
   const runs = new JobRunManager({
