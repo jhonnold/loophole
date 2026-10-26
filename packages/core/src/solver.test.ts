@@ -3,8 +3,11 @@ import fc from "fast-check";
 import { analyzeBoard } from "./analyze.ts";
 import { bruteForceSolutions } from "./bruteforce.ts";
 import { decodeEdges, encodeEdges, parsePuzzle } from "./format.ts";
-import { EdgeState } from "./grid.ts";
-import { RULE_IDS, type RuleId, type Step } from "./rules.ts";
+import { createGrid, EdgeState } from "./grid.ts";
+import { generateLoop } from "./loop.ts";
+import { createPuzzle, deriveClues, NO_CLUE } from "./puzzle.ts";
+import { createRng } from "./rng.ts";
+import { GROUP_RULES, RULE_GROUPS, RULE_IDS, type RuleId, type Step } from "./rules.ts";
 import { solve } from "./solver.ts";
 import { arbPuzzleWithSolution } from "./test-support/arbitraries.ts";
 import { FIXTURES } from "./test-support/fixtures.ts";
@@ -56,8 +59,8 @@ describe("solve: each rule", () => {
     [2, 3, "..33..", 2, { rule: "clue-needs-all", changes: "3:1 5:1", cells: [3], dots: [] }],
     [2, 3, "..33..", 4, { rule: "dot-full", changes: "10:2", cells: [], dots: [5] }],
     [2, 3, ".331..", 1, { rule: "diagonal-3s", changes: "4:1 11:1", cells: [1, 2], dots: [] }],
-    [2, 3, ".331..", 4, { rule: "lookahead", changes: "0:2", cells: [2], dots: [0, 1] }],
-    [2, 3, ".331..", 7, { rule: "clue-satisfied", changes: "3:2", cells: [1], dots: [] }],
+    [1, 3, "0..", 3, { rule: "lookahead", changes: "2:1", cells: [], dots: [4, 5] }],
+    [2, 3, ".331..", 12, { rule: "clue-satisfied", changes: "3:2", cells: [3], dots: [] }],
     [
       2,
       3,
@@ -65,6 +68,32 @@ describe("solve: each rule", () => {
       8,
       { rule: "loop-complete", changes: "4:2 5:2 6:2 7:2 14:2 15:2 16:2", cells: [], dots: [] },
     ],
+    // Corner rules (WT16): for each, the smallest puzzle, then the fewest clues, where it fires.
+    [
+      1,
+      4,
+      "1.1.",
+      5,
+      { rule: "line-into-1", changes: "2:1 10:2 3:2 9:2", cells: [2], dots: [4, 5] },
+    ],
+    [2, 3, "3.11..", 2, { rule: "line-into-3", changes: "3:1", cells: [0], dots: [4] }],
+    [
+      2,
+      2,
+      "22..",
+      0,
+      { rule: "two-passes-on", changes: "1:1 7:2 0:1", cells: [0, 1], dots: [0, 1, 2] },
+    ],
+    [2, 2, "2.2.", 0, { rule: "two-in-corner", changes: "1:1", cells: [0], dots: [0, 1] }],
+    [2, 4, "2.1.11..", 0, { rule: "ones-side-by-side", changes: "4:2", cells: [2, 4], dots: [6] }],
+    [
+      2,
+      3,
+      "3.21..",
+      1,
+      { rule: "three-diagonal-one", changes: "13:2 5:2", cells: [0, 3], dots: [4] },
+    ],
+    [1, 4, ".31.", 0, { rule: "corner-chain", changes: "7:1", cells: [1, 2], dots: [4] }],
   ];
 
   for (const [w, h, clues, index, expected] of cases) {
@@ -78,6 +107,17 @@ describe("solve: each rule", () => {
   test("every rule id is covered above", () => {
     const covered = new Set<RuleId>(cases.map((c) => c[4].rule as RuleId));
     expect([...covered].sort()).toEqual([...RULE_IDS].sort());
+  });
+
+  test("leaving the corners group out drops its rules, and the default is every group", () => {
+    const p = puzzle(1, 4, ".31.");
+    const without = solve(p, { rules: [] });
+    expect(without.status).toBe("solved");
+    const corners = new Set<RuleId>(GROUP_RULES.corners);
+    expect(without.steps.some((s) => corners.has(s.rule))).toBe(false);
+    expect(without.steps[0].rule).toBe("lookahead");
+    expect(solve(p, { rules: [...RULE_GROUPS] })).toEqual(solve(p));
+    expect(solve(p).steps[0].rule).toBe("corner-chain");
   });
 
   test("two 3s side by side do not claim their shared side", () => {
@@ -128,7 +168,7 @@ describe("solve", () => {
   });
 
   test("without lookahead it can get stuck where lookahead solves", () => {
-    const p = puzzle(2, 2, "2222");
+    const p = puzzle(2, 2, "0...");
     expect(solve(p, { lookahead: false }).status).toBe("stuck");
     expect(solve(p).status).toBe("solved");
   });
@@ -180,6 +220,41 @@ describe("solve", () => {
         },
       ),
       { numRuns: 200 },
+    );
+  });
+
+  test("larger planted boards: sound, and solving from part of a result gives that result", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 9 }),
+        fc.integer({ min: 1, max: 9 }),
+        fc.string({ minLength: 1, maxLength: 8 }),
+        fc.double({ min: 0.2, max: 1, noNaN: true }),
+        fc.boolean(),
+        fc.boolean(),
+        (w, h, seed, keep, corners, lookahead) => {
+          const grid = createGrid(w, h);
+          const rng = createRng(seed);
+          const solution = generateLoop(grid, rng);
+          const clues = Array.from(deriveClues(grid, solution), (k) =>
+            k < 4 && rng.float() < keep ? k : NO_CLUE,
+          );
+          const p = createPuzzle(w, h, clues);
+          const options = { lookahead, rules: corners ? undefined : [] };
+          const given = solution.map((s) => (rng.float() < 0.2 ? s : EdgeState.Unknown));
+          const result = solve(p, { ...options, initial: given });
+          expect(result.status).not.toBe("contradiction");
+          result.edges.forEach((s, e) => {
+            if (s !== EdgeState.Unknown) expect(s).toBe(solution[e]);
+          });
+          // The result does not depend on the order deductions came in.
+          const part = result.edges.map((s, e) =>
+            given[e] !== EdgeState.Unknown || rng.float() < 0.5 ? s : EdgeState.Unknown,
+          );
+          expect(solve(p, { ...options, initial: part }).edges).toEqual(result.edges);
+        },
+      ),
+      { numRuns: 500 },
     );
   });
 });

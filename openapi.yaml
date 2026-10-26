@@ -194,6 +194,13 @@ components:
                 - diagonal-3s
                 - premature-loop
                 - loop-complete
+                - line-into-1
+                - line-into-3
+                - two-passes-on
+                - two-in-corner
+                - ones-side-by-side
+                - three-diagonal-one
+                - corner-chain
                 - parity
                 - lookahead
             changes:
