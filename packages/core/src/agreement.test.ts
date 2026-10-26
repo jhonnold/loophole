@@ -42,10 +42,11 @@ function checkAgainstBruteForce(p: Puzzle): void {
     if (r.status === "solved") expect(all.length).toBe(1);
     if (r.status === "contradiction") expect(all.length).toBe(0);
     expect(r.status).not.toBe("incomplete");
-  }
-  // Without steps the engine works incrementally (DECISIONS, WT19) but finds the same status.
-  for (const rules of [undefined, []] as const) {
-    expect(solve(p, { rules, steps: false }).status).toBe(solve(p, { rules }).status);
+    // Without steps the engine works incrementally (DECISIONS, WT19) but finds the same status,
+    // with every group and with none.
+    if (rules === undefined || rules.length === 0) {
+      expect(solve(p, { rules, steps: false }).status).toBe(r.status);
+    }
   }
 }
 
