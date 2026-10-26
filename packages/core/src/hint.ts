@@ -62,15 +62,8 @@ export function findHint(
 
   // Every mark agrees with the solution, so the solver's deductions from the board are sound. A
   // solve stopped by the time limit has no step and falls through to a revealed line.
-  const { rules, parity, lookahead } = LEVEL_SETTINGS[puzzleLevel(puzzle)];
-  const result = solve(puzzle, {
-    ...options,
-    rules,
-    parity,
-    lookahead,
-    initial: board,
-    maxSteps: 1,
-  });
+  const { minClueShare, ...ruleSet } = LEVEL_SETTINGS[puzzleLevel(puzzle)];
+  const result = solve(puzzle, { ...options, ...ruleSet, initial: board, maxSteps: 1 });
   const step = result.steps[0];
   if (step !== undefined) return { kind: "step", step };
   return { kind: "reveal", edge: revealEdge(grid, solution, board) };

@@ -66,7 +66,7 @@ const noLookahead = process.argv.includes("--no-lookahead");
 const options: SolveOptions = {
   rules: rules ?? LEVEL_SETTINGS[level].rules,
   parity: rules !== undefined || LEVEL_SETTINGS[level].parity,
-  lookahead: noLookahead ? false : LEVEL_SETTINGS[level].lookahead,
+  lookahead: !noLookahead && LEVEL_SETTINGS[level].lookahead,
 };
 /** Other rules than `generate` used: the floor then starts from the full clue set. */
 const fewerRules = rules !== undefined || noLookahead;

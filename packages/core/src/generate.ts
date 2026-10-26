@@ -136,9 +136,10 @@ function generateAt(
   thresholds: LoopThresholds,
   onProgress: GenerateOptions["onProgress"],
 ): GenerateResult | null {
-  const { rules: groups, parity, lookahead, minClueShare } = LEVEL_SETTINGS[level];
+  // The rest is the level's rule set, as `solve` takes it.
+  const { minClueShare, ...ruleSet } = LEVEL_SETTINGS[level];
   const rules: RuleSolver = (puzzle, initial) =>
-    solve(puzzle, { rules: groups, parity, lookahead, initial, steps: false });
+    solve(puzzle, { ...ruleSet, initial, steps: false });
   // The default level leaves `meta.level` out, so its puzzles are the ones made before levels.
   const meta: Record<string, string> = { generator: GENERATOR_VERSION };
   if (level !== DEFAULT_LEVEL) meta.level = level;
@@ -157,7 +158,7 @@ function generateAt(
     return {
       puzzle: createPuzzle(grid.width, grid.height, clues, { seed, meta }),
       solution,
-      solve: solve(work, { rules: groups, parity, lookahead }),
+      solve: solve(work, ruleSet),
       stats: { attempts, clueCount, checks, restored },
     };
   }
