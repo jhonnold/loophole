@@ -213,16 +213,15 @@ export class Engine {
   private lookCursor = 0;
   /**
    * Connectivity scratch, allocated on the first connectivity pass (`initConnect`). Blocks: the
-   * DFS's discovery times, low points, next `dotEdges` slot, tree edge in and stack of dots, the
-   * stack of edges, and each edge's block. Two exits: the faces' union-find, each group's edges
-   * as a list (`groupFirst`, `groupNext`, `groupLast`, `groupSize`), the hash table from a pair
-   * of faces to its group, each dot's piece and a count per dot.
+   * DFS's discovery times, low points, next `dotEdges` slot and tree edge in (its stack of dots is
+   * `stack`), the stack of edges, and each edge's block. Two exits: the faces' union-find, each
+   * group's edges as a list (`groupFirst`, `groupNext`, `groupLast`, `groupSize`), the hash table
+   * from a pair of faces to its group, and a count per dot.
    */
   private bcDisc = NO_INT32;
   private bcLow = NO_INT32;
   private bcSlot = NO_UINT8;
   private bcVia = NO_INT32;
-  private bcDots = NO_INT32;
   private bcEdges = NO_INT32;
   private blockOf = NO_INT32;
   private faceParent = NO_INT32;
@@ -232,7 +231,6 @@ export class Engine {
   private groupSize = NO_INT32;
   private hashKey = NO_INT32;
   private hashGroup = NO_INT32;
-  private piece = NO_INT32;
   private dotTally = NO_UINT8;
   /** While steps are recorded: why `connected` last failed (a group `twoExits` cannot cross). */
   private exitCells: readonly number[] = NO_NUMBERS;
@@ -1430,13 +1428,10 @@ export class Engine {
     this.blocks();
     const { blockOf } = this;
     let target = NONE;
-    let line = NONE;
     for (let e = 0; e < grid.edgeCount; e++) {
       if (edges[e] !== Line) continue;
-      if (target === NONE) {
-        target = blockOf[e];
-        line = e;
-      } else if (blockOf[e] !== target) return -1;
+      if (target === NONE) target = blockOf[e];
+      else if (blockOf[e] !== target) return -1;
     }
     for (let i = 0; i < grid.cellCount; i++) {
       if (clues[i] <= 0) continue;
@@ -1447,7 +1442,7 @@ export class Engine {
       }
       if (!reached) return -1;
     }
-    const set = this.cutOff(target, grid.edgeDots[line * 2]);
+    const set = this.cutOff(target);
     if (set !== 0) return set;
     return this.twoExits();
   }
@@ -1458,7 +1453,6 @@ export class Engine {
     this.bcLow = new Int32Array(D);
     this.bcSlot = new Uint8Array(D);
     this.bcVia = new Int32Array(D);
-    this.bcDots = new Int32Array(D);
     this.bcEdges = new Int32Array(E);
     this.blockOf = new Int32Array(E);
     this.faceParent = new Int32Array(C + 1);
@@ -1470,7 +1464,6 @@ export class Engine {
     while (table < 2 * E) table *= 2;
     this.hashKey = new Int32Array(table);
     this.hashGroup = new Int32Array(table);
-    this.piece = new Int32Array(D);
     this.dotTally = new Uint8Array(D);
   }
 
@@ -1480,7 +1473,7 @@ export class Engine {
    */
   private blocks(): void {
     const { grid, edges, bcDisc: disc, bcLow: low, bcSlot: slot, bcVia: via } = this;
-    const { bcDots: dots, bcEdges: stack, blockOf } = this;
+    const { stack: dots, bcEdges: stack, blockOf } = this;
     disc.fill(0);
     blockOf.fill(NONE);
     let time = 0;
@@ -1531,87 +1524,62 @@ export class Engine {
 
   /**
    * Crosses the open edges outside block `target`. While steps are recorded, one step: the edges
-   * reached from the first dot of the block (from `start`, a dot of the block) that has some, with
-   * that dot as the reason, or else the edges in other parts of the board, with no reason.
+   * hanging at the first dot of the block that has some, with that dot as the reason, or else the
+   * edges no line reaches, with no reason.
    */
-  private cutOff(target: number, start: number): number {
-    const { grid, edges, blockOf } = this;
-    if (this.steps === null) {
-      let set = 0;
-      for (let e = 0; e < grid.edgeCount; e++) {
-        if (edges[e] !== Unknown || blockOf[e] === target) continue;
-        if (!this.assign(e, Cross)) return -1;
-        set++;
-      }
-      return set;
+  private cutOff(target: number): number {
+    const { grid, edges, blockOf, seen } = this;
+    const at = this.steps === null ? NONE : this.hangingAt(target);
+    if (at === NONE) this.begin("unreachable", [], []);
+    else this.begin("cut-off", [], [at]);
+    let set = 0;
+    for (let e = 0; e < grid.edgeCount; e++) {
+      if (edges[e] !== Unknown || blockOf[e] === target) continue;
+      if (at !== NONE && !seen[grid.edgeDots[e * 2]] && !seen[grid.edgeDots[e * 2 + 1]]) continue;
+      if (!this.assign(e, Cross)) return -1;
+      set++;
     }
-    let any = false;
-    for (let e = 0; e < grid.edgeCount && !any; e++) {
-      any = edges[e] === Unknown && blockOf[e] !== target;
-    }
-    if (!any) return 0;
-    // The block's dots, from `start`: a dot where an edge of another block that is not crossed
-    // begins is where everything hanging there is reached from.
-    const { piece, bcDots: stack } = this;
-    piece.fill(NONE);
-    let top = 0;
-    stack[top++] = start;
-    piece[start] = 0;
-    let found: number[] = [];
-    let at = NONE;
-    while (top > 0 && at === NONE) {
-      const d = stack[--top];
+    this.commit();
+    return set;
+  }
+
+  /**
+   * The first dot of block `target` where an edge of another block that is not crossed begins, or
+   * NONE. Marks in `seen` the dots reached from it over such edges: what hangs there, which the
+   * loop could only reach through that dot. Those edges are all open, since every line is in the
+   * block.
+   */
+  private hangingAt(target: number): number {
+    const { grid, edges, blockOf, seen, stack } = this;
+    for (let d = 0; d < grid.dotCount; d++) {
+      let inside = false;
+      let outside = false;
       for (let j = 0; j < 4; j++) {
         const e = grid.dotEdges[d * 4 + j];
         if (e === NONE || edges[e] === Cross) continue;
-        if (blockOf[e] !== target) {
-          // Every non-crossed edge outside the block is open (lines are all inside it), so this
-          // finds at least e.
-          found = this.hanging(d, target);
-          at = d;
-          break;
-        }
-        const o = otherDot(grid, e, d);
-        if (piece[o] === NONE) {
-          piece[o] = 0;
-          stack[top++] = o;
-        }
+        if (blockOf[e] === target) inside = true;
+        else outside = true;
       }
-    }
-    if (at === NONE) {
-      for (let e = 0; e < grid.edgeCount; e++) {
-        if (edges[e] === Unknown && blockOf[e] !== target) found.push(e);
-      }
-    }
-    if (at === NONE) this.begin("unreachable", [], []);
-    else this.begin("cut-off", [], [at]);
-    for (const e of found) if (!this.assign(e, Cross)) return -1;
-    this.commit();
-    return found.length;
-  }
-
-  /** The open edges reached from dot `d` over edges outside block `target` that are not crossed. */
-  private hanging(d: number, target: number): number[] {
-    const { grid, edges, blockOf } = this;
-    const out: number[] = [];
-    const seen = new Set<number>([d]);
-    const queue = [d];
-    const taken = new Set<number>();
-    for (let h = 0; h < queue.length; h++) {
-      const v = queue[h];
-      for (let j = 0; j < 4; j++) {
-        const e = grid.dotEdges[v * 4 + j];
-        if (e === NONE || edges[e] === Cross || blockOf[e] === target || taken.has(e)) continue;
-        taken.add(e);
-        if (edges[e] === Unknown) out.push(e);
-        const o = otherDot(grid, e, v);
-        if (!seen.has(o)) {
-          seen.add(o);
-          queue.push(o);
+      if (!inside || !outside) continue;
+      seen.fill(0);
+      seen[d] = 1;
+      stack[0] = d;
+      let top = 1;
+      while (top > 0) {
+        const v = stack[--top];
+        for (let j = 0; j < 4; j++) {
+          const e = grid.dotEdges[v * 4 + j];
+          if (e === NONE || edges[e] === Cross || blockOf[e] === target) continue;
+          const o = otherDot(grid, e, v);
+          if (!seen[o]) {
+            seen[o] = 1;
+            stack[top++] = o;
+          }
         }
       }
+      return d;
     }
-    return out.sort((a, b) => a - b);
+    return NONE;
   }
 
   /**
