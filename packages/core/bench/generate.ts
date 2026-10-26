@@ -1,16 +1,18 @@
 /**
  * Generator benchmark (not part of `bun run check`). Run: `bun run --cwd packages/core bench:generate`.
  *
- * 1. Loop acceptance (PRD §10, target ≥ 95%): the share of grown loops that meet the default
- *    thresholds, over many seeds per size.
+ * 1. Loop shape over many seeds per size: the mean, smallest and largest inside area, share of dots
+ *    on the loop and share of 2×2 blocks all one colour (`loopShape`; targets in DECISIONS, WT13),
+ *    and the share of loops that meet the default thresholds (PRD §10, target ≥ 95%).
  * 2. Generation time per size (NFR-1: p95 under 5 s up to 30×30), first-attempt rate (loops whose
  *    full clue set the rules solve), clue density, clues put back, and `verify` on every result.
  * Pass `--quick` to skip 100×100.
  */
 import { generate } from "../src/generate.ts";
 import { createGrid } from "../src/grid.ts";
-import { generateLoop } from "../src/loop.ts";
+import { generateLoop, LOOP_THRESHOLDS, loopShape, thresholdCount } from "../src/loop.ts";
 import { createRng } from "../src/rng.ts";
+import { loopCoverage } from "../src/test-support/loops.ts";
 import { verify } from "../src/verify.ts";
 
 function percentile(sorted: number[], p: number): number {
@@ -33,11 +35,33 @@ const LOOP_SIZES: [number, number, number][] = [
   [100, 10, 200],
   [1, 100, 200],
 ];
+const SHAPE_KEYS = ["area", "dots", "solid"] as const;
 for (const [w, h, count] of LOOP_SIZES) {
   const grid = createGrid(w, h);
+  const minArea = thresholdCount(LOOP_THRESHOLDS.minCoverage, w * h);
+  const minRows = thresholdCount(LOOP_THRESHOLDS.minSpan, h);
+  const minCols = thresholdCount(LOOP_THRESHOLDS.minSpan, w);
+  const sum = { area: 0, dots: 0, solid: 0 };
+  const lo = { area: 1, dots: 1, solid: 1 };
+  const hi = { area: 0, dots: 0, solid: 0 };
   let ok = 0;
-  for (let n = 0; n < count; n++) if (generateLoop(grid, createRng(`loop-${n}`)) !== null) ok++;
-  console.log(`loops ${w}×${h}: n=${count} accepted=${((100 * ok) / count).toFixed(1)}%`);
+  for (let n = 0; n < count; n++) {
+    const loop = generateLoop(grid, createRng(`loop-${n}`));
+    const { area, rows, cols } = loopCoverage(grid, loop);
+    if (area >= minArea && rows >= minRows && cols >= minCols) ok++;
+    const shape = loopShape(grid, loop);
+    for (const k of SHAPE_KEYS) {
+      sum[k] += shape[k];
+      lo[k] = Math.min(lo[k], shape[k]);
+      hi[k] = Math.max(hi[k], shape[k]);
+    }
+  }
+  const stats = SHAPE_KEYS.map(
+    (k) => `${k}=${(sum[k] / count).toFixed(3)} [${lo[k].toFixed(2)}–${hi[k].toFixed(2)}]`,
+  );
+  console.log(
+    `loops ${w}×${h}: n=${count} ${stats.join(" ")} accepted=${((100 * ok) / count).toFixed(1)}%`,
+  );
 }
 
 const GEN_SIZES: [number, number][] = [
