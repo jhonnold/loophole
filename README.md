@@ -233,7 +233,7 @@ Or stop Garage and archive the `garage-data` and `garage-meta` volumes. `infra/g
 | `./scripts/backup-sqlite.sh [folder]` | Back up the SQLite database (see Backups) |
 | `bun run --cwd packages/core bench` | Time puzzle verification on 10×10 to 100×100 boards (not part of the check) |
 | `bun run --cwd packages/core bench:generate` | Time puzzle generation on 7×7 to 100×100 boards and measure loop shape and acceptance (not part of the check) |
-| `bun run --cwd packages/core bench:clue-gaps` | Measure which kept clues the rule solver needs on generated 5×5 to 20×20 puzzles, against how few clues one solution allows (`--write-corpus` rewrites the test corpus; not part of the check) |
+| `bun run --cwd packages/core bench:clue-gaps` | Measure which kept clues the rule solver needs on generated 5×5 to 20×20 puzzles, against how few clues one solution allows (`--rules=` and `--no-lookahead` measure fewer rules, `--write-corpus` rewrites the test corpus; not part of the check) |
 
 ## Repository layout
 
