@@ -1,4 +1,14 @@
-import { decodeEdges, type Puzzle, parsePuzzle, type Step } from "@loophole/core";
+import {
+  DEFAULT_LEVEL,
+  decodeEdges,
+  type Level,
+  type Puzzle,
+  type PuzzleWireV1,
+  parsePuzzle,
+  puzzleLevel,
+  type Step,
+  serializePuzzle,
+} from "@loophole/core";
 import type { GeneratedPuzzle, PuzzleOrigin, PuzzleRecord } from "../domain.ts";
 import type { BlobStore, Clock, PuzzleRepository } from "../ports.ts";
 
@@ -22,29 +32,33 @@ export class PuzzleManager {
   /**
    * Stores a generated puzzle under `id` as published: solution and trace go to the blob store
    * first, so a stored row never points at a missing blob. Saving the same id again changes
-   * nothing, so a job that runs twice stores one puzzle. Returns `id`.
+   * nothing, so a job that runs twice stores one puzzle. Its level is the one the generator put in
+   * `meta.level` (PRD FR-7), which may be above the level asked for on a tiny board. Returns `id`.
    */
   async saveGenerated(id: string, generated: GeneratedPuzzle): Promise<string> {
-    const { puzzle, solution, steps } = generated;
-    return this.#save(id, parsePuzzle(puzzle), solution, steps, "generated", null, null);
+    const { solution, steps } = generated;
+    const puzzle = parsePuzzle(generated.puzzle);
+    return this.#save(id, puzzle, puzzleLevel(puzzle), solution, steps, "generated", null, null);
   }
 
   /**
    * Stores a generated daily puzzle (PRD FR-22) that players can't see before `releaseAt`. Its
    * seed and generator version are left out, since with them anyone could rebuild the solution
-   * (DECISIONS, WT6 "Puzzle storage"); the daily's own record keeps them. Like `saveGenerated`
-   * otherwise. Returns `id`.
+   * (DECISIONS, WT6 "Puzzle storage"); the daily's own record keeps them. Its level is kept. Like
+   * `saveGenerated` otherwise. Returns `id`.
    */
   async saveDaily(id: string, generated: GeneratedPuzzle, releaseAt: number): Promise<string> {
-    const { puzzle, solution, steps } = generated;
-    const { width, height, clues } = puzzle;
-    const cluesOnly = parsePuzzle({ v: 1, width, height, clues });
-    return this.#save(id, cluesOnly, solution, steps, "generated", null, releaseAt);
+    const { solution, steps } = generated;
+    const level = puzzleLevel(parsePuzzle(generated.puzzle));
+    const puzzle = cluesOnly(generated.puzzle, level);
+    return this.#save(id, puzzle, level, solution, steps, "generated", null, releaseAt);
   }
 
   /**
    * Stores a player's verified puzzle under `id` as published, with `creatorId` as its creator
    * (PRD FR-27). Like `saveGenerated`: blobs first, and saving the same id again changes nothing.
+   * Only its clues are kept, and its level is hard whatever its `meta` says: the level of a
+   * submitted puzzle is never taken from the player.
    */
   async saveSubmitted(
     id: string,
@@ -53,12 +67,14 @@ export class PuzzleManager {
     steps: readonly Step[],
     creatorId: string,
   ): Promise<string> {
-    return this.#save(id, puzzle, solution, steps, "submitted", creatorId, null);
+    const clues = cluesOnly(serializePuzzle(puzzle), DEFAULT_LEVEL);
+    return this.#save(id, clues, DEFAULT_LEVEL, solution, steps, "submitted", creatorId, null);
   }
 
   async #save(
     id: string,
     puzzle: Puzzle,
+    level: Level,
     solution: string,
     steps: readonly Step[],
     origin: PuzzleOrigin,
@@ -76,7 +92,7 @@ export class PuzzleManager {
       puzzle,
       origin,
       status: "published",
-      level: 1,
+      level,
       solutionKey,
       traceKey,
       createdAt: clock.now(),
@@ -130,4 +146,14 @@ export class PuzzleManager {
     const text = await this.#deps.blobs.get(record.solutionKey);
     return text === null ? null : decodeEdges(record.puzzle.grid, text);
   }
+}
+
+/**
+ * The puzzle's clues, with `meta.level` when `level` is below the default (as `generate` writes
+ * it), and no seed or other metadata.
+ */
+function cluesOnly({ width, height, clues }: PuzzleWireV1, level: Level): Puzzle {
+  const wire: PuzzleWireV1 = { v: 1, width, height, clues };
+  if (level !== DEFAULT_LEVEL) wire.meta = { level };
+  return parsePuzzle(wire);
 }

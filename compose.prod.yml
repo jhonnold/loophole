@@ -50,6 +50,11 @@ services:
   worker:
     <<: *app
     command: ["bun", "apps/server/src/worker/main.ts"]
+    # On `docker compose stop`/`up` the worker stops claiming jobs and gives a running one
+    # WORKER_DRAIN_MS (60 s by default) to finish; a job still running then goes back to the queue
+    # for the next worker. Keep this longer than WORKER_DRAIN_MS, or Docker kills the worker first
+    # and the job only comes back once it is found stale (30 s later).
+    stop_grace_period: 90s
     environment:
       S3_ENDPOINT: http://garage:3900
       METRICS_HOST: 0.0.0.0

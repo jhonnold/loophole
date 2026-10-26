@@ -26,7 +26,7 @@ function setup() {
       puzzle: createPuzzle(2, 2),
       origin: "generated",
       status: "published",
-      level: 1,
+      level: "hard",
       solutionKey: `puzzles/${id}/solution.txt`,
       traceKey: null,
       createdAt: 0,

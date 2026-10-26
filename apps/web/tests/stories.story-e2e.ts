@@ -276,7 +276,7 @@ test("as a player, I can play today's daily puzzle and keep a streak", async ({
   await page.goto("/");
   await expect(page.getByLabel("Streak")).toContainText("0 day streak");
   const covers = page.getByRole("list", { name: "Today's daily puzzles" });
-  await covers.getByRole("link", { name: /Medium/ }).click();
+  await covers.getByRole("link", { name: /Regular/ }).click();
   await page.getByRole("button", { name: "Start" }).click();
   await expect(board(page)).toBeVisible();
   // 10×10 needs at least 10 s to count (0.1 s per cell).
@@ -284,6 +284,6 @@ test("as a player, I can play today's daily puzzle and keep a streak", async ({
   await expect(page.getByText("Rank today")).toBeVisible({ timeout: 15_000 });
   await page.goto("/");
   await expect(page.getByLabel("Streak")).toContainText("1 day streak");
-  await expect(covers.getByRole("link", { name: /Medium.*Solved/ })).toBeVisible();
+  await expect(covers.getByRole("link", { name: /Regular.*Solved/ })).toBeVisible();
   await page.context().close();
 });

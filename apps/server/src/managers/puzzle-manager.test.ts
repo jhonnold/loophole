@@ -13,6 +13,12 @@ const GENERATED: GeneratedPuzzle = {
   steps: [{ rule: "clue-satisfied", changes: [{ edge: 0, state: 1 }], cells: [0], dots: [] }],
 };
 
+/** As the generator reports a puzzle made at easy (`meta.level`, docs/FORMAT.md). */
+const EASY: GeneratedPuzzle = {
+  ...GENERATED,
+  puzzle: { ...GENERATED.puzzle, meta: { generator: "1", level: "easy" } },
+};
+
 function setup() {
   const puzzles = new FakePuzzleRepository();
   const blobs = new MemoryBlobStore();
@@ -32,7 +38,7 @@ describe("PuzzleManager", () => {
     expect(record).toMatchObject({
       origin: "generated",
       status: "published",
-      level: 1,
+      level: "hard",
       createdAt: 5000,
       solutionKey: "puzzles/p-1/solution.txt",
       traceKey: "puzzles/p-1/trace.json",
@@ -46,6 +52,13 @@ describe("PuzzleManager", () => {
       v: 1,
       steps: GENERATED.steps,
     });
+  });
+
+  test("saveGenerated stores the level the generator reported (FR-7)", async () => {
+    const { puzzles, manager } = setup();
+    await manager.saveGenerated("e-1", EASY);
+    expect(puzzles.get("e-1")?.level).toBe("easy");
+    expect(puzzles.get("e-1")?.puzzle.meta).toEqual({ generator: "1", level: "easy" });
   });
 
   test("saving the same id again keeps one puzzle", async () => {
@@ -109,6 +122,20 @@ describe("PuzzleManager for daily puzzles", () => {
     expect(manager.listRecent(10)).toEqual([]);
     expect(await manager.getSolution("d-1")).not.toBeNull();
   });
+
+  test("saveDaily keeps the puzzle's level, in the record and in meta", async () => {
+    const { puzzles, manager } = setup();
+    await manager.saveDaily("d-2", EASY, 6000);
+    const stored = puzzles.get("d-2");
+    expect(stored?.level).toBe("easy");
+    expect(stored && serializePuzzle(stored.puzzle)).toEqual({
+      v: 1,
+      width: 2,
+      height: 2,
+      clues: "2222",
+      meta: { level: "easy" },
+    });
+  });
 });
 
 describe("PuzzleManager for submitted puzzles", () => {
@@ -119,9 +146,24 @@ describe("PuzzleManager for submitted puzzles", () => {
     expect(puzzles.get("s-1")).toMatchObject({
       origin: "submitted",
       status: "published",
+      level: "hard",
       creatorId: "u1",
     });
     expect(await blobs.get("puzzles/s-1/solution.txt")).toBe("112211121121");
+  });
+
+  test("a submitted puzzle is hard, whatever its meta says: its level never comes from the player", async () => {
+    const { puzzles, manager } = setup();
+    const claims = createPuzzle(2, 2, [2, 2, 2, 2], { seed: "x", meta: { level: "easy" } });
+    await manager.saveSubmitted("s-2", claims, "112211121121", [], "u1");
+    const stored = puzzles.get("s-2");
+    expect(stored?.level).toBe("hard");
+    expect(stored && serializePuzzle(stored.puzzle)).toEqual({
+      v: 1,
+      width: 2,
+      height: 2,
+      clues: "2222",
+    });
   });
 
   test("unpublish hides a puzzle from players but getAny and findByClues still see it", async () => {

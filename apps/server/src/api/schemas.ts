@@ -1,5 +1,5 @@
 import { z } from "@hono/zod-openapi";
-import { RULE_IDS } from "@loophole/core";
+import { LEVELS, RULE_IDS } from "@loophole/core";
 
 // Request and response bodies of the HTTP API. These are the wire shapes the OpenAPI document and
 // the generated client are built from; routes translate them to and from domain types.
@@ -36,17 +36,30 @@ export const PuzzleWireSchema = z
 
 export const PuzzleOriginSchema = z.enum(["generated", "submitted"]).openapi("PuzzleOrigin");
 
+export const LevelSchema = z.enum(LEVELS).openapi("Level", {
+  description:
+    "Difficulty level (PRD FR-7): which rules the generator's solver may use and how many clues stay, easiest first. Hints use the puzzle's level. Submitted puzzles count as hard.",
+});
+
 export const PuzzleSchema = z
   .object({
     id: Id,
     puzzle: PuzzleWireSchema,
     origin: PuzzleOriginSchema,
+    level: LevelSchema,
     createdAt: Timestamp,
   })
   .openapi("Puzzle", { description: "A published puzzle: clues only, never the solution." });
 
 export const PuzzleSummarySchema = z
-  .object({ id: Id, width: Size, height: Size, origin: PuzzleOriginSchema, createdAt: Timestamp })
+  .object({
+    id: Id,
+    width: Size,
+    height: Size,
+    origin: PuzzleOriginSchema,
+    level: LevelSchema,
+    createdAt: Timestamp,
+  })
   .openapi("PuzzleSummary");
 
 export const PuzzleListSchema = z
@@ -68,12 +81,13 @@ export const GenerateRequestSchema = z
   .strictObject({
     width: Size,
     height: Size,
-    seed: z
-      .string()
-      .min(1)
-      .max(128)
-      .optional()
-      .openapi({ description: "Same seed, size and generator version give the same puzzle." }),
+    seed: z.string().min(1).max(128).optional().openapi({
+      description: "Same seed, size, level and generator version give the same puzzle.",
+    }),
+    level: z.enum(LEVELS).optional().openapi({
+      description:
+        "Default hard. A board too small for the level's rules gets the next level up; the puzzle's `level` says which.",
+    }),
   })
   .openapi("GenerateRequest");
 

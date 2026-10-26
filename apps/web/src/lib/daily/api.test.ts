@@ -6,7 +6,7 @@ const SET = {
   day: "2026-10-25",
   live: true,
   nextAt: "2026-10-26T00:00:00.000Z",
-  puzzles: [{ size: 7, puzzleId: "d7" }],
+  puzzles: [{ size: 7, level: "hard" as const, puzzleId: "d7" }],
 };
 
 /** A daily API whose fetch answers `respond` for every request, recording what was sent. */
@@ -52,7 +52,7 @@ describe("createDailyApi", () => {
       puzzleId: "d7",
       day: "2026-10-25",
       area: 49,
-      level: 1,
+      level: "hard",
       status: "playing",
       startedAt: "2026-10-25T10:00:00.000Z",
       finishedAt: null,

@@ -14,7 +14,7 @@ function record(id: string, createdAt: number, status: PuzzleRecord["status"] = 
     puzzle,
     origin: "generated",
     status,
-    level: 1,
+    level: "hard",
     solutionKey: `puzzles/${id}/solution.txt`,
     traceKey: `puzzles/${id}/trace.json`,
     createdAt,
@@ -49,6 +49,23 @@ describe("SqlitePuzzleRepository", () => {
     const got = repo.get("b");
     expect(got && serializePuzzle(got.puzzle)).toEqual({ v: 1, width: 1, height: 1, clues: "0" });
     expect(got?.traceKey).toBeNull();
+  });
+
+  test("a loaded puzzle gets meta.level back from the level column, left out at hard", () => {
+    const repo = new SqlitePuzzleRepository(openDatabase(":memory:"));
+    repo.insert({ ...record("easy", 1), level: "easy" });
+    // A daily is stored without seed or generator version; its level is kept all the same.
+    repo.insert({ ...record("daily", 1), puzzle: createPuzzle(1, 1, [0]), level: "medium" });
+    // The column decides, whatever the stored puzzle's meta says.
+    const claims = createPuzzle(1, 1, [0], { meta: { level: "easy" } });
+    repo.insert({ ...record("claims", 1), puzzle: claims, level: "hard" });
+    expect(repo.get("easy")?.level).toBe("easy");
+    expect(repo.get("easy")?.puzzle.meta).toEqual({ generator: "1", level: "easy" });
+    expect(repo.get("daily")?.puzzle.meta).toEqual({ level: "medium" });
+    expect(repo.get("claims")?.puzzle.meta).toBeUndefined();
+    expect(repo.get("a")).toBeNull();
+    repo.insert(record("a", 1));
+    expect(repo.get("a")?.puzzle.meta).toEqual({ generator: "1" });
   });
 
   test("listPublished is newest first, skips unpublished and honours the limit", () => {

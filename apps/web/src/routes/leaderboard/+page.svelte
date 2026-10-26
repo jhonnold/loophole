@@ -24,14 +24,16 @@
     const latest = () => token === loads;
     board = undefined;
     missing = false;
+    const today = await daily.day();
+    if (!latest()) return;
+    const ofSize = today?.puzzles.find((p) => p.size === forSize);
     if (forScope === "all") {
-      const result = await daily.bucketBoard(forSize * forSize);
+      // The bucket is the size's area at the level its dailies are made at (PRD FR-23).
+      const result = await daily.bucketBoard(forSize * forSize, ofSize?.level ?? "hard");
       if (latest()) board = result;
       return;
     }
-    const today = await daily.day();
-    if (!latest()) return;
-    const puzzleId = today?.puzzles.find((p) => p.size === forSize)?.puzzleId ?? null;
+    const puzzleId = ofSize?.puzzleId ?? null;
     if (today !== null && puzzleId === null) {
       missing = true;
       board = null;

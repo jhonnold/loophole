@@ -37,6 +37,8 @@ const EnvSchema = z.object({
   WORKER_ID: z.string().min(1).optional(),
   GENERATE_TIMEOUT_MS: Ms.default(1_800_000),
   VERIFY_TIMEOUT_MS: Ms.default(45_000),
+  MAX_PENDING_GENERATIONS: z.coerce.number().int().min(1).max(100).default(3),
+  WORKER_DRAIN_MS: Ms.default(60_000),
   PUBLIC_URL: z.url(),
   TRUST_PROXY: z.stringbool().default(false),
   TURNSTILE_SITE_KEY: z.string().min(1).default(TURNSTILE_TEST_SITE_KEY),
@@ -69,6 +71,13 @@ export interface Config {
   readonly pollMs: number;
   /** New jobs are refused while this many are waiting. */
   readonly maxQueuedJobs: number;
+  /** A player's (or a guest address's) generations are refused while this many are waiting or running. */
+  readonly maxPendingGenerations: number;
+  /**
+   * After SIGTERM or SIGINT, how long the worker lets a running job go on before it stops the job
+   * and gives it back to the queue. `compose.prod.yml`'s `stop_grace_period` must be longer.
+   */
+  readonly drainMs: number;
   readonly jobs: JobRunSettings;
   /** Origin of the web app, without a trailing slash; links in mail point here. */
   readonly publicUrl: string;
@@ -165,6 +174,8 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     workerId: `${e.WORKER_ID ?? hostname()}-${process.pid}`,
     pollMs: 500,
     maxQueuedJobs: 100,
+    maxPendingGenerations: e.MAX_PENDING_GENERATIONS,
+    drainMs: e.WORKER_DRAIN_MS,
     jobs: {
       generateTimeoutMs: e.GENERATE_TIMEOUT_MS,
       verifyTimeoutMs: e.VERIFY_TIMEOUT_MS,

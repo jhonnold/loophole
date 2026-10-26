@@ -61,6 +61,7 @@ export function openApiDocument() {
     clock: systemClock,
     newId: () => crypto.randomUUID(),
     maxQueued: 1,
+    maxPendingPerRequester: 10,
   });
   const dailyRepo = new SqliteDailyRepository(db);
   const dailies = new DailyManager({

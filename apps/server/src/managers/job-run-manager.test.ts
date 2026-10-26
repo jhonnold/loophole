@@ -2,7 +2,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { createPuzzle, serializePuzzle } from "@loophole/core";
 import { MemoryBlobStore } from "../adapters/blob/memory-blob-store.ts";
 import { MemoryRateLimiter } from "../adapters/rate-limiter.ts";
-import type { TaskOutcome } from "../domain.ts";
+import { JOB_PRIORITY, type TaskOutcome } from "../domain.ts";
 import {
   FakeClock,
   FakeJobQueue,
@@ -52,7 +52,13 @@ function setup(runner: FakeTaskRunner, settings = SETTINGS) {
   const submissions = new SubmissionManager({
     submissions: new FakeSubmissionRepository(),
     puzzles,
-    jobs: new JobManager({ jobs, clock, newId: sequentialIds("j"), maxQueued: 10 }),
+    jobs: new JobManager({
+      jobs,
+      clock,
+      newId: sequentialIds("j"),
+      maxQueued: 10,
+      maxPendingPerRequester: 10,
+    }),
     limiter: new MemoryRateLimiter(clock),
     clock,
     newId: sequentialIds("s"),
@@ -249,6 +255,48 @@ describe("JobRunManager.runNext", () => {
       result: { kind: "generate", puzzleId: "j1" },
     });
     expect(s.puzzleRepo.records.size).toBe(1);
+  });
+});
+
+describe("JobRunManager.runNext: priorities and shutdown", () => {
+  test("with maxPriority it claims only jobs at that priority or above", async () => {
+    const runner = new FakeTaskRunner(async () => GENERATED);
+    const { jobs, manager, enqueue } = setup(runner);
+    enqueue("player");
+    const verifyOnly = { maxPriority: JOB_PRIORITY.verify };
+    expect(await manager.runNext("w/verify", verifyOnly)).toBe(false);
+    const puzzle = serializePuzzle(createPuzzle(2, 2));
+    jobs.enqueue({
+      id: "v1",
+      job: { kind: "verify", input: { puzzle } },
+      createdAt: 1,
+      priority: JOB_PRIORITY.verify,
+    });
+    expect(await manager.runNext("w/verify", verifyOnly)).toBe(true);
+    expect(jobs.get("v1")?.claimedBy).toBe("w/verify");
+    expect(jobs.get("player")?.status).toBe("queued");
+  });
+
+  test("a job stopped at shutdown goes back to the queue, its claim not counted", async () => {
+    const cancel = new AbortController();
+    const runner = new FakeTaskRunner(
+      (_task, { signal }) =>
+        new Promise((resolve) => {
+          signal?.addEventListener("abort", () => resolve({ status: "cancelled" }));
+          cancel.abort();
+        }),
+    );
+    const { jobs, manager, enqueue, finished } = setup(runner);
+    enqueue("j1");
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    expect(await manager.runNext("w", { cancel: cancel.signal })).toBe(true);
+    expect(warn).toHaveBeenCalledWith("Job j1 stopped at shutdown and given back to the queue");
+    warn.mockRestore();
+    expect(jobs.get("j1")).toMatchObject({ status: "queued", claimedBy: null, attempts: 0 });
+    expect(finished).toEqual([]);
+    // Once stopping, nothing more is claimed.
+    expect(await manager.runNext("w", { cancel: cancel.signal })).toBe(false);
+    expect(runner.calls).toHaveLength(1);
   });
 });
 

@@ -1,4 +1,4 @@
-import type { Puzzle } from "@loophole/core";
+import type { Level, Puzzle } from "@loophole/core";
 import type {
   AccountTokenPurpose,
   AccountTokenRecord,
@@ -56,6 +56,10 @@ export interface NewJob {
   readonly id: string;
   readonly job: JobInput;
   readonly createdAt: number;
+  /** Claim order (`JOB_PRIORITY`), lower first; `JOB_PRIORITY.player` when left out. */
+  readonly priority?: number;
+  /** Who queued a player's generation (`Job.requester`); null when left out. */
+  readonly requester?: string | null;
 }
 
 /**
@@ -66,17 +70,29 @@ export interface JobQueue {
   enqueue(job: NewJob): Job;
   get(id: string): Job | null;
   countQueued(): number;
+  /** Jobs that `requester` queued which are waiting or running now. */
+  countPending(requester: string): number;
   /** Jobs waiting and running now, and when the oldest waiting one was queued (null if none). */
   countActive(): { queued: number; running: number; oldestQueuedAt: number | null };
   /** The most recently ended jobs that failed or timed out, newest first. */
   listFailed(limit: number): Job[];
-  /** Atomically takes the oldest queued job for `workerId`, or returns null when there is none. */
-  claimNext(workerId: string, now: number): Job | null;
+  /**
+   * Atomically takes the queued job with the lowest priority, the oldest among those, for
+   * `workerId`, or returns null when there is none. With `maxPriority`, only jobs whose priority is
+   * at most that are taken.
+   */
+  claimNext(workerId: string, now: number, maxPriority?: number): Job | null;
   /** Stores progress (0 to 1); also counts as a heartbeat. */
   setProgress(id: string, workerId: string, progress: number, now: number): void;
   heartbeat(id: string, workerId: string, now: number): void;
-  /** Ends a running job. Returns false when the worker no longer holds it. */
+  /** Ends a running job and forgets its requester. Returns false when the worker no longer holds it. */
   finish(id: string, workerId: string, end: JobEnd, now: number): boolean;
+  /**
+   * Gives a running job back to the queue, as it was before `workerId` claimed it (the claim isn't
+   * counted in `attempts`), for a worker that is shutting down. Returns false when the worker no
+   * longer holds it.
+   */
+  release(id: string, workerId: string): boolean;
   /**
    * Running jobs whose last heartbeat is before `staleBefore` go back to the queue, or fail once
    * they have been claimed `maxAttempts` times. Returns how many of each.
@@ -97,6 +113,8 @@ export interface TaskRunOptions {
   readonly timeoutMs: number;
   /** Called with progress from 0 to 1, at most about once per percent. */
   readonly onProgress: (progress: number) => void;
+  /** Stops the task when aborted; it then ends as `cancelled`. */
+  readonly signal?: AbortSignal;
 }
 
 /** Runs CPU-heavy tasks (generation, verification) off the caller's thread. */
@@ -265,19 +283,14 @@ export interface AttemptRepository {
   /** Every day on which the user finished an attempt, ranked or not; any order. */
   finishedDays(userId: string): string[];
   /** The user's best ranked time in each bucket. */
-  bests(userId: string): { area: number; level: number; timeMs: number }[];
+  bests(userId: string): { area: number; level: Level; timeMs: number }[];
   /** Ranked solves of one puzzle, fastest first: the top `limit` and `viewerId`'s neighbourhood. */
   puzzleBoard(puzzleId: string, viewerId: string | null, limit: number): LeaderboardSlice;
   /**
    * Each player's best ranked time in one bucket, fastest first: the top `limit` and `viewerId`'s
    * neighbourhood.
    */
-  bucketBoard(
-    area: number,
-    level: number,
-    viewerId: string | null,
-    limit: number,
-  ): LeaderboardSlice;
+  bucketBoard(area: number, level: Level, viewerId: string | null, limit: number): LeaderboardSlice;
 }
 
 /** Names players chose to show on leaderboards. */

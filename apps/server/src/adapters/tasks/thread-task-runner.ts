@@ -11,7 +11,7 @@ const THREAD_URL = new URL("./task-thread.ts", import.meta.url).href;
 
 /**
  * Runs each task in a fresh Bun Worker thread. Generation is synchronous and cannot be
- * interrupted from inside, so the time limit (and any cancel) is `Worker.terminate()`.
+ * interrupted from inside, so the time limit and a cancel (`signal`) are `Worker.terminate()`.
  */
 export class ThreadTaskRunner implements TaskRunner {
   readonly #threadUrl: string;
@@ -21,7 +21,8 @@ export class ThreadTaskRunner implements TaskRunner {
     this.#threadUrl = threadUrl;
   }
 
-  run(task: Task, { timeoutMs, onProgress }: TaskRunOptions): Promise<TaskOutcome> {
+  run(task: Task, { timeoutMs, onProgress, signal }: TaskRunOptions): Promise<TaskOutcome> {
+    if (signal?.aborted) return Promise.resolve({ status: "cancelled" });
     return new Promise((resolve) => {
       const thread = new Worker(this.#threadUrl);
       let settled = false;
@@ -29,9 +30,12 @@ export class ThreadTaskRunner implements TaskRunner {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        signal?.removeEventListener("abort", cancel);
         thread.terminate();
         resolve(outcome);
       };
+      const cancel = () => settle({ status: "cancelled" });
+      signal?.addEventListener("abort", cancel);
       const timer = setTimeout(() => settle({ status: "timeout" }), timeoutMs);
       thread.onmessage = (event: MessageEvent<ThreadMessage>) => {
         const message = event.data;

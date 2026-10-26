@@ -1,4 +1,5 @@
 import type { ApiClient, Schemas } from "@loophole/api-client";
+import type { Level } from "@loophole/core";
 import { failureMessage } from "../auth/auth.ts";
 
 export type DailySet = Schemas["DailySet"];
@@ -99,11 +100,14 @@ export function createDailyApi(client: ApiClient) {
         }),
       ),
 
-    /** The all-time leaderboard of an area (width × height), or null when it can't be read. */
-    bucketBoard: (area: number, limit = BOARD_LIMIT) =>
+    /**
+     * The all-time leaderboard of an area (width × height) and level, or null when it can't be
+     * read.
+     */
+    bucketBoard: (area: number, level: Level, limit = BOARD_LIMIT) =>
       read(() =>
         client.GET("/api/leaderboards/areas/{area}", {
-          params: { path: { area }, query: { limit, level: 1 } },
+          params: { path: { area }, query: { limit, level } },
         }),
       ),
 

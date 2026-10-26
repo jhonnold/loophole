@@ -1,4 +1,4 @@
-import { decodeEdges, EdgeState, FormatError } from "@loophole/core";
+import { decodeEdges, EdgeState, FormatError, type Level } from "@loophole/core";
 import type { AttemptRecord, DailyRecord, PuzzleRecord } from "../domain.ts";
 import type { AttemptRepository, Clock } from "../ports.ts";
 import type { DailyManager } from "./daily-manager.ts";
@@ -60,7 +60,7 @@ export interface DailySummary {
   /** Best ranked time per leaderboard bucket. */
   readonly bests: readonly {
     readonly area: number;
-    readonly level: number;
+    readonly level: Level;
     readonly timeMs: number;
   }[];
 }

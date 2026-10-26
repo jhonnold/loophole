@@ -1,22 +1,23 @@
-import type { Puzzle } from "@loophole/core";
-import type {
-  AccountTokenPurpose,
-  AccountTokenRecord,
-  AttemptRecord,
-  DailyRecord,
-  Job,
-  LeaderboardEntry,
-  LeaderboardSlice,
-  ProgressRecord,
-  PuzzleRecord,
-  PuzzleStatus,
-  ReportRecord,
-  SessionRecord,
-  SubmissionRecord,
-  SubmissionVerdict,
-  Task,
-  TaskOutcome,
-  UserRecord,
+import type { Level, Puzzle } from "@loophole/core";
+import {
+  type AccountTokenPurpose,
+  type AccountTokenRecord,
+  type AttemptRecord,
+  type DailyRecord,
+  JOB_PRIORITY,
+  type Job,
+  type LeaderboardEntry,
+  type LeaderboardSlice,
+  type ProgressRecord,
+  type PuzzleRecord,
+  type PuzzleStatus,
+  type ReportRecord,
+  type SessionRecord,
+  type SubmissionRecord,
+  type SubmissionVerdict,
+  type Task,
+  type TaskOutcome,
+  type UserRecord,
 } from "../domain.ts";
 import type {
   AccountTokenRepository,
@@ -150,14 +151,14 @@ export class FakeReportRepository implements ReportRepository {
   }
 }
 
-/** The jobs table in a Map, with the same claim rules as the SQLite queue. */
+/** The jobs table in a Map, with the same claim rules as the SQLite queue (priority, then oldest). */
 export class FakeJobQueue implements JobQueue {
   readonly jobs = new Map<string, Job>();
   /** Every progress write, in order. */
   readonly progressWrites: { id: string; progress: number; at: number }[] = [];
   heartbeats = 0;
 
-  enqueue({ id, job, createdAt }: NewJob): Job {
+  enqueue({ id, job, createdAt, priority = JOB_PRIORITY.player, requester = null }: NewJob): Job {
     const stored = {
       ...job,
       id,
@@ -166,6 +167,8 @@ export class FakeJobQueue implements JobQueue {
       result: null,
       error: null,
       attempts: 0,
+      priority,
+      requester,
       claimedBy: null,
       createdAt,
       startedAt: null,
@@ -182,6 +185,12 @@ export class FakeJobQueue implements JobQueue {
 
   countQueued(): number {
     return [...this.jobs.values()].filter((j) => j.status === "queued").length;
+  }
+
+  countPending(requester: string): number {
+    return [...this.jobs.values()].filter(
+      (j) => j.requester === requester && (j.status === "queued" || j.status === "running"),
+    ).length;
   }
 
   countActive(): { queued: number; running: number; oldestQueuedAt: number | null } {
@@ -201,8 +210,11 @@ export class FakeJobQueue implements JobQueue {
       .slice(0, limit);
   }
 
-  claimNext(workerId: string, now: number): Job | null {
-    const next = [...this.jobs.values()].find((j) => j.status === "queued");
+  claimNext(workerId: string, now: number, maxPriority = Number.MAX_SAFE_INTEGER): Job | null {
+    // Map order is insertion order, which stands in for created_at; sort is stable.
+    const next = [...this.jobs.values()]
+      .filter((j) => j.status === "queued" && j.priority <= maxPriority)
+      .sort((a, b) => a.priority - b.priority)[0];
     if (next === undefined) return null;
     return this.#update(next.id, {
       status: "running",
@@ -231,9 +243,21 @@ export class FakeJobQueue implements JobQueue {
     this.#update(
       id,
       end.status === "done"
-        ? { status: "done", progress: 1, result: end.result, finishedAt: now }
-        : { status: end.status, error: end.error, finishedAt: now },
+        ? { status: "done", progress: 1, result: end.result, finishedAt: now, requester: null }
+        : { status: end.status, error: end.error, finishedAt: now, requester: null },
     );
+    return true;
+  }
+
+  release(id: string, workerId: string): boolean {
+    const job = this.jobs.get(id);
+    if (job === undefined || !this.#holds(id, workerId)) return false;
+    this.#update(id, {
+      status: "queued",
+      claimedBy: null,
+      progress: 0,
+      attempts: job.attempts - 1,
+    });
     return true;
   }
 
@@ -247,7 +271,12 @@ export class FakeJobQueue implements JobQueue {
       if (job.status !== "running" || (job.heartbeatAt ?? 0) >= staleBefore) continue;
       if (job.attempts >= maxAttempts) {
         counts.lost++;
-        this.#update(job.id, { status: "failed", error: "stale", finishedAt: now });
+        this.#update(job.id, {
+          status: "failed",
+          error: "stale",
+          finishedAt: now,
+          requester: null,
+        });
       } else {
         counts.requeued++;
         this.#update(job.id, { status: "queued", claimedBy: null, progress: 0 });
@@ -498,8 +527,8 @@ export class FakeAttemptRepository implements AttemptRepository {
     return [...new Set(days.map((a) => a.day))];
   }
 
-  bests(userId: string): { area: number; level: number; timeMs: number }[] {
-    const best = new Map<string, { area: number; level: number; timeMs: number }>();
+  bests(userId: string): { area: number; level: Level; timeMs: number }[] {
+    const best = new Map<string, { area: number; level: Level; timeMs: number }>();
     for (const a of this.#ranked().filter((r) => r.userId === userId)) {
       const key = `${a.area}/${a.level}`;
       const old = best.get(key);
@@ -520,7 +549,7 @@ export class FakeAttemptRepository implements AttemptRepository {
 
   bucketBoard(
     area: number,
-    level: number,
+    level: Level,
     viewerId: string | null,
     limit: number,
   ): LeaderboardSlice {

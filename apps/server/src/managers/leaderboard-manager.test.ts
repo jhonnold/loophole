@@ -36,7 +36,7 @@ async function setup() {
       puzzleId,
       day: puzzleId === "d24" ? "2026-10-24" : "2026-10-25",
       area: 4,
-      level: 1,
+      level: "hard",
       startedAt: 0,
       finishedAt: timeMs,
       timeMs,
@@ -57,7 +57,7 @@ describe("LeaderboardManager (FR-23)", () => {
     names.set("u2", "tsuru", 0);
     expect(manager.forPuzzle("d25", "u1", 10)).toEqual({
       area: 4,
-      level: 1,
+      level: "hard",
       total: 2,
       entries: [
         { rank: 1, userId: "u2", name: "tsuru", timeMs: 7000 },
@@ -83,13 +83,13 @@ describe("LeaderboardManager (FR-23)", () => {
     solve("u1", "d24", 5000);
     solve("u1", "d25", 3000);
     solve("u2", "d24", 4000);
-    expect(manager.forBucket(4, 1, null, 10).entries).toEqual([
+    expect(manager.forBucket(4, "hard", null, 10).entries).toEqual([
       { rank: 1, userId: "u1", name: null, timeMs: 3000 },
       { rank: 2, userId: "u2", name: null, timeMs: 4000 },
     ]);
-    expect(manager.forBucket(49, 1, "u1", 10)).toEqual({
+    expect(manager.forBucket(49, "hard", "u1", 10)).toEqual({
       area: 49,
-      level: 1,
+      level: "hard",
       total: 0,
       entries: [],
       me: null,

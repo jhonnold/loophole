@@ -1,4 +1,4 @@
-import type { Puzzle, PuzzleWireV1, Step, VerifyStatus } from "@loophole/core";
+import type { Level, Puzzle, PuzzleWireV1, Step, VerifyStatus } from "@loophole/core";
 
 /** Where a stored puzzle came from. */
 export type PuzzleOrigin = "generated" | "submitted";
@@ -9,12 +9,19 @@ export type PuzzleStatus = "published" | "unpublished";
 /** A stored puzzle. The solution and the solver trace live in the blob store, not here. */
 export interface PuzzleRecord {
   readonly id: string;
-  /** Clues, seed and `meta.generator` (the generator version), as the core models them. */
+  /**
+   * Clues, seed, `meta.generator` (the generator version) and, below the default level,
+   * `meta.level`, as the core models them. `meta.level` always matches `level`, so hints use the
+   * puzzle's level (core's `findHint`).
+   */
   readonly puzzle: Puzzle;
   readonly origin: PuzzleOrigin;
   readonly status: PuzzleStatus;
-  /** Difficulty level. Every puzzle is level 1 until levels exist (PRD FR-29). */
-  readonly level: number;
+  /**
+   * The level a generated puzzle was made at (PRD FR-7), as the generator reported it. Submitted
+   * puzzles and those from before levels are hard (core's `DEFAULT_LEVEL`).
+   */
+  readonly level: Level;
   /** Blob key of the solution, in the wire format's edge-state encoding. */
   readonly solutionKey: string;
   /** Blob key of the solver's step log (JSON), when there is one. */
@@ -34,12 +41,21 @@ export type JobKind = "generate" | "verify";
 
 export type JobStatus = "queued" | "running" | "done" | "failed" | "timeout";
 
+/**
+ * The order workers claim queued jobs in, lowest first and oldest first within one (DECISIONS,
+ * WT21 "Worker fairness"): a player's generation, which can take many minutes at 100×100, never
+ * holds up a submission's check or a daily puzzle that is waiting.
+ */
+export const JOB_PRIORITY = { verify: 0, daily: 1, player: 2 } as const;
+
 export interface GenerateInput {
   readonly width: number;
   readonly height: number;
   readonly seed: string;
   /** Set when the puzzle is a daily puzzle: its UTC day, `YYYY-MM-DD` (PRD FR-22). */
   readonly day?: string;
+  /** The level to generate at (PRD FR-7). Left out in jobs queued before levels: hard. */
+  readonly level?: Level;
 }
 
 export interface VerifyInput {
@@ -60,8 +76,15 @@ interface JobBase {
   readonly progress: number;
   readonly result: JobResult | null;
   readonly error: string | null;
-  /** Times the job has been claimed by a worker. */
+  /** Times the job has been claimed by a worker, not counting claims given back at shutdown. */
   readonly attempts: number;
+  /** Claim order (`JOB_PRIORITY`): lower first. */
+  readonly priority: number;
+  /**
+   * Who queued a player's generation (`user:<id>`, or `ip:<address>` for a guest), for the cap per
+   * requester; null for other jobs, and once the job has ended.
+   */
+  readonly requester: string | null;
   readonly claimedBy: string | null;
   /** Milliseconds since the epoch, like every time below. */
   readonly createdAt: number;
@@ -103,11 +126,15 @@ export type TaskOutput =
   | { readonly kind: "generate"; readonly generated: GeneratedPuzzle }
   | { readonly kind: "verify"; readonly verified: VerifyOutcome };
 
-/** How a task ended. `timeout` means the thread was stopped at the time limit. */
+/**
+ * How a task ended. `timeout` means the thread was stopped at the time limit, `cancelled` that it
+ * was stopped because the worker is shutting down.
+ */
 export type TaskOutcome =
   | { readonly status: "done"; readonly output: TaskOutput }
   | { readonly status: "failed"; readonly error: string }
-  | { readonly status: "timeout" };
+  | { readonly status: "timeout" }
+  | { readonly status: "cancelled" };
 
 /** A registered player (PRD §5). Holds only what NFR-6 allows: the email and the password hash. */
 export interface UserRecord {
@@ -242,9 +269,9 @@ export interface AttemptRecord {
   readonly puzzleId: string;
   /** The daily's UTC day. */
   readonly day: string;
-  /** Leaderboard bucket: width × height, and the puzzle's level (PRD FR-23, FR-29). */
+  /** Leaderboard bucket: width × height, and the puzzle's level (PRD FR-23). */
   readonly area: number;
-  readonly level: number;
+  readonly level: Level;
   readonly startedAt: number;
   /** Null while the attempt is being played. */
   readonly finishedAt: number | null;

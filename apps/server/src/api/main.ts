@@ -63,6 +63,7 @@ const jobs = new JobManager({
   clock: systemClock,
   newId: () => crypto.randomUUID(),
   maxQueued: config.maxQueuedJobs,
+  maxPendingPerRequester: config.maxPendingGenerations,
 });
 const users = new SqliteUserRepository(db);
 const sessions = new SessionManager({

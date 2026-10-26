@@ -19,6 +19,22 @@ describe("runTask", () => {
     expect(seen.at(-1)).toBeLessThanOrEqual(0.9);
   });
 
+  test("generate makes the puzzle at the level asked for, and hard without one (FR-7)", () => {
+    const at = (level?: "easy" | "medium" | "hard") => {
+      const out = runTask(
+        { kind: "generate", input: { width: 6, height: 6, seed: "run-task-level", level } },
+        () => {},
+      );
+      if (out.kind !== "generate") throw new Error("expected generate output");
+      return out.generated;
+    };
+    expect(at("easy").puzzle.meta?.level).toBe("easy");
+    expect(at("medium").puzzle.meta?.level).toBe("medium");
+    // Hard is the default, and the generator leaves `meta.level` out for it.
+    expect(at("hard").puzzle.meta?.level).toBeUndefined();
+    expect(at()).toEqual(at("hard"));
+  });
+
   test("verify reports unique with the solution, and multiple", () => {
     const unique = serializePuzzle(createPuzzle(2, 2, [2, 2, 2, 2]));
     expect(runTask({ kind: "verify", input: { puzzle: unique } }, () => {})).toEqual({

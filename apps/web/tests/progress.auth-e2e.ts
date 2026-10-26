@@ -150,7 +150,8 @@ test("guest progress joins the account only when asked (FR-21)", async ({
 
   await page.goto("/");
   await page.getByRole("button", { name: "Add to my account" }).click();
-  await expect(page.getByRole("status")).toHaveText(
+  // Home's New puzzle panel keeps an (empty) status region of its own.
+  await expect(page.getByRole("status").filter({ hasText: "Added your progress" })).toHaveText(
     "Added your progress on 1 puzzle to your account.",
   );
   expect(await savedLines(page, puzzleId)).toBe(0);

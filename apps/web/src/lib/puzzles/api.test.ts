@@ -5,8 +5,16 @@ import { apiSource } from "./api.ts";
 
 const PUZZLE: Schemas["Puzzle"] = {
   id: "p1",
-  puzzle: { v: 1, width: 2, height: 2, clues: "2222", seed: "s", meta: { generator: "1" } },
+  puzzle: {
+    v: 1,
+    width: 2,
+    height: 2,
+    clues: "2222",
+    seed: "s",
+    meta: { generator: "1", level: "easy" },
+  },
   origin: "generated",
+  level: "easy",
   createdAt: "2026-10-25T12:00:00.000Z",
 };
 
@@ -35,7 +43,18 @@ describe("apiSource", () => {
     const { client, urls } = clientFor({
       "/api/puzzles": [
         200,
-        { items: [{ id: "p1", width: 10, height: 7, origin: "generated", createdAt: "x" }] },
+        {
+          items: [
+            {
+              id: "p1",
+              width: 10,
+              height: 7,
+              origin: "generated",
+              level: "medium",
+              createdAt: "x",
+            },
+          ],
+        },
       ],
     });
     expect(await apiSource(client).list()).toEqual([
@@ -46,27 +65,38 @@ describe("apiSource", () => {
         width: 10,
         height: 7,
         origin: "generated",
+        level: "medium",
       },
     ]);
     expect(urls).toEqual(["/api/puzzles?limit=20"]);
   });
 
-  test("a submitted puzzle is listed as player-made", async () => {
+  test("a submitted puzzle is listed as player-made, without a level", async () => {
     const { client } = clientFor({
       "/api/puzzles": [
         200,
-        { items: [{ id: "s1", width: 5, height: 5, origin: "submitted", createdAt: "x" }] },
+        {
+          items: [
+            { id: "s1", width: 5, height: 5, origin: "submitted", level: "hard", createdAt: "x" },
+          ],
+        },
       ],
     });
-    expect(await apiSource(client).list()).toMatchObject([
-      { id: "s1", name: "Player-made", origin: "submitted" },
-    ]);
+    const [entry] = await apiSource(client).list();
+    expect(entry).toMatchObject({ id: "s1", name: "Player-made", origin: "submitted" });
+    expect(entry.level).toBeUndefined();
   });
 
   test("get parses the wire puzzle, and is null on 404", async () => {
     const { client } = clientFor({ "/api/puzzles/p1": [200, PUZZLE] });
     const entry = await apiSource(client).get("p1");
-    expect(entry).toMatchObject({ id: "p1", name: "Generated", width: 2, height: 2 });
+    expect(entry).toMatchObject({
+      id: "p1",
+      name: "Generated",
+      width: 2,
+      height: 2,
+      level: "easy",
+    });
     expect(entry && serializePuzzle(entry.puzzle)).toEqual(PUZZLE.puzzle);
     expect(await apiSource(client).get("nope")).toBeNull();
   });

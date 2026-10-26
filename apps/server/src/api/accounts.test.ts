@@ -29,6 +29,7 @@ function setup(options: { trustProxy?: boolean } = {}) {
     clock,
     newId: sequentialIds("j"),
     maxQueued: 10,
+    maxPendingPerRequester: 10,
   });
   const app = createApp({
     puzzles,

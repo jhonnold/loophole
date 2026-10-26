@@ -1,5 +1,12 @@
 import type { Database } from "bun:sqlite";
-import { type Puzzle, type PuzzleWireV1, parsePuzzle, serializePuzzle } from "@loophole/core";
+import {
+  DEFAULT_LEVEL,
+  type Level,
+  type Puzzle,
+  type PuzzleWireV1,
+  parsePuzzle,
+  serializePuzzle,
+} from "@loophole/core";
 import type { PuzzleOrigin, PuzzleRecord, PuzzleStatus } from "../../domain.ts";
 import type { PuzzleRepository } from "../../ports.ts";
 
@@ -11,7 +18,7 @@ type PuzzleRow = {
   clues: string;
   seed: string | null;
   generator_version: string | null;
-  level: number;
+  level: Level;
   origin: PuzzleOrigin;
   status: PuzzleStatus;
   solution_key: string;
@@ -24,7 +31,12 @@ type PuzzleRow = {
 const COLUMNS =
   "id, width, height, clues, seed, generator_version, level, origin, status, solution_key, trace_key, created_at, creator_id, release_at";
 
-/** Puzzles in SQLite. Clues are stored as the wire format's clue string; only `meta.generator` is kept. */
+/**
+ * Puzzles in SQLite. Clues are stored as the wire format's clue string; of `meta`, only the
+ * generator version is kept, in its own column. The level has its own column too, and a loaded
+ * puzzle gets `meta.level` back from it (left out at hard, as the generator does), so hints use
+ * the puzzle's level.
+ */
 export class SqlitePuzzleRepository implements PuzzleRepository {
   readonly #insert;
   readonly #get;
@@ -98,7 +110,10 @@ function toRow(r: PuzzleRecord): PuzzleRow {
 function fromRow(row: PuzzleRow): PuzzleRecord {
   const wire: PuzzleWireV1 = { v: 1, width: row.width, height: row.height, clues: row.clues };
   if (row.seed !== null) wire.seed = row.seed;
-  if (row.generator_version !== null) wire.meta = { generator: row.generator_version };
+  const meta: Record<string, string> = {};
+  if (row.generator_version !== null) meta.generator = row.generator_version;
+  if (row.level !== DEFAULT_LEVEL) meta.level = row.level;
+  if (Object.keys(meta).length > 0) wire.meta = meta;
   return {
     id: row.id,
     puzzle: parsePuzzle(wire),

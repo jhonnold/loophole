@@ -41,6 +41,7 @@ async function setup() {
     clock,
     newId: sequentialIds("j"),
     maxQueued: 10,
+    maxPendingPerRequester: 10,
   });
   const app = createApp({
     puzzles,

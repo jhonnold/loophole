@@ -25,6 +25,8 @@ test.describe("home on a phone (Home artboard, FR-22, FR-24)", () => {
     const small = covers.getByRole("link", { name: /Small.*New · not started/ });
     await expect(small).toHaveAttribute("href", `/daily/${TODAY}/7`);
     await expect(small).toHaveCSS("background-color", "rgb(242, 196, 206)");
+    // Each cover names its level (PRD FR-7, FR-22).
+    await expect(small).toContainText("Hard");
     await expect(covers.getByText("Not ready yet")).toHaveCount(3);
     await expect(page.getByText("With an account, your daily solves are ranked")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Practice 練習" })).toBeVisible();
@@ -86,7 +88,7 @@ test.describe("daily play", () => {
     await mockDailyApi(page);
     await page.goto(`/daily/${TODAY}/7`);
     await expect(page.getByRole("heading", { name: "Small · 7×7" })).toBeVisible();
-    await expect(page.getByText("Daily ·").first()).toBeVisible();
+    await expect(page.getByText(/^Daily · .* · Hard$/).first()).toBeVisible();
     await expect(board(page)).toBeVisible();
     await expect(page.getByText("Playing unranked.")).toBeVisible();
   });
@@ -197,7 +199,7 @@ test.describe("Solved screen (Solved artboard, FR-23, FR-24)", () => {
     await expect(rows.filter({ hasText: "kuroneko" })).toContainText("01:12");
     await expect(rows.filter({ hasText: "You" })).toContainText("214");
     await expect(rows.filter({ hasText: "Anonymous" })).toContainText("213");
-    await expect(page.getByRole("link", { name: /Next: Medium 10×10/ })).toHaveAttribute(
+    await expect(page.getByRole("link", { name: /Next: Regular 10×10/ })).toHaveAttribute(
       "href",
       `/daily/${TODAY}/10`,
     );

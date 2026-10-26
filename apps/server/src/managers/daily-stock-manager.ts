@@ -1,6 +1,6 @@
 import type { DailyRecord, GeneratedPuzzle } from "../domain.ts";
 import type { Clock, DailyRepository, DailySeeder, WorkerMetrics } from "../ports.ts";
-import { DAILY_SIZES } from "./daily-manager.ts";
+import { DAILY_SIZES, dailyLevel } from "./daily-manager.ts";
 import { addDays, dayStart, utcDay } from "./days.ts";
 import type { JobManager } from "./job-manager.ts";
 import type { PuzzleManager } from "./puzzle-manager.ts";
@@ -119,6 +119,7 @@ export class DailyStockManager {
         height: size,
         seed: seeds.seed(day, size, attempt),
         day,
+        level: dailyLevel(size),
       });
       return true;
     });
