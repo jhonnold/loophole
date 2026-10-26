@@ -281,7 +281,7 @@ export class Engine {
       }
       if (this.closed) {
         if (this.edgeTrail.length === this.grid.edgeCount) return true;
-        this.begin("loop-complete", [], []);
+        if (this.recording()) this.begin("loop-complete", [], []);
         for (let e = 0; e < this.grid.edgeCount; e++) {
           if (this.edges[e] === Unknown) this.assign(e, Cross);
         }
@@ -329,7 +329,7 @@ export class Engine {
   }
 
   private fillCell(i: number, state: EdgeState, rule: RuleId): boolean {
-    this.begin(rule, [i], []);
+    if (this.recording()) this.begin(rule, [i], []);
     for (let j = 0; j < 4; j++) {
       const e = this.grid.cellEdges[i * 4 + j];
       if (this.edges[e] === Unknown && !this.assign(e, state)) return false;
@@ -359,7 +359,7 @@ export class Engine {
     const y = this.grid.dotEdges[d * 4 + o2];
     if ((x !== NONE && edges[x] !== Cross) || (y !== NONE && edges[y] !== Cross)) return true;
     const state = k === 3 ? Line : Cross;
-    this.begin(k === 3 ? "corner-3" : "corner-1", [i], [d]);
+    if (this.recording()) this.begin(k === 3 ? "corner-3" : "corner-1", [i], [d]);
     if (!this.assign(e1, state) || !this.assign(e2, state)) return false;
     this.commit();
     return true;
@@ -388,7 +388,7 @@ export class Engine {
       const other = grid.edgeDots[e * 2] === d ? grid.edgeDots[e * 2 + 1] : grid.edgeDots[e * 2];
       if (other !== m) continue;
       if (this.plen[d] === this.lineCount && this.cluesSatisfied(e)) return true;
-      this.begin("premature-loop", [], [d, m]);
+      if (this.recording()) this.begin("premature-loop", [], [d, m]);
       if (!this.assign(e, Cross)) return false;
       this.commit();
       return true;
@@ -397,7 +397,7 @@ export class Engine {
   }
 
   private fillDot(d: number, state: EdgeState, rule: RuleId): boolean {
-    this.begin(rule, [], [d]);
+    if (this.recording()) this.begin(rule, [], [d]);
     for (let j = 0; j < 4; j++) {
       const e = this.grid.dotEdges[d * 4 + j];
       if (e !== NONE && this.edges[e] === Unknown && !this.assign(e, state)) return false;
@@ -459,8 +459,13 @@ export class Engine {
       const b = this.ufFind(nb);
       const pb = this.ufFound;
       if (a !== b) continue;
-      const cells = [na, nb].filter((n) => n !== C);
-      this.begin("parity", cells, []);
+      if (this.recording()) {
+        this.begin(
+          "parity",
+          [na, nb].filter((n) => n !== C),
+          [],
+        );
+      }
       if (!this.assign(e, pa !== pb ? Line : Cross)) return -1;
       this.commit();
       count++;
@@ -573,6 +578,16 @@ export class Engine {
   }
 
   // --- helpers ------------------------------------------------------------------------------
+
+  /**
+   * True while steps are recorded. Otherwise clears the pending step, so callers skip building a
+   * step's cells and dots when nobody reads them (lookahead probes, the verifier's search).
+   */
+  private recording(): boolean {
+    if (this.steps !== null) return true;
+    this.pending = null;
+    return false;
+  }
 
   /** Sets an edge on behalf of a rule, recording it in the current step. */
   private assign(e: number, state: EdgeState): boolean {
