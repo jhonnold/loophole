@@ -2,26 +2,37 @@ import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
 import { analyzeBoard } from "./analyze.ts";
 import { countSolutions } from "./bruteforce.ts";
-import { encodeEdges, serializePuzzleJson } from "./format.ts";
+import { encodeEdges, parsePuzzleJson, serializePuzzleJson } from "./format.ts";
 import {
   GENERATOR_VERSION,
   type GenerateProgress,
   type GenerateResult,
   generate,
 } from "./generate.ts";
+import { DEFAULT_LEVEL, LEVEL_SETTINGS, LEVELS, type Level, puzzleLevel } from "./level.ts";
 import { LOOP_THRESHOLDS, type LoopThresholds, thresholdCount } from "./loop.ts";
 import { deriveClues, NO_CLUE } from "./puzzle.ts";
 import { hashSeed } from "./rng.ts";
 import { solve } from "./solver.ts";
+import { levelRuleIds } from "./test-support/levels.ts";
 import { loopCoverage } from "./test-support/loops.ts";
 import { verify } from "./verify.ts";
 
-/** Everything FR-7 to FR-9 promise about one result. */
-function checkResult(r: GenerateResult, seed: string, thresholds = LOOP_THRESHOLDS) {
+/** Everything FR-7 to FR-9 promise about one result, made at `level`. */
+function checkResult(
+  r: GenerateResult,
+  seed: string,
+  thresholds = LOOP_THRESHOLDS,
+  level: Level = DEFAULT_LEVEL,
+) {
   const { puzzle, solution } = r;
   const { grid } = puzzle;
   expect(puzzle.seed).toBe(seed);
-  expect(puzzle.meta).toEqual({ generator: GENERATOR_VERSION });
+  expect(puzzle.meta).toEqual(
+    level === DEFAULT_LEVEL
+      ? { generator: GENERATOR_VERSION }
+      : { generator: GENERATOR_VERSION, level },
+  );
   // The solution is one loop meeting the thresholds, and every clue agrees with it.
   expect(analyzeBoard(puzzle, solution).solved).toBe(true);
   const { area, rows, cols } = loopCoverage(grid, solution);
@@ -36,8 +47,11 @@ function checkResult(r: GenerateResult, seed: string, thresholds = LOOP_THRESHOL
     expect(puzzle.clues[i]).toBe(derived[i]);
   }
   expect(r.stats.clueCount).toBe(clueCount);
-  // The rules alone solve it from an empty board, so it is unique (PRD §9), and the verifier agrees.
+  // The level's rules alone solve it from an empty board, so it is unique (PRD §9), and the
+  // verifier agrees.
   expect(r.solve.status).toBe("solved");
+  const allowed = levelRuleIds(level);
+  expect(r.solve.steps.map((s) => s.rule).filter((rule) => !allowed.has(rule))).toEqual([]);
   expect(encodeEdges(r.solve.edges)).toBe(encodeEdges(solution));
   const v = verify(puzzle, { timeLimitMs: Number.POSITIVE_INFINITY });
   expect(v.status).toBe("unique");
@@ -182,8 +196,104 @@ describe("generate: properties", () => {
   });
 });
 
+describe("generate: levels", () => {
+  // Frozen output for GENERATOR_VERSION "6" below the default level, as digests of the serialized
+  // puzzle and its solution (the default level's goldens are above).
+  test('10x10 seed "golden" at easy and medium (digests)', () => {
+    const digest = (level: Level) => {
+      const r = generate({ width: 10, height: 10, seed: "golden", level });
+      return hashSeed(serializePuzzleJson(r.puzzle) + encodeEdges(r.solution));
+    };
+    expect(digest("easy")).toEqual([886490681, 133261979, 733940933, 3331014347]);
+    expect(digest("medium")).toEqual([3032055185, 730214522, 3796690882, 2962293742]);
+  });
+
+  test("small boards at every level: unique, solved by the level's rules, deterministic", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 8 }),
+        fc.integer({ min: 1, max: 8 }),
+        fc.string({ minLength: 1, maxLength: 12 }),
+        fc.constantFrom(...LEVELS),
+        (width, height, seed, level) => {
+          const r = generate({ width, height, seed, level });
+          // A board too small for the level's rules gets a harder level, never an easier one.
+          const made = puzzleLevel(r.puzzle);
+          expect(LEVELS.indexOf(made)).toBeGreaterThanOrEqual(LEVELS.indexOf(level));
+          checkResult(r, seed, LOOP_THRESHOLDS, made);
+          const again = generate({ width, height, seed, level });
+          expect(serializePuzzleJson(again.puzzle)).toBe(serializePuzzleJson(r.puzzle));
+          expect(encodeEdges(again.solution)).toBe(encodeEdges(r.solution));
+        },
+      ),
+      { numRuns: 40 },
+    );
+  });
+
+  test("medium boards at every level verify unique", () => {
+    for (const level of LEVELS) {
+      const seed = `levels-${level}`;
+      checkResult(generate({ width: 20, height: 20, seed, level }), seed, LOOP_THRESHOLDS, level);
+    }
+  });
+
+  test("easier levels keep more clues (10 boards of 10×10)", () => {
+    const sums: Record<Level, number> = { easy: 0, medium: 0, hard: 0 };
+    for (let n = 0; n < 10; n++) {
+      const count: Record<string, number> = {};
+      for (const level of LEVELS) {
+        const { puzzle, stats } = generate({ width: 10, height: 10, seed: `density-${n}`, level });
+        expect(puzzleLevel(puzzle)).toBe(level);
+        expect(stats.restored).toBe(0);
+        const share = LEVEL_SETTINGS[level].minClueShare;
+        if (share > 0) expect(stats.clueCount).toBeGreaterThanOrEqual(thresholdCount(share, 100));
+        count[level] = stats.clueCount;
+        sums[level] += stats.clueCount;
+      }
+      expect(count.easy).toBeGreaterThan(count.medium);
+    }
+    expect(sums.easy).toBeGreaterThan(sums.medium);
+    expect(sums.medium).toBeGreaterThan(sums.hard);
+    expect(sums.easy / 1000).toBeLessThanOrEqual(0.6);
+    expect(sums.medium / 1000).toBeLessThanOrEqual(0.5);
+  });
+
+  test("the default level is hard, and its puzzles have no meta.level", () => {
+    const plain = generate({ width: 8, height: 6, seed: "default-level" });
+    const hard = generate({ width: 8, height: 6, seed: "default-level", level: "hard" });
+    expect(plain.puzzle.meta).toEqual({ generator: GENERATOR_VERSION });
+    expect(serializePuzzleJson(hard.puzzle)).toBe(serializePuzzleJson(plain.puzzle));
+    expect(encodeEdges(hard.solution)).toBe(encodeEdges(plain.solution));
+    expect(hard.solve).toEqual(plain.solve);
+  });
+
+  test("meta.level survives the wire format", () => {
+    for (const level of LEVELS) {
+      const { puzzle } = generate({ width: 6, height: 6, seed: "wire", level });
+      const back = parsePuzzleJson(serializePuzzleJson(puzzle));
+      expect(back.meta).toEqual(puzzle.meta);
+      expect(puzzleLevel(back)).toBe(level);
+    }
+  });
+
+  test("a board too small for a level's rules gets the next level up", () => {
+    // A 1×1 needs lookahead (no rule says the loop exists); the 2×2 square, all 2s, needs a corner
+    // rule. Each falls back to the next level, so it is the puzzle that level makes.
+    const at = (width: number, height: number, level?: Level) =>
+      generate({ width, height, seed: "golden", level });
+    for (const level of ["easy", "medium"] as const) {
+      expect(serializePuzzleJson(at(1, 1, level).puzzle)).toBe(
+        serializePuzzleJson(at(1, 1).puzzle),
+      );
+    }
+    const small = at(2, 2, "easy");
+    expect(puzzleLevel(small.puzzle)).toBe("medium");
+    expect(serializePuzzleJson(small.puzzle)).toBe(serializePuzzleJson(at(2, 2, "medium").puzzle));
+  });
+});
+
 describe("generate: options", () => {
-  test("rejects a bad size, seed or thresholds before doing any work", () => {
+  test("rejects a bad size, seed, thresholds or level before doing any work", () => {
     const bad: Parameters<typeof generate>[0][] = [
       { width: 0, height: 5, seed: "s" },
       { width: 5, height: 101, seed: "s" },
@@ -192,6 +302,7 @@ describe("generate: options", () => {
       { width: 5, height: 5, seed: "s", thresholds: { minCoverage: 1.5, minSpan: 0.8 } },
       { width: 5, height: 5, seed: "s", thresholds: { minCoverage: 0.4, minSpan: Number.NaN } },
       { width: 5, height: 5, seed: "s", thresholds: { minCoverage: 0.4 } as LoopThresholds },
+      { width: 5, height: 5, seed: "s", level: "expert" as Level },
     ];
     for (const options of bad) {
       let calls = 0;

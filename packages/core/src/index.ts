@@ -4,6 +4,7 @@ export * from "./format.ts";
 export * from "./generate.ts";
 export * from "./grid.ts";
 export * from "./hint.ts";
+export * from "./level.ts";
 export * from "./loop.ts";
 export * from "./puzzle.ts";
 export * from "./rng.ts";
