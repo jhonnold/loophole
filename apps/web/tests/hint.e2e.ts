@@ -54,7 +54,7 @@ function threeWrongCrosses(): Uint8Array {
   return edges;
 }
 
-// Every rule small-7 uses, so long texts (the corner and colouring rules, the 3s) are among them.
+// Every rule small-7 uses, so the long texts (corners, colouring, connectivity) are among them.
 const RULES: RuleId[] = [
   "clue-zero",
   "clue-satisfied",
@@ -66,11 +66,14 @@ const RULES: RuleId[] = [
   "corner-3",
   "premature-loop",
   "line-into-1",
+  "line-into-3",
   "two-passes-on",
   "ones-side-by-side",
   "three-diagonal-one",
   "colour-2",
   "colour-chain",
+  "cut-off",
+  "two-exits",
   "lookahead",
 ];
 

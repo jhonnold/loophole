@@ -13,7 +13,10 @@ export type SolveStatus = "solved" | "stuck" | "contradiction" | "incomplete";
 export interface SolveOptions {
   /** Starting edge states, for example a player's board. Defaults to all unknown. Not modified. */
   readonly initial?: Uint8Array;
-  /** Use bounded lookahead when the other rules are stuck. Default true. */
+  /**
+   * Use bounded lookahead when the other rules are stuck. Default true. A probe assumes one edge and
+   * runs tier 1 only (DECISIONS, WT2 and WT18).
+   */
   readonly lookahead?: boolean;
   /**
    * Rule groups to use on top of the rules that always run (`RULE_GROUPS`). Default all of them.
@@ -57,6 +60,7 @@ export function solve(puzzle: Puzzle, options: SolveOptions = {}): SolveResult {
   const engine = new Engine(puzzle, budget, {
     corners: rules.includes("corners"),
     colouring: rules.includes("colouring"),
+    connectivity: rules.includes("connectivity"),
   });
   const steps: Step[] = [];
   engine.steps = options.steps === false ? null : steps;

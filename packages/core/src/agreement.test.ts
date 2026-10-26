@@ -23,10 +23,14 @@ function checkAgainstBruteForce(p: Puzzle): void {
   if (v.solutions.length === 2) {
     expect(encodeEdges(v.solutions[0])).not.toBe(encodeEdges(v.solutions[1]));
   }
+  // Starting again from the root with deeper lookahead at once finds the same solutions.
+  const deep = verify(p, { deepenAfterNodes: 0 });
+  expect(deep.status).toBe(v.status);
+  expect(deep.solutions.map(encodeEdges)).toEqual(v.solutions.map(encodeEdges));
 
   // Every edge the rule solver decides agrees with every solution, with every rule group, with
   // each group alone and with none.
-  for (const rules of [undefined, ["corners"], ["colouring"], []] as const) {
+  for (const rules of [undefined, ["corners"], ["colouring"], ["connectivity"], []] as const) {
     const r = solve(p, { rules });
     r.edges.forEach((state, e) => {
       if (state === EdgeState.Unknown) return;

@@ -24,4 +24,20 @@ describe("Engine", () => {
     expect(engine.propagate(false)).toBe(true);
     expect(engine.edges).toEqual(first);
   });
+
+  test("probes run the corner rules only when probeCorners is on (the verifier after deepen)", () => {
+    // A 2 in a one-wide strip with colouring off: only a probe that runs the corner rules settles it.
+    const p = puzzle(1, 3, ".2.");
+    const budget = new Budget(Date.now, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
+    const shallow = new Engine(p, budget, { colouring: false });
+    expect(shallow.solveRoot(true)).toBe(true);
+    expect(shallow.closed).toBe(false);
+    const deep = new Engine(p, budget, { colouring: false, probeCorners: true });
+    expect(deep.solveRoot(true)).toBe(true);
+    expect(deep.closed).toBe(true);
+    const deepened = new Engine(p, budget, { colouring: false });
+    deepened.deepen();
+    expect(deepened.solveRoot(true)).toBe(true);
+    expect(deepened.closed).toBe(true);
+  });
 });

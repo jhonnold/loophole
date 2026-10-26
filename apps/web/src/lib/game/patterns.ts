@@ -214,4 +214,27 @@ export const RULE_PATTERNS: Readonly<Partial<Record<RuleId, RulePattern>>> = {
     cells: [a.cell(0, 2), a.cell(1, 0), a.cell(1, 2)],
     ghostLines: [a.h(0, 2)],
   })),
+  // Connectivity. The bottom-right cell's dots have no other open edges, so no path of open edges
+  // joins its sides to the line at the top (whose loop can still close around the top-left).
+  unreachable: pattern(3, 3, ".........", (a) => ({
+    lines: [a.h(0, 0)],
+    crosses: [a.v(1, 2), a.h(2, 1), a.v(1, 3), a.h(3, 1)],
+    ghostCrosses: [a.h(2, 2), a.v(2, 3), a.h(3, 2), a.v(2, 2)],
+  })),
+  // The bottom-right cell hangs off the rest at the centre dot: a loop through it would have to
+  // pass that dot twice.
+  "cut-off": pattern(2, 2, "....", (a) => ({
+    lines: [a.h(0, 0)],
+    crosses: [a.h(0, 1), a.v(0, 2), a.v(1, 0), a.h(2, 0)],
+    dots: [a.dot(1, 1)],
+    ghostCrosses: [a.h(1, 1), a.v(1, 2), a.h(2, 1), a.v(1, 1)],
+  })),
+  // Lines at the top and at the bottom, and the middle row's outer sides crossed: only the middle
+  // cell's two sides lead from the top half to the bottom half.
+  "two-exits": pattern(3, 3, ".........", (a) => ({
+    lines: [a.h(0, 1), a.h(3, 1)],
+    crosses: [a.v(1, 0), a.v(1, 3)],
+    dots: [a.dot(0, 1), a.dot(3, 1)],
+    ghostLines: [a.v(1, 1), a.v(1, 2)],
+  })),
 };

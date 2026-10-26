@@ -99,6 +99,10 @@ describe("solve: each rule", () => {
     [1, 3, ".2.", 0, { rule: "colour-2", changes: "0:1", cells: [0, 1], dots: [] }],
     [1, 4, ".32.", 0, { rule: "colour-3", changes: "8:1", cells: [1], dots: [] }],
     [3, 3, "3..2.23..", 2, { rule: "colour-chain", changes: "2:1", cells: [2, 3, 5], dots: [] }],
+    // Connectivity (WT18): for each, the smallest puzzle, then the fewest clues, where it fires.
+    [1, 5, ".3.1.", 4, { rule: "unreachable", changes: "4:2 5:2 14:2 15:2", cells: [], dots: [] }],
+    [2, 4, "1....3.2", 6, { rule: "cut-off", changes: "1:2 3:2 11:2 12:2", cells: [], dots: [4] }],
+    [1, 5, ".3.3.", 4, { rule: "two-exits", changes: "10:1 11:1", cells: [], dots: [2, 6] }],
   ];
 
   for (const [w, h, clues, index, expected] of cases) {
@@ -139,13 +143,25 @@ describe("solve: each rule", () => {
     // beside the outside) and so are the cells above and below it, or it is outside and both of
     // those differ from it. Either way they are inside. No other rule, lookahead included, sees it.
     const p = puzzle(1, 3, ".2.");
-    const without = solve(p, { rules: ["corners"] });
+    const without = solve(p, { rules: ["corners", "connectivity"] });
     expect(without.status).toBe("stuck");
     expect(without.steps).toEqual([]);
     const all = solve(p);
     expect(all.status).toBe("solved");
     expect(all.steps[0].rule).toBe("colour-2");
     expect(GROUP_RULES.colouring).toContain(all.steps[0].rule);
+  });
+
+  test("leaving the connectivity group out drops its rules", () => {
+    // Two 3s in a one-wide strip: the loop has lines above and below the middle cell, and only its
+    // two sides lead from one part to the other.
+    const p = puzzle(1, 5, ".3.3.");
+    const connectivity = new Set<RuleId>(GROUP_RULES.connectivity);
+    const without = solve(p, { rules: ["corners", "colouring"] });
+    expect(without.status).toBe("solved");
+    expect(without.steps.some((s) => connectivity.has(s.rule))).toBe(false);
+    expect(without.steps[4].rule).toBe("lookahead");
+    expect(solve(p).steps[4].rule).toBe("two-exits");
   });
 
   test("two 3s side by side do not claim their shared side", () => {

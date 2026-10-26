@@ -2658,7 +2658,7 @@ export interface components {
             /** @enum {string} */
             kind: "step";
             /** @enum {string} */
-            rule: "clue-zero" | "clue-satisfied" | "clue-needs-all" | "dot-full" | "dot-continue" | "dot-dead-end" | "corner-1" | "corner-3" | "adjacent-3s" | "diagonal-3s" | "premature-loop" | "loop-complete" | "line-into-1" | "line-into-3" | "two-passes-on" | "two-in-corner" | "ones-side-by-side" | "three-diagonal-one" | "corner-chain" | "parity" | "colour-1" | "colour-2" | "colour-3" | "colour-chain" | "lookahead";
+            rule: "clue-zero" | "clue-satisfied" | "clue-needs-all" | "dot-full" | "dot-continue" | "dot-dead-end" | "corner-1" | "corner-3" | "adjacent-3s" | "diagonal-3s" | "premature-loop" | "loop-complete" | "line-into-1" | "line-into-3" | "two-passes-on" | "two-in-corner" | "ones-side-by-side" | "three-diagonal-one" | "corner-chain" | "parity" | "colour-1" | "colour-2" | "colour-3" | "colour-chain" | "unreachable" | "cut-off" | "two-exits" | "lookahead";
             changes: {
                 edge: number;
                 /** @enum {string} */
