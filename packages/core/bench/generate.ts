@@ -4,8 +4,9 @@
  * 1. Loop shape over many seeds per size: the mean, smallest and largest inside area, share of dots
  *    on the loop and share of 2×2 blocks all one colour (`loopShape`; targets in DECISIONS, WT13),
  *    and the share of loops that meet the default thresholds (PRD §10, target ≥ 95%).
- * 2. Generation time per size (NFR-1: p95 under 5 s up to 30×30), first-attempt rate (loops whose
- *    full clue set the rules solve), clue density, clues put back, and `verify` on every result.
+ * 2. Generation time per size (NFR-1: p95 under 10 s up to 30×30 and under 30 s at 40×40),
+ *    first-attempt rate (loops whose full clue set the rules solve), clue density, clues put back
+ *    by the safeguard, and `verify` on every result. 100×100 takes 6 to 19 minutes a puzzle.
  * Pass `--quick` to skip 100×100.
  */
 import { generate } from "../src/generate.ts";

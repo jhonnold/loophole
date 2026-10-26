@@ -11,12 +11,24 @@ import { type SolveResult, solve } from "./solver.ts";
  */
 export const GENERATOR_VERSION = "3";
 
-/** A clue's removal is tested with the edges this many cells around it unknown, the rest given. */
-const WINDOW_RADIUS = 3;
+/**
+ * Clue removal tests run block by block; a block is at most this many cells on a side. Each block's
+ * tests start from the edges the rules decide with every clue in the block hidden.
+ */
+const BLOCK_SIZE = 2;
 /** Clues put back in one round are more than this many rows or columns apart. */
 const RESTORE_SPACING = 2;
 /** Loops tried before giving up. Only 2×2 and rare small boards need a second; this bounds the loop. */
 const MAX_ATTEMPTS = 100;
+
+/**
+ * Solves `puzzle` from `initial` (every edge unknown when left out). Generation judges every clue
+ * removal by one of these, so the rules it allows decide which clues can go.
+ */
+type RuleSolver = (puzzle: Puzzle, initial?: Uint8Array) => SolveResult;
+
+/** Every rule, lookahead included. */
+const ALL_RULES: RuleSolver = (puzzle, initial) => solve(puzzle, { initial });
 
 export interface GenerateProgress {
   /** Clue removal tests done so far. */
@@ -45,7 +57,7 @@ export interface GenerateStats {
   readonly clueCount: number;
   /** Clue removal tests made. */
   readonly checks: number;
-  /** Clues put back because the whole puzzle got stuck without them. */
+  /** Clues put back because the whole puzzle got stuck without them (a safeguard; normally 0). */
   readonly restored: number;
 }
 
@@ -66,10 +78,11 @@ export interface GenerateResult {
  * 2. Give every cell its clue (a cell with 4 lines gets none). If the rule
  *    solver cannot solve that (two loops can share every clue, as the L shapes on a 2×2 board do),
  *    try a new loop, with one more cell added after shaping than the last.
- * 3. In random order, remove each clue if the solver can still decide the 7×7 window of cells
- *    around it with every edge outside the window given. This local test is cheap but generous.
+ * 3. In a seeded order, block by block, remove each clue if the rules still solve the whole puzzle
+ *    without it (`removeClues`).
  * 4. Solve the whole puzzle from scratch. While it gets stuck, put back removed clues next to the
- *    open edges, spread out, and solve again.
+ *    open edges, spread out, and solve again. A safeguard: step 3's tests reach the same end as
+ *    solving from scratch, so this has not been needed in the benchmarks.
  *
  * The result is solved by the rules alone, which proves it has one solution (PRD §9). Uses only the
  * seeded generator and no clock, so it is deterministic. Throws `RangeError` for a bad size, seed or
@@ -94,9 +107,9 @@ export function generate(options: GenerateOptions): GenerateResult {
     const full = deriveClues(grid, solution).map((k) => (k === 4 ? NO_CLUE : k));
     const clues = full.slice();
     const work: Puzzle = { grid, clues };
-    if (solve(work).status !== "solved") continue;
-    const checks = removeClues(work, solution, rng, onProgress);
-    const { result, restored } = restoreClues(work, full, rng);
+    if (ALL_RULES(work).status !== "solved") continue;
+    const checks = removeClues(work, rng, ALL_RULES, onProgress);
+    const { result, restored } = restoreClues(work, full, rng, ALL_RULES);
     let clueCount = 0;
     for (const k of clues) if (k !== NO_CLUE) clueCount++;
     return {
@@ -109,30 +122,83 @@ export function generate(options: GenerateOptions): GenerateResult {
   throw new Error(`no usable loop after ${MAX_ATTEMPTS} attempts`);
 }
 
-/** Step 3: the local removal test, in random order. Changes `puzzle.clues`; returns the tests made. */
+/**
+ * Step 3. Removes each clue whose removal leaves the puzzle solved by `rules`, in a seeded order,
+ * block by block. Changes `puzzle.clues`; returns the tests made, one per clue of the full set.
+ *
+ * Solving the whole board from scratch for every test costs too much on large boards, so a test
+ * starts from its block's base: the edges `rules` decide with every clue of the block hidden. Every
+ * puzzle that has all the clues outside the block has those edges in all its solutions, so starting
+ * there is sound, and since the rules only add to what they know, a test ends where solving from
+ * scratch would. Bases nest: the board is halved, the longer side first, down to blocks, and each
+ * half's base is solved from its parent's once the halves before it are done, so it only has to work
+ * out what the parent's base left open.
+ *
+ * "Ends where solving from scratch would" needs the rules to be monotone in both clues and edges:
+ * knowing more edges, or having more clues, never loses a deduction. Every rule is sound, which is
+ * not enough on its own, and monotonicity is measured, not proved. After the premature-loop fix in
+ * `Engine.set` it held in every run (0 differences in 43,200 solves from random sound partial
+ * states and block bases against solving from scratch; 116 before the fix). One theoretical gap is
+ * left: the premature-loop rule skips a crossing that would complete the solution, which depends on
+ * the total line count, and a dot is not queued again when a line is added elsewhere. The final
+ * solve from an empty board in `restoreClues` guards the result: a puzzle the rules cannot solve
+ * from scratch is never returned, at worst it keeps more clues than needed.
+ */
 function removeClues(
   puzzle: Puzzle,
-  solution: Uint8Array,
   rng: Rng,
+  rules: RuleSolver,
   onProgress: GenerateOptions["onProgress"],
 ): number {
   const { grid, clues } = puzzle;
-  const order: number[] = [];
-  for (let i = 0; i < grid.cellCount; i++) if (clues[i] !== NO_CLUE) order.push(i);
-  shuffle(order, rng);
-  const initial = new Uint8Array(grid.edgeCount);
-  for (let n = 0; n < order.length; n++) {
-    const i = order[n];
-    const k = clues[i];
-    clues[i] = NO_CLUE;
-    initial.set(solution);
-    forEachNear(grid, i, WINDOW_RADIUS, (x) => {
-      for (let j = 0; j < 4; j++) initial[grid.cellEdges[x * 4 + j]] = EdgeState.Unknown;
-    });
-    if (solve(puzzle, { initial }).status !== "solved") clues[i] = k;
-    onProgress?.({ done: n + 1, total: order.length });
-  }
-  return order.length;
+  let total = 0;
+  for (const k of clues) if (k !== NO_CLUE) total++;
+  let done = 0;
+  const visit = (top: number, left: number, bottom: number, right: number, base: Uint8Array) => {
+    if (bottom - top <= BLOCK_SIZE && right - left <= BLOCK_SIZE) {
+      const order = cellsIn(grid, top, left, bottom, right).filter((i) => clues[i] !== NO_CLUE);
+      shuffle(order, rng);
+      for (const i of order) {
+        const k = clues[i];
+        clues[i] = NO_CLUE;
+        if (rules(puzzle, base).status !== "solved") clues[i] = k;
+        done++;
+        onProgress?.({ done, total });
+      }
+      return;
+    }
+    const parts: [number, number, number, number][] = [];
+    if (bottom - top >= right - left) {
+      const mid = (top + bottom) >> 1;
+      parts.push([top, left, mid, right], [mid, left, bottom, right]);
+    } else {
+      const mid = (left + right) >> 1;
+      parts.push([top, left, bottom, mid], [top, mid, bottom, right]);
+    }
+    if (rng.int(2) === 1) parts.reverse();
+    for (const [t, l, b, r] of parts) {
+      visit(t, l, b, r, hiddenBase(puzzle, rules, cellsIn(grid, t, l, b, r), base));
+    }
+  };
+  visit(0, 0, grid.height, grid.width, new Uint8Array(grid.edgeCount));
+  return done;
+}
+
+/** The edges `rules` decide from `initial` with the clues of `cells` hidden. Restores the clues. */
+function hiddenBase(
+  puzzle: Puzzle,
+  rules: RuleSolver,
+  cells: number[],
+  initial: Uint8Array,
+): Uint8Array {
+  const { clues } = puzzle;
+  const kept = cells.map((i) => clues[i]);
+  for (const i of cells) clues[i] = NO_CLUE;
+  const { edges } = rules(puzzle, initial);
+  cells.forEach((i, n) => {
+    clues[i] = kept[n];
+  });
+  return edges;
 }
 
 /**
@@ -144,11 +210,12 @@ function restoreClues(
   puzzle: Puzzle,
   full: Int8Array,
   rng: Rng,
+  rules: RuleSolver,
 ): { result: SolveResult; restored: number } {
   const { grid, clues } = puzzle;
   let restored = 0;
   for (;;) {
-    const result = solve(puzzle);
+    const result = rules(puzzle);
     if (result.status === "solved") return { result, restored };
     const removed: number[] = [];
     const nearOpen: number[] = [];
@@ -174,6 +241,15 @@ function restoreClues(
       });
     }
   }
+}
+
+/** Cells in rows `top` to `bottom - 1` and columns `left` to `right - 1`, row by row. */
+function cellsIn(grid: Grid, top: number, left: number, bottom: number, right: number): number[] {
+  const cells: number[] = [];
+  for (let r = top; r < bottom; r++) {
+    for (let c = left; c < right; c++) cells.push(r * grid.width + c);
+  }
+  return cells;
 }
 
 /** Calls `visit` with every cell at most `radius` rows and `radius` columns away from cell `i`. */

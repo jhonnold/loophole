@@ -4,7 +4,7 @@
  * Measures how far today's rule solver is from what uniqueness alone allows, on generated puzzles
  * (DECISIONS, WT14). For each size it generates puzzles and prints one line:
  * - `clues`: share of cells that keep a clue. `restored`: share of cells whose clue `generate`
- *   put back after its window pass (`stats.restored`).
+ *   put back in its safeguard step (`stats.restored`; 0 since WT15).
  * - Each kept clue taken out alone: `removable` (the rules still solve the puzzle), `gap` (still
  *   one solution, but the rules get stuck: a solver gap), `needed` (no longer one solution) and
  *   `unknown` (the verifier's node budget ran out). Shares of the kept clues.
@@ -14,7 +14,7 @@
  *   would allow (an estimate: one greedy order, and a removal whose check runs out of nodes is not
  *   made). Too slow above 15×15, so left out there.
  * Everything is seeded and uses node budgets, never time, so every run prints the same numbers
- * apart from the times. Takes about a minute.
+ * apart from the times. Takes about 3 minutes.
  *
  * `--write-corpus` also rewrites `src/test-support/clue-gaps.json`: the first gap cases from the
  * smallest sizes, each the generated puzzle without that clue plus the edges the solver decided
