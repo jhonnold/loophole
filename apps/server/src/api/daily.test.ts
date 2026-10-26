@@ -381,6 +381,10 @@ describe("leaderboards (FR-23)", () => {
     ).json()) as Leaderboard;
     expect(guest).toMatchObject({ area: 4, level: "hard", total: 2, me: null });
     expect(guest.entries).toEqual([{ rank: 1, name: "tsuru", timeMs: 50_000, me: false }]);
+    // Each level has its own board; levels are named, so the old `?level=1` is refused.
+    const easy = await send("GET", "/api/leaderboards/areas/4?level=easy");
+    expect(await easy.json()).toMatchObject({ area: 4, level: "easy", total: 0, entries: [] });
+    await expectProblem(await send("GET", "/api/leaderboards/areas/4?level=1"), 400);
     await expectProblem(await send("GET", "/api/leaderboards/daily/d26"), 404);
     await expectProblem(await send("GET", "/api/leaderboards/areas/0"), 400);
   });
