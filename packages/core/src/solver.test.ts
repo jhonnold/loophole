@@ -94,7 +94,7 @@ describe("solve: each rule", () => {
       { rule: "three-diagonal-one", changes: "13:2 5:2", cells: [0, 3], dots: [4] },
     ],
     [1, 4, ".31.", 0, { rule: "corner-chain", changes: "7:1", cells: [1, 2], dots: [4] }],
-    // Colouring (WT17): for each, the smallest puzzle, then the fewest clues, where it fires.
+    // Colouring (WT17): a small puzzle where each fires; colour-chain's is its pattern drawing's.
     [2, 4, "1..11...", 3, { rule: "colour-1", changes: "17:2", cells: [4, 5], dots: [] }],
     [1, 3, ".2.", 0, { rule: "colour-2", changes: "0:1", cells: [0, 1], dots: [] }],
     [1, 4, ".32.", 0, { rule: "colour-3", changes: "8:1", cells: [1], dots: [] }],
