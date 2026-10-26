@@ -181,8 +181,6 @@ export class Engine {
    * nodes, its clue cell, and the node pairs whose relations it used), for the steps' reasons.
    */
   private readonly colourRecs: ColourRec[] = [];
-  /** While steps are recorded: the links behind the union-find (`colourForest`), once needed. */
-  private forest: Forest | null = null;
   /** Edges the current colouring pass has set. */
   private colourSet = 0;
   /** While steps are recorded: in the pass's first round, which adds one deciding relation. */
@@ -942,7 +940,6 @@ export class Engine {
     const recording = this.steps !== null;
     this.rings = false;
     this.colourSet = 0;
-    this.forest = null;
     if (recording) {
       this.colourRecs.length = 0;
       // A hint names the simplest deduction: first a clue whose own relation decides an edge on
@@ -1125,9 +1122,6 @@ export class Engine {
     if (this.steps !== null) {
       const deps = this.colourDeps(this.clues[i], known, a, b, x);
       this.colourRecs.push({ u: cNode[a], v: cNode[b], cell: i, deps });
-      if (this.forest !== null) {
-        addLink(this.forest, cNode[a], cNode[b], this.colourRecs.length - 1);
-      }
     }
     let n = small;
     do {
@@ -1161,8 +1155,8 @@ export class Engine {
       this.ufFind(n);
       const state = this.ufFound !== po ? Line : Cross;
       if (this.recording()) {
-        this.forest ??= this.colourForest();
-        const why = colourReason(this.forest, this.colourRecs, n, other);
+        // The pass's only edge while steps are recorded, so the forest is built once a pass.
+        const why = colourReason(this.colourForest(), this.colourRecs, n, other);
         // The edge's cells too, unless they hold a clue the reason does not use.
         const cells = new Set(why);
         if (n !== C && this.clues[n] === NO_CLUE) cells.add(n);
