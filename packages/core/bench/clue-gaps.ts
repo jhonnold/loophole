@@ -45,8 +45,8 @@ const CORPUS_PER_PUZZLE = 2;
 const CORPUS_FILE = new URL("../src/test-support/clue-gaps.json", import.meta.url);
 
 /**
- * The one place the harness runs the rule solver. When `solve` takes a rule set (roadmap,
- * WT15–17), pass it here to measure that subset.
+ * The one place the harness runs the rule solver. When `solve` takes a rule set (the rules
+ * work after the clue-removal rework), pass it here to measure that subset.
  */
 function runRules(puzzle: Puzzle): SolveResult {
   return solve(puzzle);
