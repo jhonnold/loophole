@@ -109,7 +109,7 @@ export function generate(options: GenerateOptions): GenerateResult {
     const work: Puzzle = { grid, clues };
     if (ALL_RULES(work).status !== "solved") continue;
     const checks = removeClues(work, rng, ALL_RULES, onProgress);
-    const { restored } = restoreClues(work, full, rng, ALL_RULES);
+    const restored = restoreClues(work, full, rng, ALL_RULES);
     let clueCount = 0;
     for (const k of clues) if (k !== NO_CLUE) clueCount++;
     return {
@@ -199,19 +199,15 @@ function hiddenBase(
 /**
  * Step 4: solve from scratch; while stuck, put back removed clues of cells next to an open edge
  * (or, if there are none, any removed clues), keeping each round's picks spread out. Terminates
- * because each round puts back at least one clue and the full clue set solves.
+ * because each round puts back at least one clue and the full clue set solves. Returns how many it
+ * put back.
  */
-function restoreClues(
-  puzzle: Puzzle,
-  full: Int8Array,
-  rng: Rng,
-  rules: RuleSolver,
-): { result: SolveResult; restored: number } {
+function restoreClues(puzzle: Puzzle, full: Int8Array, rng: Rng, rules: RuleSolver): number {
   const { grid, clues } = puzzle;
   let restored = 0;
   for (;;) {
     const result = rules(puzzle);
-    if (result.status === "solved") return { result, restored };
+    if (result.status === "solved") return restored;
     const removed: number[] = [];
     const nearOpen: number[] = [];
     for (let i = 0; i < grid.cellCount; i++) {
