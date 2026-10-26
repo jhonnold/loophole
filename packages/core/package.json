@@ -9,6 +9,7 @@
   "scripts": {
     "typecheck": "tsc -p . && tsc -p tsconfig.test.json",
     "bench": "bun bench/verify.ts",
-    "bench:generate": "bun bench/generate.ts"
+    "bench:generate": "bun bench/generate.ts",
+    "bench:clue-gaps": "bun bench/clue-gaps.ts"
   }
 }
