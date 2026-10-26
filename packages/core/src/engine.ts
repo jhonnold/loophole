@@ -600,7 +600,8 @@ export class Engine {
     const setCrosses = 0b1111 & ~any & ~crosses;
     const narrow = (c0 & n0) !== c0 || (c1 & n1) !== c1 || (c2 & n2) !== c2 || (c3 & n3) !== c3;
     if (!narrow && setLines === 0 && setCrosses === 0) return 0;
-    const why = this.steps === null ? undefined : this.cornerReason(i, base, used);
+    const why =
+      this.steps === null ? undefined : this.gather(i, used, [base, base + 1, base + 2, base + 3]);
     const nm = [c0 & n0, c1 & n1, c2 & n2, c3 & n3];
     for (let j = 0; j < 4; j++) {
       if (nm[j] === corners[base + j]) continue;
@@ -685,12 +686,7 @@ export class Engine {
     let narrow = false;
     for (let q = 0; q < 4; q++) if (qs[q] >= 0 && nm[q] !== corners[qs[q]]) narrow = true;
     if (!narrow && setLines === 0 && setCrosses === 0) return 0;
-    let why: readonly number[] | undefined;
-    if (this.steps !== null) {
-      const from: number[] = [];
-      for (let q = 0; q < 4; q++) if (used & (1 << q)) from.push(qs[q]);
-      why = this.gather(grid.cellCount + d, from);
-    }
+    const why = this.steps === null ? undefined : this.gather(grid.cellCount + d, used, qs);
     for (let q = 0; q < 4; q++) {
       const c = qs[q];
       if (c < 0 || nm[q] === corners[c]) continue;
@@ -724,22 +720,17 @@ export class Engine {
     return 1;
   }
 
-  /** The reason for a corner cell rule's result: the cell and the reasons of the masks it used. */
-  private cornerReason(i: number, base: number, used: number): readonly number[] {
-    const from: number[] = [];
-    for (let j = 0; j < 4; j++) {
-      // A mask still at the clue's default adds nothing; one narrowed elsewhere adds its reason.
-      if (used & (1 << j) && this.cornerWhy[base + j] !== undefined) from.push(base + j);
-    }
-    return this.gather(i, from);
-  }
-
-  /** `own` and the reasons recorded for corners `from` (with their cells), sorted, no repeats. */
-  private gather(own: number, from: readonly number[]): readonly number[] {
+  /**
+   * A corner rule's reason: `own` (the clue cell or dot) and, for each corner `corners[q]` whose bit
+   * is set in `used`, its clue cell and the reason recorded when it was narrowed. Sorted, no
+   * repeats.
+   */
+  private gather(own: number, used: number, corners: readonly number[]): readonly number[] {
     const sites = new Set<number>([own]);
-    for (const c of from) {
-      sites.add(c >> 2);
-      for (const x of this.cornerWhy[c] ?? []) sites.add(x);
+    for (let q = 0; q < 4; q++) {
+      if (!(used & (1 << q))) continue;
+      sites.add(corners[q] >> 2);
+      for (const x of this.cornerWhy[corners[q]] ?? []) sites.add(x);
     }
     return [...sites].sort((a, b) => a - b);
   }
