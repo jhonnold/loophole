@@ -20,6 +20,11 @@
  * 5. lookahead: assume an edge, run tier 1 (and with `probeCorners`, which `deepen` turns on, the
  *    corner rules too), and take the opposite on a contradiction
  * After any change the engine goes back to tier 1, so steps come out roughly easiest first.
+ *
+ * When no steps are recorded (the verifier, generation's clue tests) the order of deductions does
+ * not matter, only the fixpoint, so the global tiers work incrementally: parity's union-find is
+ * trailed and undone with the edges, colouring looks again only at the clues a union touched, and
+ * lookahead's passes leave the detect-only connectivity check until lookahead finds nothing.
  */
 import { EdgeState, type Grid, NONE } from "./grid.ts";
 import { NO_CLUE, type Puzzle } from "./puzzle.ts";
@@ -63,6 +68,17 @@ export interface Mark {
   readonly closed: boolean;
   /** `cornerScan` then, so undoing past the first corner pass makes the next one scan again. */
   readonly scan: number;
+  /** The trailed union-find (see `trailed`): its trail length and `ufSeen` then. */
+  readonly uf: number;
+  readonly ufSeen: number;
+  /**
+   * Whether colouring had cells left to look at then. Latent hazard: if a colouring pass runs
+   * between such a mark and its `undo` with no union in between, it drains the queue (or drops it
+   * on a contradiction), `undo` then splits nothing and those cells are not looked at again. No
+   * caller does this: marks are taken after `propagate`'s colouring pass, or inside probes, which
+   * never colour. A caller that did would have to make `undo` set `colourAll`.
+   */
+  readonly colourPending: boolean;
 }
 
 /*
@@ -166,6 +182,22 @@ export class Engine {
   private readonly ufParity: Uint8Array;
   private ufFound = 0;
   /**
+   * Without recorded steps (the verifier, generation's clue tests) the union-find is trailed
+   * instead of rebuilt on every parity pass: union by size, no path compression, each set's nodes in
+   * a ring (`ufNext`, `ufSize`), every union pushed on `ufTrail` so `undo` can split it again.
+   * Colouring's relations go into it too and stay until undone. Null until the first parity pass,
+   * which decides.
+   */
+  private trailed: boolean | null = null;
+  /** Edges on the trail before this position are in the trailed union-find. */
+  private ufSeen = 0;
+  /** Roots attached under another root, in order (trailed mode). */
+  private readonly ufTrail: number[] = [];
+  /** Open edges a union found between the two sets it joined (trailed mode). */
+  private readonly decided: number[] = [];
+  /** Trailed mode: the next colouring pass looks at every clue cell, not just the queued ones. */
+  private colourAll = true;
+  /**
    * Colouring. These arrays are allocated on the first colouring pass (`initColour`), so a puzzle
    * the earlier tiers finish pays nothing. Once a pass adds its first relation, each union-find
    * set's nodes form a ring (`ufNext`) with the set's size at its root (`ufSize`), so a new
@@ -202,6 +234,15 @@ export class Engine {
   /** Whether `ufNext` and `ufSize` describe the current union-find (see `buildRings`). */
   private rings = false;
   private readonly seen: Uint8Array;
+  /**
+   * Marks for `connected` and `pairFeasible`: dot d was reached in the current walk when
+   * `reach[d] === walk` (and cell c marked when `cellMark[c] === walk`), so nothing is cleared
+   * between walks (`nextWalk`).
+   */
+  private readonly reach: Int32Array;
+  private walk = 0;
+  /** Cells with a clue above 0, in index order. */
+  private readonly positive: Int32Array;
   private readonly order: Int32Array;
   private readonly stack: Int32Array;
   /** Edges `connected` treats as crossed: the group `twoExits` is checking. */
@@ -220,6 +261,13 @@ export class Engine {
   private bcVia = new Int32Array(0);
   private bcEdges = new Int32Array(0);
   private blockOf = new Int32Array(0);
+  /** Lines in each block, counted by `blocks`. */
+  private blockLines = new Int32Array(0);
+  /** For each dot and `dotEdges` slot, the dot at the other end (connectivity scratch). */
+  private dotNext = new Int32Array(0);
+  /** `pairFeasible`'s second queue of dots (the first is `stack`), and cell marks (see `reach`). */
+  private pieceQueue = new Int32Array(0);
+  private cellMark = new Int32Array(0);
   private faceParent = new Int32Array(0);
   private groupNext = new Int32Array(0);
   private groupFirst = new Int32Array(0);
@@ -285,6 +333,10 @@ export class Engine {
     this.ufParent = new Int32Array(grid.cellCount + 1);
     this.ufParity = new Uint8Array(grid.cellCount + 1);
     this.seen = new Uint8Array(grid.dotCount);
+    this.reach = new Int32Array(grid.dotCount);
+    const positive: number[] = [];
+    for (let i = 0; i < grid.cellCount; i++) if (puzzle.clues[i] > 0) positive.push(i);
+    this.positive = Int32Array.from(positive);
     this.stack = new Int32Array(grid.dotCount);
     this.inGroup = new Uint8Array(grid.edgeCount);
     this.order = readingOrder(grid);
@@ -336,15 +388,19 @@ export class Engine {
         if (c < 0) return false;
         if (c > 0) continue;
       }
+      // Without recorded steps, lookahead's passes leave the check for when lookahead finds nothing:
+      // it only finds contradictions, and one now is still one then (DECISIONS, WT19).
+      const later = lookahead && !this.connectOn && this.steps === null;
       if (this.connectOn) {
         const k = this.connectivity();
         if (k < 0) return false;
         if (k > 0) continue;
-      } else if (!this.connected()) return false;
+      } else if (!later && !this.connected()) return false;
       if (!lookahead) return true;
       const q = this.lookahead();
       if (q < 0) return false;
       if (q > 0) continue;
+      if (later && !this.connected()) return false;
       if (this.colourOn && last) {
         const c = this.colour();
         if (c < 0) return false;
@@ -371,6 +427,9 @@ export class Engine {
       corners: this.cornerTrail.length,
       closed: this.closed,
       scan: this.cornerScan,
+      uf: this.ufTrail.length,
+      ufSeen: this.ufSeen,
+      colourPending: this.colourAll || this.colourLen > 0,
     };
   }
 
@@ -394,6 +453,14 @@ export class Engine {
     }
     this.closed = m.closed;
     if (m.scan < this.cornerScan) this.cornerScan = m.scan;
+    if (this.ufTrail.length > m.uf) {
+      this.splitTo(m.uf);
+      // Cells queued since the mark were queued by unions now undone. If none was queued then,
+      // every cell was at its fixpoint; otherwise look at all of them again.
+      if (m.colourPending) this.colourAll = true;
+      else while (this.colourLen > 0) this.dequeueColour();
+    }
+    this.ufSeen = m.ufSeen;
     this.clearQueue();
     while (this.cqLen > 0) this.dequeueCorner();
     if (this.cornerSeen > m.edges) this.cornerSeen = m.edges;
@@ -909,10 +976,16 @@ export class Engine {
    * Every cell is inside or outside the loop, and everything beyond the border is outside. A line
    * separates cells of different sides, a cross joins cells of the same side. Union-find with
    * parity over the cells plus one "outside" node (index cellCount) links cells whose relative
-   * side is known; an open edge between two linked cells is then decided. Returns the number of
-   * edges set, or -1 on a contradiction.
+   * side is known; an open edge between two linked cells is then decided. Rebuilt on every pass
+   * while steps are recorded, so each pass decides its edges in index order; otherwise trailed
+   * (`parityTrailed`). Returns the number of edges set, or -1 on a contradiction.
    */
   private parity(): number {
+    if (this.trailed === null) {
+      this.trailed = this.steps === null;
+      if (this.trailed) this.initTrailed();
+    }
+    if (this.trailed) return this.parityTrailed();
     const { grid, edges, ufParent, ufParity } = this;
     const C = grid.cellCount;
     for (let i = 0; i <= C; i++) {
@@ -958,7 +1031,118 @@ export class Engine {
     return count;
   }
 
-  /** Root of `x`'s set; leaves the parity of `x` relative to the root in `ufFound`. */
+  /** Sets up the trailed union-find: every node alone. Allocates the colouring arrays too. */
+  private initTrailed(): void {
+    if (this.ufNext.length === 0) this.initColour();
+    const n = this.grid.cellCount + 1;
+    for (let x = 0; x < n; x++) {
+      this.ufParent[x] = x;
+      this.ufParity[x] = 0;
+      this.ufNext[x] = x;
+      this.ufSize[x] = 1;
+    }
+  }
+
+  /**
+   * Parity with the trailed union-find: adds the edges set since the last pass, then decides the
+   * open edges between the sets those unions joined. Same result as rebuilding (the relations are
+   * the same, and no open edge is left inside a set after a pass). Returns the number of edges set,
+   * or -1 on a contradiction.
+   */
+  private parityTrailed(): number {
+    const { grid, edges, edgeTrail } = this;
+    for (; this.ufSeen < edgeTrail.length; this.ufSeen++) {
+      const e = edgeTrail[this.ufSeen];
+      const x = edges[e] === Line ? 1 : 0;
+      if (!this.unite(sideNode(grid, e, 0), sideNode(grid, e, 1), x)) {
+        this.decided.length = 0;
+        return -1;
+      }
+    }
+    const set = this.assignDecided();
+    // The edges just set join nodes already in one set: nothing to add for them.
+    if (set > 0) this.ufSeen = edgeTrail.length;
+    return set;
+  }
+
+  /**
+   * Trailed mode: records "nodes u and v are on different sides exactly when x is 1". False when the
+   * union-find already says otherwise. When it joins two sets, first notes in `decided` the open
+   * edges between them (found from the smaller set) and queues the clue cells at or beside the
+   * smaller set's nodes for colouring (every cell with nodes in both sets has one there).
+   */
+  private unite(u: number, v: number, x: number): boolean {
+    const { grid, edges, ufParent, ufParity, ufSize, ufNext } = this;
+    let small = this.ufFind(u);
+    const pu = this.ufFound;
+    let large = this.ufFind(v);
+    const pv = this.ufFound;
+    if (small === large) return (pu ^ pv) === x;
+    if (ufSize[small] > ufSize[large]) {
+      const t = small;
+      small = large;
+      large = t;
+    }
+    const C = grid.cellCount;
+    let n = small;
+    do {
+      if (this.colourOn) this.queueAround(n);
+      const list = n === C ? this.borderEdges : grid.cellEdges;
+      const from = n === C ? 0 : n * 4;
+      const to = n === C ? list.length : from + 4;
+      for (let k = from; k < to; k++) {
+        const e = list[k];
+        if (edges[e] !== Unknown) continue;
+        const a = sideNode(grid, e, 0);
+        if (this.ufFind(a === n ? sideNode(grid, e, 1) : a) === large) this.decided.push(e);
+      }
+      n = ufNext[n];
+    } while (n !== small);
+    ufParent[small] = large;
+    ufParity[small] = pu ^ pv ^ x;
+    this.joinRings(small, large);
+    this.ufTrail.push(small);
+    return true;
+  }
+
+  /** Trailed mode: sets the edges in `decided`, whose sides are now in one set. -1 on a contradiction. */
+  private assignDecided(): number {
+    const { grid, decided } = this;
+    let set = 0;
+    for (let k = 0; k < decided.length; k++) {
+      const e = decided[k];
+      this.ufFind(sideNode(grid, e, 0));
+      const pa = this.ufFound;
+      this.ufFind(sideNode(grid, e, 1));
+      if (!this.assign(e, pa !== this.ufFound ? Line : Cross)) {
+        decided.length = 0;
+        return -1;
+      }
+      set++;
+    }
+    decided.length = 0;
+    return set;
+  }
+
+  /** Trailed mode: undoes unions until `ufTrail` has `length` entries. */
+  private splitTo(length: number): void {
+    const { ufTrail, ufParent, ufParity, ufSize, ufNext } = this;
+    while (ufTrail.length > length) {
+      const s = ufTrail.pop() as number;
+      const l = ufParent[s];
+      ufSize[l] -= ufSize[s];
+      const t = ufNext[s];
+      ufNext[s] = ufNext[l];
+      ufNext[l] = t;
+      ufParent[s] = s;
+      ufParity[s] = 0;
+    }
+  }
+
+  /**
+   * Root of `x`'s set; leaves the parity of `x` relative to the root in `ufFound`. Compresses the
+   * path unless the union-find is trailed (`undo` could not put it back).
+   */
   private ufFind(x: number): number {
     const { ufParent, ufParity } = this;
     let root = x;
@@ -966,6 +1150,10 @@ export class Engine {
     while (ufParent[root] !== root) {
       p ^= ufParity[root];
       root = ufParent[root];
+    }
+    if (this.trailed) {
+      this.ufFound = p;
+      return root;
     }
     // Path compression: point every node on the way straight at the root.
     let cur = x;
@@ -993,6 +1181,7 @@ export class Engine {
    * sets it has nodes in. Returns the number of edges set, or -1 on a contradiction.
    */
   private colour(): number {
+    if (this.trailed) return this.colourTrailed();
     if (this.ufNext.length === 0) this.initColour();
     const { colourCells } = this;
     const recording = this.steps !== null;
@@ -1022,6 +1211,25 @@ export class Engine {
       if (!ok || (recording && this.colourSet > 0)) {
         while (this.colourLen > 0) this.dequeueColour();
         if (!ok) return -1;
+      }
+    }
+    return this.colourSet;
+  }
+
+  /**
+   * Colouring on the trailed union-find: its relations stay, so only the cells whose nodes a union
+   * has joined since (queued by `unite`) need another look, or every cell after `colourAll`.
+   */
+  private colourTrailed(): number {
+    if (this.colourAll) {
+      this.colourAll = false;
+      for (let x = 0; x < this.colourCells.length; x++) this.queueColour(this.colourCells[x]);
+    }
+    this.colourSet = 0;
+    while (this.colourLen > 0) {
+      if (!this.colourCell(this.dequeueColour())) {
+        while (this.colourLen > 0) this.dequeueColour();
+        return -1;
       }
     }
     return this.colourSet;
@@ -1164,6 +1372,14 @@ export class Engine {
    */
   private colourJoin(i: number, known: number, a: number, b: number, x: number): boolean {
     const { ufParent, ufParity, ufSize, ufNext, cNode } = this;
+    if (this.trailed) {
+      // The union-find is trailed: `unite` finds the edges to decide and the cells to queue.
+      if (!this.unite(cNode[a], cNode[b], x)) return false;
+      const set = this.assignDecided();
+      if (set < 0) return false;
+      this.colourSet += set;
+      return true;
+    }
     let small = this.ufFind(cNode[a]);
     const pa = this.ufFound;
     let large = this.ufFind(cNode[b]);
@@ -1360,40 +1576,47 @@ export class Engine {
    * that first dot and a clue it did not reach.
    */
   private connected(): boolean {
-    const { grid, edges, clues, seen, stack, inGroup } = this;
+    const { grid, edges, stack, inGroup, reach } = this;
     const first = edges.indexOf(Line);
     if (first < 0) return true;
     const seed = grid.edgeDots[first * 2];
-    seen.fill(0);
-    seen[seed] = 1;
+    const walk = this.nextWalk();
+    reach[seed] = walk;
     stack[0] = seed;
     let top = 1;
+    // Each line is met once from each end, and both ends are reached when one is.
+    let lineEnds = 0;
     while (top > 0) {
       const d = stack[--top];
       for (let j = 0; j < 4; j++) {
         const e = grid.dotEdges[d * 4 + j];
-        if (e === NONE || edges[e] === Cross || inGroup[e]) continue;
+        if (e === NONE) continue;
+        const s = edges[e];
+        if (s === Cross || inGroup[e]) continue;
+        if (s === Line) lineEnds++;
         const o = otherDot(grid, e, d);
-        if (!seen[o]) {
-          seen[o] = 1;
+        if (reach[o] !== walk) {
+          reach[o] = walk;
           stack[top++] = o;
         }
       }
     }
-    for (let e = first + 1; e < grid.edgeCount; e++) {
-      if (edges[e] !== Line || seen[grid.edgeDots[e * 2]]) continue;
+    if (lineEnds !== 2 * this.lineCount) {
       if (this.steps !== null) {
+        let e = first + 1;
+        while (edges[e] !== Line || reach[grid.edgeDots[e * 2]] === walk) e++;
         this.exitCells = [];
         this.exitDots = [seed, grid.edgeDots[e * 2]].sort((a, b) => a - b);
       }
       return false;
     }
-    for (let i = 0; i < grid.cellCount; i++) {
-      if (clues[i] <= 0) continue;
+    const { positive } = this;
+    for (let x = 0; x < positive.length; x++) {
+      const i = positive[x];
       let reached = false;
       for (let j = 0; j < 4 && !reached; j++) {
         const e = grid.cellEdges[i * 4 + j];
-        reached = edges[e] !== Cross && !inGroup[e] && seen[grid.edgeDots[e * 2]] === 1;
+        reached = edges[e] !== Cross && !inGroup[e] && reach[grid.edgeDots[e * 2]] === walk;
       }
       if (reached) continue;
       if (this.steps !== null) {
@@ -1403,6 +1626,16 @@ export class Engine {
       return false;
     }
     return true;
+  }
+
+  /** A new mark for `reach` and `cellMark`; clears them long before the counter could overflow. */
+  private nextWalk(): number {
+    if (this.walk === 0x3fffffff) {
+      this.reach.fill(0);
+      this.cellMark.fill(0);
+      this.walk = 0;
+    }
+    return ++this.walk;
   }
 
   // --- tier 4c: connectivity ---------------------------------------------------------------
@@ -1418,19 +1651,17 @@ export class Engine {
    * 2. Two exits (`twoExits`), when the first decides nothing.
    */
   private connectivity(): number {
-    const { grid, edges, clues } = this;
+    const { grid, edges } = this;
     if (this.lineCount === 0) return 0;
     if (this.blockOf.length === 0) this.initConnect();
     this.blocks();
     const { blockOf } = this;
-    let target = NONE;
-    for (let e = 0; e < grid.edgeCount; e++) {
-      if (edges[e] !== Line) continue;
-      if (target === NONE) target = blockOf[e];
-      else if (blockOf[e] !== target) return -1;
-    }
-    for (let i = 0; i < grid.cellCount; i++) {
-      if (clues[i] <= 0) continue;
+    const { positive } = this;
+    // Every line in one block: the first line's block holds them all.
+    const target = blockOf[edges.indexOf(Line)];
+    if (this.blockLines[target] !== this.lineCount) return -1;
+    for (let x = 0; x < positive.length; x++) {
+      const i = positive[x];
       let reached = false;
       for (let j = 0; j < 4 && !reached; j++) {
         const e = grid.cellEdges[i * 4 + j];
@@ -1451,6 +1682,16 @@ export class Engine {
     this.bcVia = new Int32Array(D);
     this.bcEdges = new Int32Array(E);
     this.blockOf = new Int32Array(E);
+    this.blockLines = new Int32Array(E);
+    this.dotNext = new Int32Array(D * 4).fill(NONE);
+    this.pieceQueue = new Int32Array(D);
+    this.cellMark = new Int32Array(C);
+    for (let d = 0; d < D; d++) {
+      for (let j = 0; j < 4; j++) {
+        const e = this.grid.dotEdges[d * 4 + j];
+        if (e !== NONE) this.dotNext[d * 4 + j] = otherDot(this.grid, e, d);
+      }
+    }
     this.faceParent = new Int32Array(C + 1);
     this.groupNext = new Int32Array(E);
     this.groupFirst = new Int32Array(E);
@@ -1468,52 +1709,57 @@ export class Engine {
    * crossed into `blockOf` (NONE for crossed edges): Tarjan's algorithm, with explicit stacks.
    */
   private blocks(): void {
-    const { grid, edges, bcDisc: disc, bcLow: low, bcSlot: slot, bcVia: via } = this;
-    const { stack: dots, bcEdges: stack, blockOf } = this;
+    const { grid, edges, bcDisc: disc, bcLow: low, bcSlot: slot, bcVia: via, dotNext } = this;
+    const { stack: dots, bcEdges: stack, blockOf, blockLines } = this;
+    const { dotEdges } = grid;
     disc.fill(0);
     blockOf.fill(NONE);
-    let time = 0;
+    // Only the part of the graph holding the lines: edges anywhere else are in no block of theirs.
+    const r = grid.edgeDots[edges.indexOf(Line) * 2];
+    let time = 1;
     let blocks = 0;
-    for (let r = 0; r < grid.dotCount; r++) {
-      if (disc[r] !== 0) continue;
-      let top = 0;
-      let etop = 0;
-      dots[top++] = r;
-      disc[r] = low[r] = ++time;
-      slot[r] = 0;
-      via[r] = NONE;
-      while (top > 0) {
-        const v = dots[top - 1];
-        if (slot[v] < 4) {
-          const e = grid.dotEdges[v * 4 + slot[v]++];
-          if (e === NONE || edges[e] === Cross || e === via[v]) continue;
-          const w = otherDot(grid, e, v);
-          if (disc[w] === 0) {
-            stack[etop++] = e;
-            via[w] = e;
-            disc[w] = low[w] = ++time;
-            slot[w] = 0;
-            dots[top++] = w;
-          } else if (disc[w] < disc[v]) {
-            stack[etop++] = e;
-            if (disc[w] < low[v]) low[v] = disc[w];
-          }
-          continue;
+    let top = 0;
+    let etop = 0;
+    dots[top++] = r;
+    disc[r] = low[r] = time;
+    slot[r] = 0;
+    via[r] = NONE;
+    while (top > 0) {
+      const v = dots[top - 1];
+      const k = slot[v];
+      if (k < 4) {
+        slot[v] = k + 1;
+        const e = dotEdges[v * 4 + k];
+        if (e === NONE || edges[e] === Cross || e === via[v]) continue;
+        const w = dotNext[v * 4 + k];
+        const dw = disc[w];
+        if (dw === 0) {
+          stack[etop++] = e;
+          via[w] = e;
+          disc[w] = low[w] = ++time;
+          slot[w] = 0;
+          dots[top++] = w;
+        } else if (dw < disc[v]) {
+          stack[etop++] = e;
+          if (dw < low[v]) low[v] = dw;
         }
-        top--;
-        const f = via[v];
-        if (f === NONE) continue;
-        const u = otherDot(grid, f, v);
-        if (low[v] < low[u]) low[u] = low[v];
-        if (low[v] >= disc[u]) {
-          // u separates v's subtree: the edges stacked since f form one block.
-          let g: number;
-          do {
-            g = stack[--etop];
-            blockOf[g] = blocks;
-          } while (g !== f);
-          blocks++;
-        }
+        continue;
+      }
+      top--;
+      if (top === 0) break;
+      const u = dots[top - 1];
+      const f = via[v];
+      if (low[v] < low[u]) low[u] = low[v];
+      if (low[v] >= disc[u]) {
+        // u separates v's subtree: the edges stacked since f form one block.
+        let g: number;
+        let lines = 0;
+        do {
+          g = stack[--etop];
+          blockOf[g] = blocks;
+          if (edges[g] === Line) lines++;
+        } while (g !== f);
+        blockLines[blocks++] = lines;
       }
     }
   }
@@ -1657,9 +1903,115 @@ export class Engine {
   private groupFeasible(g: number): boolean {
     const { inGroup, groupFirst, groupNext } = this;
     for (let e = groupFirst[g]; e !== NONE; e = groupNext[e]) inGroup[e] = 1;
-    const ok = this.connected();
+    const ok =
+      this.steps === null && this.groupSize[g] === 2
+        ? this.pairFeasible(groupFirst[g])
+        : this.connected();
     for (let e = groupFirst[g]; e !== NONE; e = groupNext[e]) inGroup[e] = 0;
     return ok;
+  }
+
+  /**
+   * `groupFeasible` for a group of two edges, without recorded steps. Every line and every open
+   * edge is in one block here (`cutOff` found nothing), so crossing both edges leaves two pieces,
+   * one at each end of `e`, the group's first edge. Walks both at once, a dot at a time, and stops
+   * when one is done, so it pays for the smaller piece only. If the walks meet, the pieces are one
+   * after all and `connected` decides.
+   */
+  private pairFeasible(e: number): boolean {
+    const { grid, reach, stack: qa, pieceQueue: qb } = this;
+    // All three marks before anything is marked: the counter's reset clears `reach` and `cellMark`.
+    const wa = this.nextWalk();
+    const wb = this.nextWalk();
+    const mark = this.nextWalk();
+    qa[0] = grid.edgeDots[e * 2];
+    qb[0] = grid.edgeDots[e * 2 + 1];
+    reach[qa[0]] = wa;
+    reach[qb[0]] = wb;
+    let ha = 0;
+    let ta = 1;
+    let hb = 0;
+    let tb = 1;
+    for (;;) {
+      if (ha === ta) return this.pieceFeasible(qa, ta, wa, mark);
+      if (hb === tb) return this.pieceFeasible(qb, tb, wb, mark);
+      ta = this.spread(qa[ha++], qa, ta, wa, wb);
+      if (ta >= 0) tb = this.spread(qb[hb++], qb, tb, wb, wa);
+      if (ta < 0 || tb < 0) return this.connected();
+    }
+  }
+
+  /**
+   * One step of `pairFeasible`'s walk marked `own`: queues the dots next to `d` over edges that are
+   * neither crossed nor in the group at `q[tail]` onwards. Returns the new tail, or -1 when one of
+   * them belongs to the other walk.
+   */
+  private spread(d: number, q: Int32Array, tail: number, own: number, other: number): number {
+    const { grid, edges, inGroup, reach, dotNext } = this;
+    for (let j = 0; j < 4; j++) {
+      const e = grid.dotEdges[d * 4 + j];
+      if (e === NONE || edges[e] === Cross || inGroup[e]) continue;
+      const o = dotNext[d * 4 + j];
+      if (reach[o] === own) continue;
+      if (reach[o] === other) return -1;
+      reach[o] = own;
+      q[tail++] = o;
+    }
+    return tail;
+  }
+
+  /**
+   * `pairFeasible` once the piece with dots `q[0..n)` (marked `w` in `reach`) is done; `mark` marks
+   * the clue cells already counted (in `cellMark`). The loop
+   * lies in this piece if it holds every line, in the other one if it holds none; with lines in
+   * both there is no loop. Every clue above 0 needs a side in the loop's piece that is neither
+   * crossed nor in the group.
+   */
+  private pieceFeasible(q: Int32Array, n: number, w: number, mark: number): boolean {
+    const { grid, edges, clues, inGroup, reach, cellMark, dotCells } = this;
+    // Both ends of a line here are here: count each line at both.
+    let lineEnds = 0;
+    for (let x = 0; x < n; x++) {
+      for (let j = 0; j < 4; j++) {
+        const e = grid.dotEdges[q[x] * 4 + j];
+        if (e !== NONE && edges[e] === Line) lineEnds++;
+      }
+    }
+    const lines = lineEnds / 2;
+    if (lines !== 0 && lines !== this.lineCount) return false;
+    if (lines === this.lineCount) {
+      // The loop is here: every clue above 0 needs a usable side here.
+      let found = 0;
+      for (let x = 0; x < n; x++) {
+        for (let j = 0; j < 4; j++) {
+          const e = grid.dotEdges[q[x] * 4 + j];
+          if (e === NONE || edges[e] === Cross || inGroup[e]) continue;
+          for (let k = 0; k < 2; k++) {
+            const c = grid.edgeCells[e * 2 + k];
+            if (c === NONE || clues[c] <= 0 || cellMark[c] === mark) continue;
+            cellMark[c] = mark;
+            found++;
+          }
+        }
+      }
+      return found === this.positive.length;
+    }
+    // The loop is in the other piece: no clue above 0 may have all its usable sides here. Such a
+    // clue has a side with an end here (a group edge has one), so it is beside one of these dots.
+    for (let x = 0; x < n; x++) {
+      for (let j = 0; j < 4; j++) {
+        const c = dotCells[q[x] * 4 + j];
+        if (c === NONE || clues[c] <= 0 || cellMark[c] === mark) continue;
+        cellMark[c] = mark;
+        let elsewhere = false;
+        for (let s = 0; s < 4 && !elsewhere; s++) {
+          const e = grid.cellEdges[c * 4 + s];
+          elsewhere = edges[e] !== Cross && !inGroup[e] && reach[grid.edgeDots[e * 2]] !== w;
+        }
+        if (!elsewhere) return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -1718,7 +2070,8 @@ export class Engine {
     for (let k = 0; k < E; k++) {
       const e = (this.lookCursor + k) % E;
       if (this.edges[e] !== Unknown) continue;
-      for (const assumed of [Line, Cross]) {
+      for (let t = 0; t < 2; t++) {
+        const assumed = t === 0 ? Line : Cross;
         this.budget.tick();
         this.probes++;
         const m = this.mark();
