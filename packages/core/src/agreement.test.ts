@@ -24,15 +24,18 @@ function checkAgainstBruteForce(p: Puzzle): void {
     expect(encodeEdges(v.solutions[0])).not.toBe(encodeEdges(v.solutions[1]));
   }
 
-  // Every edge the rule solver decides agrees with every solution.
-  const r = solve(p);
-  r.edges.forEach((state, e) => {
-    if (state === EdgeState.Unknown) return;
-    for (const s of all) expect(s[e]).toBe(state);
-  });
-  if (r.status === "solved") expect(all.length).toBe(1);
-  if (r.status === "contradiction") expect(all.length).toBe(0);
-  expect(r.status).not.toBe("incomplete");
+  // Every edge the rule solver decides agrees with every solution, with every rule group and with
+  // the corners group left out.
+  for (const rules of [undefined, []]) {
+    const r = solve(p, { rules });
+    r.edges.forEach((state, e) => {
+      if (state === EdgeState.Unknown) return;
+      for (const s of all) expect(s[e]).toBe(state);
+    });
+    if (r.status === "solved") expect(all.length).toBe(1);
+    if (r.status === "contradiction") expect(all.length).toBe(0);
+    expect(r.status).not.toBe("incomplete");
+  }
 }
 
 describe("agreement with brute force", () => {

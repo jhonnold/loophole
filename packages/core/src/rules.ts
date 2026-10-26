@@ -18,11 +18,39 @@ export const RULE_IDS = [
   "diagonal-3s",
   "premature-loop",
   "loop-complete",
+  "line-into-1",
+  "line-into-3",
+  "two-passes-on",
+  "two-in-corner",
+  "ones-side-by-side",
+  "three-diagonal-one",
+  "corner-chain",
   "parity",
   "lookahead",
 ] as const;
 
 export type RuleId = (typeof RULE_IDS)[number];
+
+/**
+ * Groups of rules that `solve` can leave out (`SolveOptions.rules`), so a difficulty level can use
+ * a smaller set. The rules outside every group always run; lookahead has its own option.
+ */
+export const RULE_GROUPS = ["corners"] as const;
+
+export type RuleGroup = (typeof RULE_GROUPS)[number];
+
+/** The rule ids each group's steps carry. */
+export const GROUP_RULES: Readonly<Record<RuleGroup, readonly RuleId[]>> = {
+  corners: [
+    "line-into-1",
+    "line-into-3",
+    "two-passes-on",
+    "two-in-corner",
+    "ones-side-by-side",
+    "three-diagonal-one",
+    "corner-chain",
+  ],
+};
 
 export const RULE_TEXT: Readonly<Record<RuleId, string>> = {
   "clue-zero": "A 0 has no lines around it, so all four of its sides are crossed.",
@@ -45,6 +73,20 @@ export const RULE_TEXT: Readonly<Record<RuleId, string>> = {
     "This edge would close a loop while other lines or numbers still need it, so it is crossed.",
   "loop-complete":
     "The loop is closed and every number is satisfied, so all other edges are crossed.",
+  "line-into-1":
+    "The 1's one line is at this corner, so the loop comes in from outside there and the 1's other sides are crossed.",
+  "line-into-3":
+    "The loop passes through this corner of the 3, so it comes in from outside there and the 3's far sides are lines.",
+  "two-passes-on":
+    "The loop passes through both or neither of two opposite corners of a 2, so what holds at one carries across.",
+  "two-in-corner":
+    "A 2 in the board's corner has both sides there or neither, so either way the loop leaves it along the border.",
+  "ones-side-by-side":
+    "The loop can't go straight on past the 1s' shared side, so a line there would give a 1 two lines: it is crossed.",
+  "three-diagonal-one":
+    "The loop passes through the corner the 3 and the 1 share, so the 3's far sides are lines, the 1's crossed.",
+  "corner-chain":
+    "Working out which corners of the highlighted clues the loop passes through leaves one way for the marked edges.",
   parity:
     "Known edges show whether these two cells are on the same side of the loop, which decides the edge between them.",
   lookahead:
@@ -65,6 +107,13 @@ export const RULE_TITLE: Readonly<Record<RuleId, string>> = {
   "diagonal-3s": "3s corner to corner",
   "premature-loop": "No small loops",
   "loop-complete": "Loop complete",
+  "line-into-1": "Line into a 1's corner",
+  "line-into-3": "Line into a 3's corner",
+  "two-passes-on": "A 2 passes it on",
+  "two-in-corner": "2 in a corner",
+  "ones-side-by-side": "1s side by side",
+  "three-diagonal-one": "3 diagonal to a 1",
+  "corner-chain": "Corners pass along",
   parity: "Inside and outside",
   lookahead: "Try and see",
 };

@@ -1,6 +1,6 @@
 import { Budget, Engine, SolverStop } from "./engine.ts";
 import type { Puzzle } from "./puzzle.ts";
-import type { Step } from "./rules.ts";
+import { RULE_GROUPS, type RuleGroup, type Step } from "./rules.ts";
 
 /**
  * - `solved`: the rules decided every edge; the result is the puzzle's only solution.
@@ -15,6 +15,11 @@ export interface SolveOptions {
   readonly initial?: Uint8Array;
   /** Use bounded lookahead when the other rules are stuck. Default true. */
   readonly lookahead?: boolean;
+  /**
+   * Rule groups to use on top of the rules that always run (`RULE_GROUPS`). Default all of them.
+   * A difficulty level can leave groups out; deductions are sound either way.
+   */
+  readonly rules?: readonly RuleGroup[];
   /** Stop after recording this many steps. Default no limit. */
   readonly maxSteps?: number;
   /** Stop after this many milliseconds, measured with `now`. Default no limit. */
@@ -43,7 +48,8 @@ export function solve(puzzle: Puzzle, options: SolveOptions = {}): SolveResult {
     now() + (options.timeLimitMs ?? Number.POSITIVE_INFINITY),
     Number.POSITIVE_INFINITY,
   );
-  const engine = new Engine(puzzle, budget);
+  const rules = options.rules ?? RULE_GROUPS;
+  const engine = new Engine(puzzle, budget, rules.includes("corners"));
   const steps: Step[] = [];
   engine.steps = steps;
   engine.maxSteps = options.maxSteps ?? Number.POSITIVE_INFINITY;

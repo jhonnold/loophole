@@ -34,7 +34,7 @@ describe("verify", () => {
 
   test("searches when the rules get stuck", () => {
     // Unique (checked by brute force), but the rules alone get stuck.
-    const result = verify(puzzle(2, 3, ".2222."));
+    const result = verify(puzzle(1, 4, ".22."));
     expect(result.status).toBe("unique");
     expect(result.stats.nodes).toBeGreaterThan(0);
   });

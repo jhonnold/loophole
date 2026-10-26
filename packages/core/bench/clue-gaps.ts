@@ -16,6 +16,10 @@
  * Everything is seeded and uses node budgets, never time, so every run prints the same numbers
  * apart from the times. Takes about 3 minutes.
  *
+ * `--rules=<groups>` (comma-separated `RULE_GROUPS`, empty for none) and `--no-lookahead` measure
+ * the rule solver with fewer rules. The puzzles are still generated with every rule, so with either
+ * flag the solver floor starts from the full clue set instead of the generated puzzle.
+ *
  * `--write-corpus` also rewrites `src/test-support/clue-gaps.json`: the first gap cases from the
  * smallest sizes, each the generated puzzle without that clue plus the edges the solver decided
  * before it got stuck. `clue-gaps.test.ts` checks them. The committed file is the WT14 baseline;
@@ -24,9 +28,10 @@
  */
 import { encodeEdges, serializePuzzle } from "../src/format.ts";
 import { generate } from "../src/generate.ts";
-import { createPuzzle, NO_CLUE, type Puzzle } from "../src/puzzle.ts";
+import { createPuzzle, deriveClues, NO_CLUE, type Puzzle } from "../src/puzzle.ts";
 import { createRng } from "../src/rng.ts";
-import { type SolveResult, solve } from "../src/solver.ts";
+import { RULE_GROUPS, type RuleGroup } from "../src/rules.ts";
+import { type SolveOptions, type SolveResult, solve } from "../src/solver.ts";
 import { CLUE_GAP_VERIFY_OPTIONS, type ClueGapEntry } from "../src/test-support/clue-gaps.ts";
 import { verify } from "../src/verify.ts";
 
@@ -44,12 +49,18 @@ const CORPUS_SIZES = [5, 7, 10];
 const CORPUS_PER_PUZZLE = 2;
 const CORPUS_FILE = new URL("../src/test-support/clue-gaps.json", import.meta.url);
 
-/**
- * The one place the harness runs the rule solver. When `solve` takes a rule set (the rules
- * work after the clue-removal rework), pass it here to measure that subset.
- */
+const rulesArg = process.argv.find((a) => a.startsWith("--rules="))?.slice("--rules=".length);
+const rules = rulesArg?.split(",").filter((g) => g !== "") as RuleGroup[] | undefined;
+for (const g of rules ?? []) {
+  if (!(RULE_GROUPS as readonly string[]).includes(g)) throw new Error(`unknown rule group ${g}`);
+}
+const options: SolveOptions = { rules, lookahead: !process.argv.includes("--no-lookahead") };
+/** Fewer rules than `generate` used: the floor then starts from the full clue set. */
+const fewerRules = rules !== undefined || !options.lookahead;
+
+/** The one place the harness runs the rule solver, with the rules the flags chose. */
 function runRules(puzzle: Puzzle): SolveResult {
-  return solve(puzzle);
+  return solve(puzzle, options);
 }
 
 /**
@@ -92,7 +103,7 @@ for (const [size, count, withVerifyFloor] of SIZES) {
   let sizeCorpus = 0;
   for (let n = 0; n < count; n++) {
     const seed = `clue-gaps-${size}-${n}`;
-    const { puzzle, stats } = generate({ width: size, height: size, seed });
+    const { puzzle, solution, stats } = generate({ width: size, height: size, seed });
     const { grid } = puzzle;
     cells += grid.cellCount;
     restored += stats.restored;
@@ -132,7 +143,10 @@ for (const [size, count, withVerifyFloor] of SIZES) {
       else classes.needed++;
       clues[i] = k;
     }
-    solverFloor += greedyFloor(puzzle, `${seed}/floor`, (p) => runRules(p).status === "solved");
+    const start = fewerRules
+      ? { grid, clues: deriveClues(grid, solution).map((k) => (k === 4 ? NO_CLUE : k)) }
+      : puzzle;
+    solverFloor += greedyFloor(start, `${seed}/floor`, (p) => runRules(p).status === "solved");
     if (withVerifyFloor) {
       verifyFloor += greedyFloor(puzzle, `${seed}/floor`, (p) => {
         const status = verify(p, CLUE_GAP_VERIFY_OPTIONS).status;

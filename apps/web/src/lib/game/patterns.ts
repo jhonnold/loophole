@@ -123,6 +123,59 @@ export const RULE_PATTERNS: Readonly<Partial<Record<RuleId, RulePattern>>> = {
     dots: [a.dot(0, 1), a.dot(1, 1)],
     ghostCrosses: [a.v(0, 1)],
   })),
+  // Corner rules. A line comes down into the 1's top-right corner and the edge on to the right is
+  // crossed: the 1's line is at that corner, so its far sides are crossed.
+  "line-into-1": pattern(2, 2, "..1.", (a) => ({
+    lines: [a.v(0, 1)],
+    crosses: [a.h(1, 1)],
+    cells: [a.cell(1, 0)],
+    dots: [a.dot(1, 1)],
+    ghostCrosses: [a.v(1, 0), a.h(2, 0)],
+  })),
+  // A line comes down into the 3's top-right corner: the 3's far sides are lines, and the edge on
+  // to the right is crossed.
+  "line-into-3": pattern(2, 2, "..3.", (a) => ({
+    lines: [a.v(0, 1)],
+    cells: [a.cell(1, 0)],
+    dots: [a.dot(1, 1)],
+    ghostLines: [a.v(1, 0), a.h(2, 0)],
+    ghostCrosses: [a.h(1, 1)],
+  })),
+  // The loop passes through the 2's top-left corner (a line comes down, the edge to the left is
+  // crossed), so it passes through the bottom-right corner too, where the edge below is crossed.
+  "two-passes-on": pattern(3, 3, "....2....", (a) => ({
+    lines: [a.v(0, 1)],
+    crosses: [a.h(1, 0), a.v(2, 2)],
+    cells: [a.cell(1, 1)],
+    dots: [a.dot(1, 1), a.dot(2, 2)],
+    ghostLines: [a.h(2, 2)],
+  })),
+  // Both sides at the board's corner or neither: either way the loop leaves the 2 along the border.
+  "two-in-corner": pattern(2, 2, "2...", (a) => ({
+    cells: [a.cell(0, 0)],
+    dots: [a.dot(0, 0), a.dot(0, 1), a.dot(1, 0)],
+    ghostLines: [a.h(0, 1), a.v(1, 0)],
+  })),
+  "ones-side-by-side": pattern(2, 2, "11..", (a) => ({
+    cells: [a.cell(0, 0), a.cell(0, 1)],
+    dots: [a.dot(0, 1)],
+    ghostCrosses: [a.v(0, 1)],
+  })),
+  // The 1's far sides are crossed, so its line passes through the corner it shares with the 3, and
+  // the 3's far sides are lines.
+  "three-diagonal-one": pattern(2, 2, "3..1", (a) => ({
+    crosses: [a.v(1, 2), a.h(2, 1)],
+    cells: [a.cell(0, 0), a.cell(1, 1)],
+    dots: [a.dot(1, 1)],
+    ghostLines: [a.h(0, 0), a.v(0, 0)],
+  })),
+  // One chain of corners: a 1 and a 3 side by side on the border. If the 3's top side were empty,
+  // its shared side would be a line, which could only go on along the 1's top: two lines for the 1.
+  "corner-chain": pattern(2, 2, "13..", (a) => ({
+    cells: [a.cell(0, 0), a.cell(0, 1)],
+    dots: [a.dot(0, 1)],
+    ghostLines: [a.h(0, 1)],
+  })),
   // The left cell is outside (its outer side is crossed), the right one inside (its outer side is a
   // line), so the edge between them is a line.
   parity: pattern(2, 1, "..", (a) => ({
