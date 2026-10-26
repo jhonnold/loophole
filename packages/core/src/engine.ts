@@ -17,8 +17,8 @@
  *    stays inside one block of the edges that are not crossed, and it uses both or neither of two
  *    edges between the same two faces (global). Without that group, a connectivity check that only
  *    detects contradictions
- * 5. lookahead: assume an edge, run tier 1 (and, once `deepen` has run, the corner rules too), and
- *    take the opposite on a contradiction
+ * 5. lookahead: assume an edge, run tier 1 (and with `probeCorners`, which `deepen` turns on, the
+ *    corner rules too), and take the opposite on a contradiction
  * After any change the engine goes back to tier 1, so steps come out roughly easiest first.
  */
 import { EdgeState, type Grid, NONE } from "./grid.ts";
