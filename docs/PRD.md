@@ -104,7 +104,7 @@ Priority: **P0** = required for launch, **P1** = soon after.
 
 ## 8. Non-functional requirements
 
-- NFR-1 Performance: generation p95 for ≤ 30×30 under 5 s; larger sizes are asynchronous with progress. Verification of a submitted 100×100 puzzle completes or returns `unknown` within a fixed time budget (default 30 s).
+- NFR-1 Performance: generation runs as a background job with progress (FR-11), so it may take longer than a request (decided 2026-10-26): p95 under 10 s for ≤ 30×30 and under 30 s at 40×40, and a 100×100 finishes within the worker's generation time limit (default 30 min). Verification of a submitted 100×100 puzzle completes or returns `unknown` within a fixed time budget (default 30 s).
 - NFR-2 Responsiveness: usable at 360 px width with no horizontal page scroll; 60 fps drawing on mid-range phones for grids up to 30×30; large grids use canvas rendering and viewport culling.
 - NFR-3 Correctness: solver, verifier, and generator are covered by unit and property tests; CI blocks merges on failure.
 - NFR-4 Security: argon2id, CSRF protection, secure cookies, rate limits on auth endpoints, parameterized queries, input validation of puzzle uploads.
