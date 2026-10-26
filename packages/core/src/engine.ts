@@ -57,6 +57,8 @@ export interface Mark {
   readonly ends: number;
   readonly corners: number;
   readonly closed: boolean;
+  /** `cornerScan` then, so undoing past the first corner pass makes the next one scan again. */
+  readonly scan: number;
 }
 
 /*
@@ -311,6 +313,7 @@ export class Engine {
       ends: this.endTrail.length,
       corners: this.cornerTrail.length,
       closed: this.closed,
+      scan: this.cornerScan,
     };
   }
 
@@ -333,6 +336,7 @@ export class Engine {
       edges[e] = Unknown;
     }
     this.closed = m.closed;
+    if (m.scan < this.cornerScan) this.cornerScan = m.scan;
     this.clearQueue();
     while (this.cqLen > 0) this.dequeueCorner();
     if (this.cornerSeen > m.edges) this.cornerSeen = m.edges;
@@ -562,11 +566,8 @@ export class Engine {
    * Returns 0 when nothing is left to do, -1 on a contradiction.
    */
   private cornerPass(): number {
-    // Hazard: the first pass scans every corner dot once (`cornerScan`) and that is never redone.
-    // A mark taken before this first pass and undone past it would restore the default masks but
-    // leave the scan finished, so those dots would never be visited again. Nothing does this today
-    // (the verifier's first pass is at its root, probes run tier 1 only); WT18, if it runs corners
-    // in probes or marks before the first pass, must reset `cornerScan` in `undo`.
+    // The first pass scans every corner dot once (`cornerScan`). `undo` puts the scan back to where
+    // it was at the mark, so a mark taken before (or during) that scan scans those dots again.
     if (this.cornerScan < 0) this.initCorners();
     const { grid, edgeTrail } = this;
     const C = grid.cellCount;
