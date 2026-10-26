@@ -26,10 +26,6 @@ import { NO_CLUE, type Puzzle } from "./puzzle.ts";
 import type { EdgeChange, RuleId, Step } from "./rules.ts";
 
 const { Unknown, Line, Cross } = EdgeState;
-/** Empty arrays for scratch that is allocated on first use (zero-length, so sharing is safe). */
-const NO_INT32 = new Int32Array(0);
-const NO_UINT8 = new Uint8Array(0);
-const NO_NUMBERS: readonly number[] = [];
 
 /** Thrown to stop the engine early: out of time or search nodes, or `maxSteps` reached. */
 export class SolverStop extends Error {
@@ -218,23 +214,23 @@ export class Engine {
    * group's edges as a list (`groupFirst`, `groupNext`, `groupLast`, `groupSize`), the hash table
    * from a pair of faces to its group, and a count per dot.
    */
-  private bcDisc = NO_INT32;
-  private bcLow = NO_INT32;
-  private bcSlot = NO_UINT8;
-  private bcVia = NO_INT32;
-  private bcEdges = NO_INT32;
-  private blockOf = NO_INT32;
-  private faceParent = NO_INT32;
-  private groupNext = NO_INT32;
-  private groupFirst = NO_INT32;
-  private groupLast = NO_INT32;
-  private groupSize = NO_INT32;
-  private hashKey = NO_INT32;
-  private hashGroup = NO_INT32;
-  private dotTally = NO_UINT8;
+  private bcDisc = new Int32Array(0);
+  private bcLow = new Int32Array(0);
+  private bcSlot = new Uint8Array(0);
+  private bcVia = new Int32Array(0);
+  private bcEdges = new Int32Array(0);
+  private blockOf = new Int32Array(0);
+  private faceParent = new Int32Array(0);
+  private groupNext = new Int32Array(0);
+  private groupFirst = new Int32Array(0);
+  private groupLast = new Int32Array(0);
+  private groupSize = new Int32Array(0);
+  private hashKey = new Int32Array(0);
+  private hashGroup = new Int32Array(0);
+  private dotTally = new Uint8Array(0);
   /** While steps are recorded: why `connected` last failed (a group `twoExits` cannot cross). */
-  private exitCells: readonly number[] = NO_NUMBERS;
-  private exitDots: readonly number[] = NO_NUMBERS;
+  private exitCells: readonly number[] = [];
+  private exitDots: readonly number[] = [];
   /**
    * Corner masks, 4 per cell; 0 for cells without a 1, 2 or 3. These and the other corner arrays
    * are allocated on the first corner pass, so a puzzle the first tier finishes pays nothing.
