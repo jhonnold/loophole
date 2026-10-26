@@ -13,8 +13,12 @@
  *    there can still take, narrowed at the clue and at the dot in turn (a worklist)
  * 4. inside/outside parity, a union-find over cells (global); when it decides nothing,
  *    colouring (optional): the relations each 1, 2 or 3 forces among its neighbours' sides, added
- *    to the same union-find (global); then a connectivity check that only detects contradictions
- * 5. lookahead: assume an edge, run tier 1, and take the opposite on a contradiction
+ *    to the same union-find (global); then connectivity (optional): the loop is one cycle, so it
+ *    stays inside one block of the edges that are not crossed, and it uses both or neither of two
+ *    edges between the same two faces (global). Without that group, a connectivity check that only
+ *    detects contradictions
+ * 5. lookahead: assume an edge, run tier 1 (and with `probeCorners`, which `deepen` turns on, the
+ *    corner rules too), and take the opposite on a contradiction
  * After any change the engine goes back to tier 1, so steps come out roughly easiest first.
  */
 import { EdgeState, type Grid, NONE } from "./grid.ts";
@@ -57,6 +61,8 @@ export interface Mark {
   readonly ends: number;
   readonly corners: number;
   readonly closed: boolean;
+  /** `cornerScan` then, so undoing past the first corner pass makes the next one scan again. */
+  readonly scan: number;
 }
 
 /*
@@ -117,6 +123,14 @@ export interface EngineOptions {
    * deduction.
    */
   readonly colourLast?: boolean;
+  /** Run the connectivity rules (rule group "connectivity"). Default true. */
+  readonly connectivity?: boolean;
+  /**
+   * Lookahead probes run the corner rules after tier 1, when the corners group is on. Default false:
+   * `solve` keeps tier-1 probes (they cost about 2× in generation for little gain, DECISIONS WT18);
+   * the verifier turns them on with `deepen`.
+   */
+  readonly probeCorners?: boolean;
 }
 
 export class Engine {
@@ -190,7 +204,33 @@ export class Engine {
   private readonly seen: Uint8Array;
   private readonly order: Int32Array;
   private readonly stack: Int32Array;
+  /** Edges `connected` treats as crossed: the group `twoExits` is checking. */
+  private readonly inGroup: Uint8Array;
   private lookCursor = 0;
+  /**
+   * Connectivity scratch, allocated on the first connectivity pass (`initConnect`). Blocks: the
+   * DFS's discovery times, low points, next `dotEdges` slot and tree edge in (its stack of dots is
+   * `stack`), the stack of edges, and each edge's block. Two exits: the faces' union-find, each
+   * group's edges as a list (`groupFirst`, `groupNext`, `groupLast`, `groupSize`), the hash table
+   * from a pair of faces to its group, and a count per dot.
+   */
+  private bcDisc = new Int32Array(0);
+  private bcLow = new Int32Array(0);
+  private bcSlot = new Uint8Array(0);
+  private bcVia = new Int32Array(0);
+  private bcEdges = new Int32Array(0);
+  private blockOf = new Int32Array(0);
+  private faceParent = new Int32Array(0);
+  private groupNext = new Int32Array(0);
+  private groupFirst = new Int32Array(0);
+  private groupLast = new Int32Array(0);
+  private groupSize = new Int32Array(0);
+  private hashKey = new Int32Array(0);
+  private hashGroup = new Int32Array(0);
+  private dotTally = new Uint8Array(0);
+  /** While steps are recorded: why `connected` last failed (a group `twoExits` cannot cross). */
+  private exitCells: readonly number[] = [];
+  private exitDots: readonly number[] = [];
   /**
    * Corner masks, 4 per cell; 0 for cells without a 1, 2 or 3. These and the other corner arrays
    * are allocated on the first corner pass, so a puzzle the first tier finishes pays nothing.
@@ -217,6 +257,8 @@ export class Engine {
   private readonly cornersOn: boolean;
   private readonly colourOn: boolean;
   private readonly colourLast: boolean;
+  private connectOn: boolean;
+  private probeCorners: boolean;
 
   constructor(
     puzzle: Puzzle,
@@ -226,6 +268,8 @@ export class Engine {
     this.cornersOn = options.corners ?? true;
     this.colourOn = options.colouring ?? true;
     this.colourLast = options.colourLast ?? false;
+    this.connectOn = options.connectivity ?? true;
+    this.probeCorners = options.probeCorners ?? false;
     const grid = puzzle.grid;
     this.grid = grid;
     this.clues = puzzle.clues;
@@ -242,6 +286,7 @@ export class Engine {
     this.ufParity = new Uint8Array(grid.cellCount + 1);
     this.seen = new Uint8Array(grid.dotCount);
     this.stack = new Int32Array(grid.dotCount);
+    this.inGroup = new Uint8Array(grid.edgeCount);
     this.order = readingOrder(grid);
   }
 
@@ -291,7 +336,11 @@ export class Engine {
         if (c < 0) return false;
         if (c > 0) continue;
       }
-      if (!this.connected()) return false;
+      if (this.connectOn) {
+        const k = this.connectivity();
+        if (k < 0) return false;
+        if (k > 0) continue;
+      } else if (!this.connected()) return false;
       if (!lookahead) return true;
       const q = this.lookahead();
       if (q < 0) return false;
@@ -305,12 +354,23 @@ export class Engine {
     }
   }
 
+  /**
+   * From now on the connectivity rules run and lookahead probes run the corner rules too (when the
+   * corners group is on). The verifier, which starts without both, calls this when its search runs
+   * long (see `verify`).
+   */
+  deepen(): void {
+    this.connectOn = true;
+    this.probeCorners = true;
+  }
+
   mark(): Mark {
     return {
       edges: this.edgeTrail.length,
       ends: this.endTrail.length,
       corners: this.cornerTrail.length,
       closed: this.closed,
+      scan: this.cornerScan,
     };
   }
 
@@ -333,6 +393,7 @@ export class Engine {
       edges[e] = Unknown;
     }
     this.closed = m.closed;
+    if (m.scan < this.cornerScan) this.cornerScan = m.scan;
     this.clearQueue();
     while (this.cqLen > 0) this.dequeueCorner();
     if (this.cornerSeen > m.edges) this.cornerSeen = m.edges;
@@ -562,11 +623,8 @@ export class Engine {
    * Returns 0 when nothing is left to do, -1 on a contradiction.
    */
   private cornerPass(): number {
-    // Hazard: the first pass scans every corner dot once (`cornerScan`) and that is never redone.
-    // A mark taken before this first pass and undone past it would restore the default masks but
-    // leave the scan finished, so those dots would never be visited again. Nothing does this today
-    // (the verifier's first pass is at its root, probes run tier 1 only); WT18, if it runs corners
-    // in probes or marks before the first pass, must reset `cornerScan` in `undo`.
+    // The first pass scans every corner dot once (`cornerScan`). `undo` puts the scan back to where
+    // it was at the mark, so a mark taken before (or during) that scan scans those dots again.
     if (this.cornerScan < 0) this.initCorners();
     const { grid, edgeTrail } = this;
     const C = grid.cellCount;
@@ -1294,12 +1352,15 @@ export class Engine {
   }
 
   /**
-   * False when the loop cannot be one piece: walking from a line along edges that are not crossed
-   * must reach every other line and an open side of every clue above 0. Does nothing before the
-   * first line is drawn (a clue's sides can then lie in different regions).
+   * False when the loop cannot be one piece: walking from a line along edges that are neither
+   * crossed nor in `inGroup` (a group `twoExits` tries crossed) must reach every other line and
+   * such a side of every clue above 0. Does nothing before the first line is drawn (a clue's sides
+   * can then lie in different regions). While steps are recorded, a false leaves the reason in
+   * `exitCells` and `exitDots`: the first line's dot and the dot of a line it did not reach, or
+   * that first dot and a clue it did not reach.
    */
   private connected(): boolean {
-    const { grid, edges, clues, seen, stack } = this;
+    const { grid, edges, clues, seen, stack, inGroup } = this;
     const first = edges.indexOf(Line);
     if (first < 0) return true;
     const seed = grid.edgeDots[first * 2];
@@ -1311,36 +1372,345 @@ export class Engine {
       const d = stack[--top];
       for (let j = 0; j < 4; j++) {
         const e = grid.dotEdges[d * 4 + j];
-        if (e === NONE || edges[e] === Cross) continue;
-        const o = grid.edgeDots[e * 2] === d ? grid.edgeDots[e * 2 + 1] : grid.edgeDots[e * 2];
+        if (e === NONE || edges[e] === Cross || inGroup[e]) continue;
+        const o = otherDot(grid, e, d);
         if (!seen[o]) {
           seen[o] = 1;
           stack[top++] = o;
         }
       }
     }
-    for (let e = 0; e < grid.edgeCount; e++) {
-      if (edges[e] === Line && !seen[grid.edgeDots[e * 2]]) return false;
+    for (let e = first + 1; e < grid.edgeCount; e++) {
+      if (edges[e] !== Line || seen[grid.edgeDots[e * 2]]) continue;
+      if (this.steps !== null) {
+        this.exitCells = [];
+        this.exitDots = [seed, grid.edgeDots[e * 2]].sort((a, b) => a - b);
+      }
+      return false;
     }
     for (let i = 0; i < grid.cellCount; i++) {
       if (clues[i] <= 0) continue;
       let reached = false;
       for (let j = 0; j < 4 && !reached; j++) {
         const e = grid.cellEdges[i * 4 + j];
-        reached = edges[e] !== Cross && seen[grid.edgeDots[e * 2]] === 1;
+        reached = edges[e] !== Cross && !inGroup[e] && seen[grid.edgeDots[e * 2]] === 1;
       }
-      if (!reached) return false;
+      if (reached) continue;
+      if (this.steps !== null) {
+        this.exitCells = [i];
+        this.exitDots = [seed];
+      }
+      return false;
     }
     return true;
+  }
+
+  // --- tier 4c: connectivity ---------------------------------------------------------------
+
+  /**
+   * The loop is one simple cycle in the graph of dots and the edges that are not crossed. Returns
+   * the number of edges set, or -1 on a contradiction. Does nothing before the first line.
+   *
+   * 1. Cut off: a cycle lies inside one block (biconnected component) of that graph. So every line
+   *    is in one block, every clue above 0 has a side there that is not crossed, and every open
+   *    edge in another block is crossed: the loop could only reach it through one dot (or not at
+   *    all), and it passes each dot once.
+   * 2. Two exits (`twoExits`), when the first decides nothing.
+   */
+  private connectivity(): number {
+    const { grid, edges, clues } = this;
+    if (this.lineCount === 0) return 0;
+    if (this.blockOf.length === 0) this.initConnect();
+    this.blocks();
+    const { blockOf } = this;
+    let target = NONE;
+    for (let e = 0; e < grid.edgeCount; e++) {
+      if (edges[e] !== Line) continue;
+      if (target === NONE) target = blockOf[e];
+      else if (blockOf[e] !== target) return -1;
+    }
+    for (let i = 0; i < grid.cellCount; i++) {
+      if (clues[i] <= 0) continue;
+      let reached = false;
+      for (let j = 0; j < 4 && !reached; j++) {
+        const e = grid.cellEdges[i * 4 + j];
+        reached = edges[e] !== Cross && blockOf[e] === target;
+      }
+      if (!reached) return -1;
+    }
+    const set = this.cutOff(target);
+    if (set !== 0) return set;
+    return this.twoExits();
+  }
+
+  private initConnect(): void {
+    const { dotCount: D, edgeCount: E, cellCount: C } = this.grid;
+    this.bcDisc = new Int32Array(D);
+    this.bcLow = new Int32Array(D);
+    this.bcSlot = new Uint8Array(D);
+    this.bcVia = new Int32Array(D);
+    this.bcEdges = new Int32Array(E);
+    this.blockOf = new Int32Array(E);
+    this.faceParent = new Int32Array(C + 1);
+    this.groupNext = new Int32Array(E);
+    this.groupFirst = new Int32Array(E);
+    this.groupLast = new Int32Array(E);
+    this.groupSize = new Int32Array(E);
+    let table = 2;
+    while (table < 2 * E) table *= 2;
+    this.hashKey = new Int32Array(table);
+    this.hashGroup = new Int32Array(table);
+    this.dotTally = new Uint8Array(D);
+  }
+
+  /**
+   * Numbers the blocks (biconnected components) of the graph of dots and the edges that are not
+   * crossed into `blockOf` (NONE for crossed edges): Tarjan's algorithm, with explicit stacks.
+   */
+  private blocks(): void {
+    const { grid, edges, bcDisc: disc, bcLow: low, bcSlot: slot, bcVia: via } = this;
+    const { stack: dots, bcEdges: stack, blockOf } = this;
+    disc.fill(0);
+    blockOf.fill(NONE);
+    let time = 0;
+    let blocks = 0;
+    for (let r = 0; r < grid.dotCount; r++) {
+      if (disc[r] !== 0) continue;
+      let top = 0;
+      let etop = 0;
+      dots[top++] = r;
+      disc[r] = low[r] = ++time;
+      slot[r] = 0;
+      via[r] = NONE;
+      while (top > 0) {
+        const v = dots[top - 1];
+        if (slot[v] < 4) {
+          const e = grid.dotEdges[v * 4 + slot[v]++];
+          if (e === NONE || edges[e] === Cross || e === via[v]) continue;
+          const w = otherDot(grid, e, v);
+          if (disc[w] === 0) {
+            stack[etop++] = e;
+            via[w] = e;
+            disc[w] = low[w] = ++time;
+            slot[w] = 0;
+            dots[top++] = w;
+          } else if (disc[w] < disc[v]) {
+            stack[etop++] = e;
+            if (disc[w] < low[v]) low[v] = disc[w];
+          }
+          continue;
+        }
+        top--;
+        const f = via[v];
+        if (f === NONE) continue;
+        const u = otherDot(grid, f, v);
+        if (low[v] < low[u]) low[u] = low[v];
+        if (low[v] >= disc[u]) {
+          // u separates v's subtree: the edges stacked since f form one block.
+          let g: number;
+          do {
+            g = stack[--etop];
+            blockOf[g] = blocks;
+          } while (g !== f);
+          blocks++;
+        }
+      }
+    }
+  }
+
+  /**
+   * Crosses the open edges outside block `target`. While steps are recorded, one step: the edges
+   * hanging at the first dot of the block that has some, with that dot as the reason, or else the
+   * edges no line reaches, with no reason.
+   */
+  private cutOff(target: number): number {
+    const { grid, edges, blockOf, seen } = this;
+    const at = this.steps === null ? NONE : this.hangingAt(target);
+    if (at === NONE) this.begin("unreachable", [], []);
+    else this.begin("cut-off", [], [at]);
+    let set = 0;
+    for (let e = 0; e < grid.edgeCount; e++) {
+      if (edges[e] !== Unknown || blockOf[e] === target) continue;
+      if (at !== NONE && !seen[grid.edgeDots[e * 2]] && !seen[grid.edgeDots[e * 2 + 1]]) continue;
+      if (!this.assign(e, Cross)) return -1;
+      set++;
+    }
+    this.commit();
+    return set;
+  }
+
+  /**
+   * The first dot of block `target` where an edge of another block that is not crossed begins, or
+   * NONE. Marks in `seen` the dots reached from it over such edges: what hangs there, which the
+   * loop could only reach through that dot. Those edges are all open, since every line is in the
+   * block.
+   */
+  private hangingAt(target: number): number {
+    const { grid, edges, blockOf, seen, stack } = this;
+    for (let d = 0; d < grid.dotCount; d++) {
+      let inside = false;
+      let outside = false;
+      for (let j = 0; j < 4; j++) {
+        const e = grid.dotEdges[d * 4 + j];
+        if (e === NONE || edges[e] === Cross) continue;
+        if (blockOf[e] === target) inside = true;
+        else outside = true;
+      }
+      if (!inside || !outside) continue;
+      seen.fill(0);
+      seen[d] = 1;
+      stack[0] = d;
+      let top = 1;
+      while (top > 0) {
+        const v = stack[--top];
+        for (let j = 0; j < 4; j++) {
+          const e = grid.dotEdges[v * 4 + j];
+          if (e === NONE || edges[e] === Cross || blockOf[e] === target) continue;
+          const o = otherDot(grid, e, v);
+          if (!seen[o]) {
+            seen[o] = 1;
+            stack[top++] = o;
+          }
+        }
+      }
+      return d;
+    }
+    return NONE;
+  }
+
+  /**
+   * Two exits. Faces are the regions of cells (and the outside) joined across crossed edges. Two
+   * edges that are not crossed, between the same two faces, are both lines or both not: a closed
+   * curve through the two faces meets the graph only at those two edges, and the loop crosses any
+   * closed curve an even number of times. So the open edges between two faces (a group; parity has
+   * decided the rest) are all lines or all crossed. With all crossed, the loop would lie in one
+   * part (piece) of the graph without them; when no piece holds every line and a side that is not
+   * crossed of every clue above 0, they are all lines. Runs only once a line is drawn, after the
+   * cut-off rule found nothing. Returns the number of edges set, or -1 on a contradiction.
+   */
+  private twoExits(): number {
+    const { grid, edges, faceParent: fp, groupNext, groupFirst, groupLast, groupSize } = this;
+    const { hashKey, hashGroup } = this;
+    const C = grid.cellCount;
+    for (let x = 0; x <= C; x++) fp[x] = x;
+    for (let e = 0; e < grid.edgeCount; e++) {
+      if (edges[e] !== Cross) continue;
+      const a = this.faceFind(sideNode(grid, e, 0));
+      const b = this.faceFind(sideNode(grid, e, 1));
+      if (a !== b) fp[a] = b;
+    }
+    // Groups in order of their first edge, found with a hash table on the pair of faces (linear
+    // probing); groupNext links each group's edges in edge order.
+    hashKey.fill(NONE);
+    const mask = hashKey.length - 1;
+    let groups = 0;
+    for (let e = 0; e < grid.edgeCount; e++) {
+      if (edges[e] !== Unknown) continue;
+      const a = this.faceFind(sideNode(grid, e, 0));
+      const b = this.faceFind(sideNode(grid, e, 1));
+      const key = a < b ? a * (C + 1) + b : b * (C + 1) + a;
+      let h = Math.imul(key, 0x9e3779b1) & mask;
+      while (hashKey[h] !== NONE && hashKey[h] !== key) h = (h + 1) & mask;
+      groupNext[e] = NONE;
+      if (hashKey[h] === NONE) {
+        hashKey[h] = key;
+        hashGroup[h] = groups;
+        groupFirst[groups] = e;
+        groupLast[groups] = e;
+        groupSize[groups] = 1;
+        groups++;
+      } else {
+        const g = hashGroup[h];
+        groupNext[groupLast[g]] = e;
+        groupLast[g] = e;
+        groupSize[g]++;
+      }
+    }
+    let set = 0;
+    for (let g = 0; g < groups; g++) {
+      if (groupSize[g] < 2 || this.isChain(g) || this.groupFeasible(g)) continue;
+      if (this.recording()) this.begin("two-exits", this.exitCells, this.exitDots);
+      for (let e = groupFirst[g]; e !== NONE; e = groupNext[e]) {
+        if (!this.assign(e, Line)) return -1;
+      }
+      this.commit();
+      set += groupSize[g];
+      // While steps are recorded, one step a pass, so the cheaper rules follow it up first.
+      if (this.steps !== null) return set;
+    }
+    return set;
+  }
+
+  private faceFind(x: number): number {
+    const fp = this.faceParent;
+    while (fp[x] !== x) {
+      fp[x] = fp[fp[x]];
+      x = fp[x];
+    }
+    return x;
+  }
+
+  /**
+   * Whether `connected` still holds with every edge of group g crossed. When not, and steps are
+   * recorded, its reason is left in `exitCells` and `exitDots`.
+   */
+  private groupFeasible(g: number): boolean {
+    const { inGroup, groupFirst, groupNext } = this;
+    for (let e = groupFirst[g]; e !== NONE; e = groupNext[e]) inGroup[e] = 1;
+    const ok = this.connected();
+    for (let e = groupFirst[g]; e !== NONE; e = groupNext[e]) inGroup[e] = 0;
+    return ok;
+  }
+
+  /**
+   * Whether group g is a chain: its edges form one path (or a cycle through one other dot) whose
+   * inner dots have no other edge that is not crossed. Its pieces are then those inner dots, which
+   * hold nothing, and the rest of the graph, so with every line already in the rest it can only be
+   * needed for a clue whose open sides all lie on it; clue-needs-all and dot-continue then reach
+   * the same edges (or the board has no solution). Chains are most groups, so they are skipped.
+   */
+  private isChain(g: number): boolean {
+    const { grid, dotTally, groupFirst, groupNext } = this;
+    for (let e = groupFirst[g]; e !== NONE; e = groupNext[e]) {
+      dotTally[grid.edgeDots[e * 2]]++;
+      dotTally[grid.edgeDots[e * 2 + 1]]++;
+    }
+    let inner = 0;
+    for (let e = groupFirst[g]; e !== NONE; e = groupNext[e]) {
+      for (let k = 0; k < 2; k++) {
+        const d = grid.edgeDots[e * 2 + k];
+        if (dotTally[d] === 2 && this.openDegree(d) === 2) {
+          inner++;
+          dotTally[d] = 3;
+        }
+      }
+    }
+    for (let e = groupFirst[g]; e !== NONE; e = groupNext[e]) {
+      dotTally[grid.edgeDots[e * 2]] = 0;
+      dotTally[grid.edgeDots[e * 2 + 1]] = 0;
+    }
+    return inner === this.groupSize[g] - 1;
+  }
+
+  /** Edges at dot `d` that are not crossed. */
+  private openDegree(d: number): number {
+    let n = 0;
+    for (let j = 0; j < 4; j++) {
+      const e = this.grid.dotEdges[d * 4 + j];
+      if (e !== NONE && this.edges[e] !== Cross) n++;
+    }
+    return n;
   }
 
   // --- tier 5: lookahead --------------------------------------------------------------------
 
   /**
-   * Tries each open edge both ways, running only the worklist rules after each assumption. If
-   * one way leads to a contradiction the edge takes the other state. Scans round-robin from where
-   * the last scan stopped. Returns 1 after a deduction, 0 when a full scan finds none, -1 when the
-   * deduction itself contradicts.
+   * Tries each open edge both ways, running the worklist rules and, when the corners group is on
+   * and `probeCorners` (the verifier after `deepen`), the corner rules after each assumption (never
+   * parity, colouring, connectivity or lookahead: those cost O(edges) each). If one way leads to a
+   * contradiction the edge takes the other state. Scans round-robin from where the last scan
+   * stopped. Returns 1 after a deduction, 0 when a full scan finds none, -1 when the deduction
+   * itself contradicts.
    */
   private lookahead(): number {
     const E = this.grid.edgeCount;
@@ -1353,7 +1723,7 @@ export class Engine {
         this.probes++;
         const m = this.mark();
         this.steps = null;
-        const ok = this.set(e, assumed) && this.local();
+        const ok = this.set(e, assumed) && this.probe();
         const site = this.conflict;
         this.steps = recording;
         this.undo(m);
@@ -1371,6 +1741,22 @@ export class Engine {
       }
     }
     return 0;
+  }
+
+  /**
+   * A probe's rules: tier 1 and, when probes run them, the corner rules, to their joint fixpoint.
+   * False on a contradiction. Corner masks are trailed, so `undo` restores them; lookahead runs only
+   * once a corner pass has found nothing, so the first pass's scan is always finished here and the
+   * corner queue is empty at the probe's mark (`undo` drains it).
+   */
+  private probe(): boolean {
+    for (;;) {
+      if (!this.local()) return false;
+      if (this.closed || !this.cornersOn || !this.probeCorners) return true;
+      const c = this.cornerPass();
+      if (c < 0) return false;
+      if (c === 0) return true;
+    }
   }
 
   // --- helpers ------------------------------------------------------------------------------
@@ -1475,6 +1861,12 @@ export class Engine {
   private clearQueue(): void {
     while (this.qLen > 0) this.dequeue();
   }
+}
+
+/** The other end of edge `e` from dot `d`. */
+function otherDot(grid: Grid, e: number, d: number): number {
+  const a = grid.edgeDots[e * 2];
+  return a === d ? grid.edgeDots[e * 2 + 1] : a;
 }
 
 /** The node across side `j` (0 top, 1 right, 2 bottom, 3 left) of cell `i`: a cell, or outside. */

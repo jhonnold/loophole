@@ -13,7 +13,9 @@ import { verify } from "./verify.ts";
  * id means a rule got weaker. WT15's premature-loop fix solved 3; WT16's corner rules 23; WT17's
  * colouring 29. `SOLVED_WITHOUT_COLOURING` is the same with the colouring group left out (WT16's
  * 23), `SOLVED_WITHOUT_GROUPS` with every group left out (WT15's three). Colouring alone, without
- * the corners, solves the same 29 as every group.
+ * the corners, solves the same 29 as every group. WT18's connectivity group adds none of these
+ * (lookahead found them already); without lookahead it adds 3: every group solves
+ * `SOLVED_WITHOUT_LOOKAHEAD`, the groups before WT18 `SOLVED_WITHOUT_LOOKAHEAD_WT17`.
  */
 const SOLVED: string[] = [
   "clue-gaps-5-3#16",
@@ -76,6 +78,29 @@ const SOLVED_WITHOUT_GROUPS: string[] = [
   "clue-gaps-10-8#26",
   "clue-gaps-10-8#27",
 ];
+const SOLVED_WITHOUT_LOOKAHEAD: string[] = [
+  "clue-gaps-5-41#4",
+  "clue-gaps-5-41#9",
+  "clue-gaps-5-44#16",
+  "clue-gaps-5-81#1",
+  "clue-gaps-5-81#5",
+  "clue-gaps-5-95#3",
+  "clue-gaps-5-95#18",
+  "clue-gaps-10-0#77",
+  "clue-gaps-10-3#41",
+  "clue-gaps-10-4#35",
+  "clue-gaps-10-7#60",
+];
+const SOLVED_WITHOUT_LOOKAHEAD_WT17: string[] = [
+  "clue-gaps-5-41#4",
+  "clue-gaps-5-41#9",
+  "clue-gaps-5-44#16",
+  "clue-gaps-5-81#1",
+  "clue-gaps-5-95#18",
+  "clue-gaps-10-3#41",
+  "clue-gaps-10-4#35",
+  "clue-gaps-10-7#60",
+];
 
 const corpus = clueGapCorpus();
 
@@ -106,19 +131,25 @@ describe("clue-gap corpus", () => {
       expect(c.stuck.includes(EdgeState.Unknown)).toBe(true);
       expect(disagreements(c.stuck, solution)).toBe(0);
       expect(disagreements(solve(c.puzzle).edges, solution)).toBe(0);
-      for (const rules of [["corners"], ["colouring"], []] as const) {
+      for (const rules of [["corners"], ["colouring"], ["connectivity"], []] as const) {
         expect(disagreements(solve(c.puzzle, { rules }).edges, solution)).toBe(0);
       }
     });
   }
 
   test(`the rule solver solves exactly the entries in SOLVED (${SOLVED.length} today)`, () => {
-    const solvedWith = (rules?: readonly RuleGroup[]) =>
-      corpus.filter((c) => solve(c.puzzle, { rules }).status === "solved").map((c) => c.id);
+    const solvedWith = (rules?: readonly RuleGroup[], lookahead = true) =>
+      corpus
+        .filter((c) => solve(c.puzzle, { rules, lookahead }).status === "solved")
+        .map((c) => c.id);
     expect(solvedWith()).toEqual(SOLVED);
     expect(solvedWith(["colouring"])).toEqual(SOLVED);
+    expect(solvedWith(["corners", "colouring"])).toEqual(SOLVED);
     expect(solvedWith(["corners"])).toEqual(SOLVED_WITHOUT_COLOURING);
+    expect(solvedWith(["corners", "connectivity"])).toEqual(SOLVED_WITHOUT_COLOURING);
     expect(solvedWith([])).toEqual(SOLVED_WITHOUT_GROUPS);
+    expect(solvedWith(undefined, false)).toEqual(SOLVED_WITHOUT_LOOKAHEAD);
+    expect(solvedWith(["corners", "colouring"], false)).toEqual(SOLVED_WITHOUT_LOOKAHEAD_WT17);
   });
 
   test("from a correct partial board, with any rule groups, nothing contradicts the solution", () => {

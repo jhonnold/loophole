@@ -30,6 +30,9 @@ export const RULE_IDS = [
   "colour-2",
   "colour-3",
   "colour-chain",
+  "unreachable",
+  "cut-off",
+  "two-exits",
   "lookahead",
 ] as const;
 
@@ -39,7 +42,7 @@ export type RuleId = (typeof RULE_IDS)[number];
  * Groups of rules that `solve` can leave out (`SolveOptions.rules`), so a difficulty level can use
  * a smaller set. The rules outside every group always run; lookahead has its own option.
  */
-export const RULE_GROUPS = ["corners", "colouring"] as const;
+export const RULE_GROUPS = ["corners", "colouring", "connectivity"] as const;
 
 export type RuleGroup = (typeof RULE_GROUPS)[number];
 
@@ -55,6 +58,7 @@ export const GROUP_RULES: Readonly<Record<RuleGroup, readonly RuleId[]>> = {
     "corner-chain",
   ],
   colouring: ["colour-1", "colour-2", "colour-3", "colour-chain"],
+  connectivity: ["unreachable", "cut-off", "two-exits"],
 };
 
 export const RULE_TEXT: Readonly<Record<RuleId, string>> = {
@@ -102,6 +106,12 @@ export const RULE_TEXT: Readonly<Record<RuleId, string>> = {
     "Just one cell beside a 3 is on the same side of the loop as it (off the board is outside), which settles this edge.",
   "colour-chain":
     "Working out which side of the loop the cells beside the highlighted clues are on leaves one way for this edge.",
+  unreachable:
+    "No path of open edges leads from the loop's lines to these edges, so the loop can't use them: they are crossed.",
+  "cut-off":
+    "The loop could get to these edges only through this dot, and it can't pass through a dot twice, so they're crossed.",
+  "two-exits":
+    "The loop must get from one side of these edges to the other, and uses all of them or none, so it uses them all.",
   lookahead:
     "Trying the other choice for this edge quickly leads to a contradiction, so it must be this way.",
 };
@@ -132,6 +142,9 @@ export const RULE_TITLE: Readonly<Record<RuleId, string>> = {
   "colour-2": "Sides around a 2",
   "colour-3": "Sides around a 3",
   "colour-chain": "Sides pass along",
+  unreachable: "Out of reach",
+  "cut-off": "One way in",
+  "two-exits": "Only ways across",
   lookahead: "Try and see",
 };
 

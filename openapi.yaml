@@ -206,6 +206,9 @@ components:
                 - colour-2
                 - colour-3
                 - colour-chain
+                - unreachable
+                - cut-off
+                - two-exits
                 - lookahead
             changes:
               type: array

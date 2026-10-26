@@ -5,6 +5,9 @@ import type { Puzzle } from "./puzzle.ts";
 /** Default verification time limit (PRD NFR-1). */
 export const DEFAULT_VERIFY_TIME_LIMIT_MS = 30_000;
 
+/** Default `VerifyOptions.deepenAfterNodes` (DECISIONS, WT18). */
+export const DEFAULT_DEEPEN_AFTER_NODES = 200;
+
 /**
  * - `unique`: exactly one solution.
  * - `none`: no solution.
@@ -20,6 +23,13 @@ export interface VerifyOptions {
   readonly now?: () => number;
   /** Give up with `unknown` after this many search nodes. Default no limit. */
   readonly maxNodes?: number;
+  /**
+   * When the search has visited this many nodes without finishing, start again from the root with
+   * the connectivity rules and lookahead probes that also run the corner rules: they cost more per
+   * pass but can save most of a long search. The answer is the same either way. Default
+   * `DEFAULT_DEEPEN_AFTER_NODES`.
+   */
+  readonly deepenAfterNodes?: number;
 }
 
 export interface VerifyStats {
@@ -54,12 +64,25 @@ export function verify(puzzle: Puzzle, options: VerifyOptions = {}): VerifyResul
     options.maxNodes ?? Number.POSITIVE_INFINITY,
   );
   // Colouring after lookahead at the root: no steps are read here, and it saves a colouring pass
-  // before every lookahead deduction (DECISIONS, WT17).
-  const engine = new Engine(puzzle, budget, { colourLast: true });
+  // before every lookahead deduction (DECISIONS, WT17). The connectivity rules and corner probes
+  // cost more than they save here until the search runs long (DECISIONS, WT18).
+  const engine = new Engine(puzzle, budget, { colourLast: true, connectivity: false });
   const solutions: Uint8Array[] = [];
   let status: VerifyStatus;
   try {
-    if (engine.solveRoot(true)) search(engine, budget, solutions);
+    if (engine.solveRoot(true)) {
+      const root = engine.mark();
+      const limit = options.deepenAfterNodes ?? DEFAULT_DEEPEN_AFTER_NODES;
+      if (!search(engine, budget, solutions, limit)) {
+        // A long search: start again from the root with the connectivity rules and deeper
+        // lookahead. The search finds solutions in the same order either way (the first in
+        // reading order, cross before line), so it finds the same ones again.
+        engine.undo(root);
+        solutions.length = 0;
+        engine.deepen();
+        if (engine.propagate(true)) search(engine, budget, solutions, Number.POSITIVE_INFINITY);
+      }
+    }
     status = solutions.length === 0 ? "none" : solutions.length === 1 ? "unique" : "multiple";
   } catch (err) {
     if (!(err instanceof SolverStop)) throw err;
@@ -84,16 +107,20 @@ interface Frame {
  * on the first open edge in reading order, cross first, and runs the rules without lookahead at
  * every node. Edges before a node's branch position are all decided, so the next scan starts
  * there. Uses an explicit stack because a 100×100 board can need thousands of nested branches.
+ * Returns false, leaving the engine mid-search, when it is about to visit node `limit` + 1 (counted
+ * from its start); true when it is done.
  */
-function search(engine: Engine, budget: Budget, solutions: Uint8Array[]): void {
+function search(engine: Engine, budget: Budget, solutions: Uint8Array[], limit: number): boolean {
+  const end = budget.nodes + limit;
   const stack: Frame[] = [];
   let ok = true;
   for (;;) {
     if (ok) {
       if (engine.closed) {
         solutions.push(engine.edges.slice());
-        if (solutions.length >= 2) return;
+        if (solutions.length >= 2) return true;
       } else {
+        if (budget.nodes >= end) return false;
         budget.node();
         // An open edge exists: local() fails when every edge is decided and no loop closed.
         const pos = engine.nextOpen(stack.at(-1)?.pos ?? 0);
@@ -105,7 +132,7 @@ function search(engine: Engine, budget: Budget, solutions: Uint8Array[]): void {
     // Backtrack to the deepest branch that still has its line side to try.
     for (;;) {
       const top = stack.at(-1);
-      if (top === undefined) return;
+      if (top === undefined) return true;
       engine.undo(top.mark);
       if (!top.triedLine) {
         top.triedLine = true;

@@ -6,7 +6,8 @@
  *    and the share of loops that meet the default thresholds (PRD §10, target ≥ 95%).
  * 2. Generation time per size (NFR-1: p95 under 10 s up to 30×30 and under 30 s at 40×40),
  *    first-attempt rate (loops whose full clue set the rules solve), clue density, clues put back
- *    by the safeguard, and `verify` on every result. 100×100 takes 6 to 19 minutes a puzzle.
+ *    by the safeguard, and `verify` on every result. 100×100 takes 6 to 18 minutes a puzzle (WT18:
+ *    374 to 1 047 s for seeds `bench-0` to `bench-2`, next to other jobs).
  * Pass `--quick` to skip 100×100.
  */
 import { generate } from "../src/generate.ts";

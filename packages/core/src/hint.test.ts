@@ -84,9 +84,9 @@ describe("findHint", () => {
   });
 
   test("reveals a line instead when the time limit stops the search for a deduction", () => {
-    // Tiny-5 (a web fixture): replay its solver steps up to its first lookahead, which only comes
+    // Small-7 (a web fixture): replay its solver steps up to its first lookahead, which only comes
     // after the time-checked tiers. With a clock already past the limit the hint is a reveal.
-    const p = puzzle(5, 5, "..0.......3.1.0.3.1......");
+    const p = puzzle(7, 7, ".11..0..23.2......2.21.0....1....01.1..3..0..1..1");
     const full = solve(p);
     const board = new Uint8Array(p.grid.edgeCount);
     for (const step of full.steps) {

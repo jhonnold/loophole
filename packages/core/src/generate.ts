@@ -9,7 +9,7 @@ import { type SolveResult, solve } from "./solver.ts";
  * same version (PRD FR-10). Bump it whenever any output changes, including through a change to the
  * solver's rules, which decide which clues can go.
  */
-export const GENERATOR_VERSION = "5";
+export const GENERATOR_VERSION = "6";
 
 /**
  * Clue removal tests run block by block; a block is at most this many cells on a side. Each block's
