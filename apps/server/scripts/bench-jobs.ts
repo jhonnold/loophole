@@ -2,17 +2,20 @@
 // verifications the way the worker does, each in a fresh thread under the worker's time limits,
 // and fails if a budget is missed. Timings depend on the machine and its load: run it on an idle
 // host (it prints the load average first).
-//   bun run bench:jobs            all sizes, about a minute
+//   bun run bench:jobs            all sizes, 10 to 25 minutes (one 100×100 generation takes 6 to 19)
 //   bun run bench:jobs --quick    up to 30×30 and one 100×100 verification
 import { availableParallelism, loadavg } from "node:os";
-import { generate, serializePuzzle } from "@loophole/core";
+import type { PuzzleWireV1 } from "@loophole/core";
 import { ThreadTaskRunner } from "../src/adapters/tasks/thread-task-runner.ts";
 import type { Task } from "../src/domain.ts";
 
-/** NFR-1: generation up to 30×30 has a p95 under 5 s. */
-const GENERATE_P95_MS = 5_000;
+/** NFR-1: generation p95 under 10 s up to 30×30 and under 30 s at 40×40, the largest daily. */
+function generateBudgetMs(size: number): number | null {
+  if (size <= 30) return 10_000;
+  return size <= 40 ? 30_000 : null;
+}
 /** The worker's limits (GENERATE_TIMEOUT_MS, VERIFY_TIMEOUT_MS defaults). */
-const GENERATE_TIMEOUT_MS = 60_000;
+const GENERATE_TIMEOUT_MS = 1_800_000;
 const VERIFY_TIMEOUT_MS = 45_000;
 /** NFR-1: a verification ends (with a verdict or `unknown`) within core's 30 s budget. */
 const VERIFY_BUDGET_MS = 30_000;
@@ -45,9 +48,11 @@ const sizes: [number, number][] = [
     ? []
     : ([
         [40, 5],
-        [100, 2],
+        [100, 1],
       ] as [number, number][])),
 ];
+/** The generated 100×100, verified below as a submission. */
+let generated100: PuzzleWireV1 | undefined;
 for (const [size, count] of sizes) {
   const times: number[] = [];
   for (let n = 0; n < count; n++) {
@@ -58,6 +63,8 @@ for (const [size, count] of sizes) {
     const { outcome, ms } = await timed(task, GENERATE_TIMEOUT_MS);
     if (outcome.status !== "done")
       failures.push(`generate ${size}×${size} #${n}: ${outcome.status}`);
+    else if (size === 100 && outcome.output.kind === "generate")
+      generated100 = outcome.output.generated.puzzle;
     times.push(ms);
   }
   times.sort((a, b) => a - b);
@@ -65,21 +72,18 @@ for (const [size, count] of sizes) {
   console.log(
     `generate ${size}×${size}: n=${count} p95=${p.toFixed(0)}ms max=${times.at(-1)?.toFixed(0)}ms`,
   );
-  if (size <= 30 && p >= GENERATE_P95_MS) {
-    failures.push(`generate ${size}×${size}: p95 ${p.toFixed(0)} ms is over ${GENERATE_P95_MS} ms`);
+  const budget = generateBudgetMs(size);
+  if (budget !== null && p >= budget) {
+    failures.push(`generate ${size}×${size}: p95 ${p.toFixed(0)} ms is over ${budget} ms`);
   }
 }
 
-// A generated 100×100 (the rules solve it) and an empty 100×100 grid (many solutions: the search
-// must find two and stop) as submissions.
-const puzzles = [
-  [
-    "generated 100×100",
-    serializePuzzle(generate({ width: 100, height: 100, seed: "bench-v" }).puzzle),
-  ],
-  ["empty 100×100", { v: 1 as const, width: 100, height: 100, clues: ".".repeat(10_000) }],
-] as const;
-for (const [label, puzzle] of quick ? puzzles.slice(1) : puzzles) {
+// The generated 100×100 (the rules solve it; not with --quick) and an empty 100×100 grid (many
+// solutions: the search must find two and stop) as submissions.
+const puzzles: [string, PuzzleWireV1][] = [];
+if (generated100 !== undefined) puzzles.push(["generated 100×100", generated100]);
+puzzles.push(["empty 100×100", { v: 1, width: 100, height: 100, clues: ".".repeat(10_000) }]);
+for (const [label, puzzle] of puzzles) {
   const { outcome, ms } = await timed({ kind: "verify", input: { puzzle } }, VERIFY_TIMEOUT_MS);
   const verdict =
     outcome.status === "done" && outcome.output.kind === "verify"

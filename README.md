@@ -228,7 +228,7 @@ Or stop Garage and archive the `garage-data` and `garage-meta` volumes. `infra/g
 | `bun run test:e2e:auth` | Build the web app, serve it from the API with a worker and run the account, publishing and progress end-to-end tests (needs Mailpit; publishing and progress also Garage) |
 | `bun run test:e2e:stories` | The same stack, running one end-to-end test per PRD §6 user story (needs Mailpit and Garage) |
 | `bun run admin <email>` | Make an account an admin; `--revoke` takes it away |
-| `bun run bench:jobs` | Time generations and verifications as the worker runs them and fail if NFR-1's budgets are missed (`--quick` for a shorter run; not part of the check) |
+| `bun run bench:jobs` | Time generations and verifications as the worker runs them and fail if NFR-1's budgets are missed (10 to 25 minutes; `--quick` for a shorter run; not part of the check) |
 | `./scripts/test-under-load.sh [copies] [rounds]` | Run `bun test` several times at once to shake out timing-sensitive tests |
 | `./scripts/backup-sqlite.sh [folder]` | Back up the SQLite database (see Backups) |
 | `bun run --cwd packages/core bench` | Time puzzle verification on 10×10 to 100×100 boards (not part of the check) |

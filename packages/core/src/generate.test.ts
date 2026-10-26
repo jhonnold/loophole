@@ -12,6 +12,7 @@ import {
 import { LOOP_THRESHOLDS, type LoopThresholds, thresholdCount } from "./loop.ts";
 import { deriveClues, NO_CLUE } from "./puzzle.ts";
 import { hashSeed } from "./rng.ts";
+import { solve } from "./solver.ts";
 import { loopCoverage } from "./test-support/loops.ts";
 import { verify } from "./verify.ts";
 
@@ -44,7 +45,7 @@ function checkResult(r: GenerateResult, seed: string, thresholds = LOOP_THRESHOL
 }
 
 describe("generate: golden values (FR-10)", () => {
-  // Frozen output for GENERATOR_VERSION "2". If one changes, the generator's output changed: bump
+  // Frozen output for GENERATOR_VERSION "3". If one changes, the generator's output changed: bump
   // GENERATOR_VERSION and update these (docs/DECISIONS.md, WT3).
   const cases: [number, number, string, string][] = [
     [1, 1, ".", "1111"],
@@ -53,25 +54,25 @@ describe("generate: golden values (FR-10)", () => {
     [
       5,
       5,
-      "0.12....21.1..2.13.21.2.3",
+      "..1.3.....3.3....3..1.21.",
       "222212111212112121222212221221222211212221121211212111211211",
     ],
     [
       6,
       4,
-      ".....1..2.31..1....10.1.",
+      "...13..22..12.......0.1.",
       "1111122112122222112221111222221222212112112211212211122222",
     ],
     [
       7,
       7,
-      "....3.11.3.2.33201......22..0..11.1..1.1..3222...",
+      "00..3.....3..3.......122..32001..3...1....3......",
       "2222122221222111212121122112221121222222121111112111111122221122221111111222222122121211222221212222221112222221",
     ],
     [
       10,
       10,
-      "212.2.2.1121...2232.212.3.21.11..2112.32..2.21..223.2..1122..12....22.11..3..12..220..2.11.3..0.31.1",
+      ".......1.12......3..2.233.....1.1....2............3.21.11.232122.11.2.11...11....2...02.11.3.......1",
       "1111111222221111221112121221222221221212221122222212222222221212222221222222221222121222222222221222212222111212222221222121222111212121111222121222121111211211211111212112111121211121122212111212122112222121221122212212",
     ],
   ];
@@ -92,12 +93,12 @@ describe("generate: golden values (FR-10)", () => {
     });
   }
 
-  // Larger boards go through several restore rounds and clipped windows; a digest of the serialized
-  // puzzle and its solution keeps the test short.
+  // Larger boards go through more levels of nested blocks; a digest of the serialized puzzle and its
+  // solution keeps the test short.
   test('20x20 seed "golden" (digest)', () => {
     const r = generate({ width: 20, height: 20, seed: "golden" });
     expect(hashSeed(serializePuzzleJson(r.puzzle) + encodeEdges(r.solution))).toEqual([
-      1637745618, 2430984644, 1904902262, 590195424,
+      2668647316, 1055507470, 2136871833, 3334050716,
     ]);
   });
 });
@@ -149,6 +150,35 @@ describe("generate: properties", () => {
       "strict",
       thresholds,
     );
+  });
+
+  test("every clue is needed: without any one of them the rules get stuck", () => {
+    for (let n = 0; n < 10; n++) {
+      const { puzzle, stats } = generate({ width: 4 + n, height: 13 - n, seed: `needed-${n}` });
+      // Removal tests reach what solving from scratch does, so the safeguard has nothing to restore.
+      expect(stats.restored).toBe(0);
+      const clues = puzzle.clues.slice();
+      const without = { grid: puzzle.grid, clues };
+      for (let i = 0; i < clues.length; i++) {
+        const k = clues[i];
+        if (k === NO_CLUE) continue;
+        clues[i] = NO_CLUE;
+        expect(solve(without).status).not.toBe("solved");
+        clues[i] = k;
+      }
+    }
+  });
+
+  test("keeps about two clues in five (mean over 20 boards of 10×10)", () => {
+    let clues = 0;
+    for (let n = 0; n < 20; n++) {
+      const { stats } = generate({ width: 10, height: 10, seed: `density-${n}` });
+      expect(stats.restored).toBe(0);
+      clues += stats.clueCount;
+    }
+    const mean = clues / (20 * 100);
+    expect(mean).toBeGreaterThanOrEqual(0.35);
+    expect(mean).toBeLessThanOrEqual(0.45);
   });
 });
 

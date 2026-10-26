@@ -27,8 +27,9 @@ const env = {
   S3_BUCKET: "loophole-dev",
   S3_ACCESS_KEY_ID: "GK1a2b3c4d5e6f708192a3b4c5",
   S3_SECRET_ACCESS_KEY: "8b339f8231fe89196b07eb8766bf6f079805f64a9be09934697b94e0b1aa0a0b",
-  // Today's and tomorrow's daily puzzles only, so the worker is soon free for the tests' own jobs.
-  DAILY_DAYS_AHEAD: "2",
+  // Today's daily puzzles only (a 40×40 takes several seconds), so the worker is soon free for the
+  // tests' own jobs.
+  DAILY_DAYS_AHEAD: "1",
   // No metrics listeners: a developer's .env may turn them on for the dev servers' ports.
   API_METRICS_PORT: "0",
   WORKER_METRICS_PORT: "0",
