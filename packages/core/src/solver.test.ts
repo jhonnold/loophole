@@ -130,6 +130,20 @@ describe("solve: each rule", () => {
     expect(solve(p).steps[0].rule).toBe("corner-chain");
   });
 
+  test("parity can be left out, but not under colouring or connectivity", () => {
+    const p = puzzle(2, 3, "..33..");
+    expect(solve(p).steps.some((s) => s.rule === "parity")).toBe(true);
+    const without = solve(p, { rules: [], parity: false, lookahead: false });
+    expect(without.steps.some((s) => s.rule === "parity")).toBe(false);
+    expect(solve(p, { rules: [], parity: false, lookahead: false, steps: false }).edges).toEqual(
+      without.edges,
+    );
+    expect(() => solve(p, { parity: false })).toThrow(RangeError);
+    expect(() => solve(p, { rules: ["colouring"], parity: false })).toThrow(RangeError);
+    expect(() => solve(p, { rules: ["connectivity"], parity: false })).toThrow(RangeError);
+    expect(() => solve(p, { rules: ["corners"], parity: false, lookahead: false })).not.toThrow();
+  });
+
   test("without steps it reaches the same edges and records none", () => {
     const p = puzzle(3, 3, "0...11.3.");
     const full = solve(p);

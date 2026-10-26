@@ -7,7 +7,7 @@ import { bruteForceSolutions } from "./bruteforce.ts";
 import { encodeEdges } from "./format.ts";
 import { EdgeState } from "./grid.ts";
 import { createPuzzle, NO_CLUE, type Puzzle } from "./puzzle.ts";
-import { solve } from "./solver.ts";
+import { type SolveOptions, solve } from "./solver.ts";
 import { arbPuzzleWithSolution } from "./test-support/arbitraries.ts";
 import { verify } from "./verify.ts";
 
@@ -32,9 +32,20 @@ function checkAgainstBruteForce(p: Puzzle): void {
   }
 
   // Every edge the rule solver decides agrees with every solution, with every rule group, with
-  // each group alone and with none.
-  for (const rules of [undefined, ["corners"], ["colouring"], ["connectivity"], []] as const) {
-    const r = solve(p, { rules });
+  // each group alone and with none, and without parity: as the easy level solves, and with corners
+  // alone (colouring and connectivity need parity).
+  const sets: SolveOptions[] = [
+    {},
+    { rules: ["corners"] },
+    { rules: ["colouring"] },
+    { rules: ["connectivity"] },
+    { rules: [] },
+    { rules: [], parity: false, lookahead: false },
+    { rules: ["corners"], parity: false },
+  ];
+  for (const options of sets) {
+    const { rules } = options;
+    const r = solve(p, options);
     r.edges.forEach((state, e) => {
       if (state === EdgeState.Unknown) return;
       for (const s of all) expect(s[e]).toBe(state);
@@ -43,9 +54,9 @@ function checkAgainstBruteForce(p: Puzzle): void {
     if (r.status === "contradiction") expect(all.length).toBe(0);
     expect(r.status).not.toBe("incomplete");
     // Without steps the engine works incrementally (DECISIONS, WT19) but finds the same status,
-    // with every group and with none.
-    if (rules === undefined || rules.length === 0) {
-      expect(solve(p, { rules, steps: false }).status).toBe(r.status);
+    // with every group, with none and without parity.
+    if (rules === undefined || rules.length === 0 || options.parity === false) {
+      expect(solve(p, { ...options, steps: false }).status).toBe(r.status);
     }
   }
 }
