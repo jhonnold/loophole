@@ -88,6 +88,7 @@ describe("loopShape", () => {
       [["###", "#.#", "#.#"], { area: 7 / 9, dots: 1, solid: 0 }],
       [["...", ".#.", "..."], { area: 1 / 9, dots: 4 / 16, solid: 0 }],
       [["###", "###", "..."], { area: 6 / 9, dots: 10 / 16, solid: 2 / 4 }],
+      [["#..", "#..", "###"], { area: 5 / 9, dots: 12 / 16, solid: 1 / 4 }],
     ];
     for (const [rows, want] of cases) {
       const { grid, edges } = loopAround(rows);
