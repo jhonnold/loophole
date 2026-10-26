@@ -22,9 +22,9 @@
  * After any change the engine goes back to tier 1, so steps come out roughly easiest first.
  *
  * When no steps are recorded (the verifier, generation's clue tests) the order of deductions does
- * not matter, only the fixpoint, so parity and colouring work incrementally: parity's union-find
- * is trailed and undone with the edges, and colouring looks again only at the clues a union
- * touched.
+ * not matter, only the fixpoint, so the global tiers work incrementally: parity's union-find is
+ * trailed and undone with the edges, colouring looks again only at the clues a union touched, and
+ * lookahead's passes leave the detect-only connectivity check until lookahead finds nothing.
  */
 import { EdgeState, type Grid, NONE } from "./grid.ts";
 import { NO_CLUE, type Puzzle } from "./puzzle.ts";
@@ -234,6 +234,15 @@ export class Engine {
   /** Whether `ufNext` and `ufSize` describe the current union-find (see `buildRings`). */
   private rings = false;
   private readonly seen: Uint8Array;
+  /**
+   * Marks for `connected` and `pairFeasible`: dot d was reached in the current walk when
+   * `reach[d] === walk` (and cell c marked when `cellMark[c] === walk`), so nothing is cleared
+   * between walks (`nextWalk`).
+   */
+  private readonly reach: Int32Array;
+  private walk = 0;
+  /** Cells with a clue above 0, in index order; built on first use (`positiveCells`). */
+  private positive: Int32Array | null = null;
   private readonly order: Int32Array;
   private readonly stack: Int32Array;
   /** Edges `connected` treats as crossed: the group `twoExits` is checking. */
@@ -252,6 +261,13 @@ export class Engine {
   private bcVia = new Int32Array(0);
   private bcEdges = new Int32Array(0);
   private blockOf = new Int32Array(0);
+  /** Lines in each block, counted by `blocks`. */
+  private blockLines = new Int32Array(0);
+  /** For each dot and `dotEdges` slot, the dot at the other end (connectivity scratch). */
+  private dotNext = new Int32Array(0);
+  /** `pairFeasible`'s second queue of dots (the first is `stack`), and cell marks (see `reach`). */
+  private pieceQueue = new Int32Array(0);
+  private cellMark = new Int32Array(0);
   private faceParent = new Int32Array(0);
   private groupNext = new Int32Array(0);
   private groupFirst = new Int32Array(0);
@@ -317,6 +333,7 @@ export class Engine {
     this.ufParent = new Int32Array(grid.cellCount + 1);
     this.ufParity = new Uint8Array(grid.cellCount + 1);
     this.seen = new Uint8Array(grid.dotCount);
+    this.reach = new Int32Array(grid.dotCount);
     this.stack = new Int32Array(grid.dotCount);
     this.inGroup = new Uint8Array(grid.edgeCount);
     this.order = readingOrder(grid);
@@ -368,15 +385,19 @@ export class Engine {
         if (c < 0) return false;
         if (c > 0) continue;
       }
+      // Without recorded steps, lookahead's passes leave the check for when lookahead finds nothing:
+      // it only finds contradictions, and one now is still one then (DECISIONS, WT19).
+      const later = lookahead && !this.connectOn && this.steps === null;
       if (this.connectOn) {
         const k = this.connectivity();
         if (k < 0) return false;
         if (k > 0) continue;
-      } else if (!this.connected()) return false;
+      } else if (!later && !this.connected()) return false;
       if (!lookahead) return true;
       const q = this.lookahead();
       if (q < 0) return false;
       if (q > 0) continue;
+      if (later && !this.connected()) return false;
       if (this.colourOn && last) {
         const c = this.colour();
         if (c < 0) return false;
@@ -1552,49 +1573,92 @@ export class Engine {
    * that first dot and a clue it did not reach.
    */
   private connected(): boolean {
-    const { grid, edges, clues, seen, stack, inGroup } = this;
+    const { grid, edges, stack, inGroup, reach } = this;
     const first = edges.indexOf(Line);
     if (first < 0) return true;
     const seed = grid.edgeDots[first * 2];
-    seen.fill(0);
-    seen[seed] = 1;
+    const walk = this.nextWalk();
+    reach[seed] = walk;
     stack[0] = seed;
     let top = 1;
+    // Each line is met once from each end, and both ends are reached when one is.
+    let lineEnds = 0;
     while (top > 0) {
       const d = stack[--top];
       for (let j = 0; j < 4; j++) {
         const e = grid.dotEdges[d * 4 + j];
-        if (e === NONE || edges[e] === Cross || inGroup[e]) continue;
+        if (e === NONE) continue;
+        const s = edges[e];
+        if (s === Cross || inGroup[e]) continue;
+        if (s === Line) lineEnds++;
         const o = otherDot(grid, e, d);
-        if (!seen[o]) {
-          seen[o] = 1;
+        if (reach[o] !== walk) {
+          reach[o] = walk;
           stack[top++] = o;
         }
       }
     }
-    for (let e = first + 1; e < grid.edgeCount; e++) {
-      if (edges[e] !== Line || seen[grid.edgeDots[e * 2]]) continue;
-      if (this.steps !== null) {
-        this.exitCells = [];
-        this.exitDots = [seed, grid.edgeDots[e * 2]].sort((a, b) => a - b);
-      }
-      return false;
-    }
-    for (let i = 0; i < grid.cellCount; i++) {
-      if (clues[i] <= 0) continue;
+    let ok = lineEnds === 2 * this.lineCount;
+    const positive = this.positiveCells();
+    for (let x = 0; x < positive.length && ok; x++) {
+      const i = positive[x];
       let reached = false;
       for (let j = 0; j < 4 && !reached; j++) {
         const e = grid.cellEdges[i * 4 + j];
-        reached = edges[e] !== Cross && !inGroup[e] && seen[grid.edgeDots[e * 2]] === 1;
+        reached = edges[e] !== Cross && !inGroup[e] && reach[grid.edgeDots[e * 2]] === walk;
+      }
+      ok = reached;
+    }
+    if (ok) return true;
+    if (this.steps !== null) this.exitReason(seed, walk);
+    return false;
+  }
+
+  /** The cells with a clue above 0, in index order. */
+  private positiveCells(): Int32Array {
+    if (this.positive === null) {
+      const cells: number[] = [];
+      for (let i = 0; i < this.grid.cellCount; i++) if (this.clues[i] > 0) cells.push(i);
+      this.positive = Int32Array.from(cells);
+    }
+    return this.positive;
+  }
+
+  /** A new mark for `reach` and `cellMark`; clears them long before the counter could overflow. */
+  private nextWalk(): number {
+    if (this.walk === 0x3fffffff) {
+      this.reach.fill(0);
+      this.cellMark.fill(0);
+      this.walk = 0;
+    }
+    return ++this.walk;
+  }
+
+  /**
+   * Why `connected` just failed, in `exitCells` and `exitDots`: the first line it did not reach
+   * (with the seed's dot), else the first clue it did not reach (with the seed's dot).
+   */
+  private exitReason(seed: number, walk: number): void {
+    const { grid, edges, inGroup, reach } = this;
+    const positive = this.positiveCells();
+    for (let e = 0; e < grid.edgeCount; e++) {
+      if (edges[e] !== Line || reach[grid.edgeDots[e * 2]] === walk) continue;
+      this.exitCells = [];
+      this.exitDots = [seed, grid.edgeDots[e * 2]].sort((a, b) => a - b);
+      return;
+    }
+    for (let x = 0; x < positive.length; x++) {
+      const i = positive[x];
+      let reached = false;
+      for (let j = 0; j < 4 && !reached; j++) {
+        const e = grid.cellEdges[i * 4 + j];
+        reached = edges[e] !== Cross && !inGroup[e] && reach[grid.edgeDots[e * 2]] === walk;
       }
       if (reached) continue;
-      if (this.steps !== null) {
-        this.exitCells = [i];
-        this.exitDots = [seed];
-      }
-      return false;
+      this.exitCells = [i];
+      this.exitDots = [seed];
+      return;
     }
-    return true;
   }
 
   // --- tier 4c: connectivity ---------------------------------------------------------------
@@ -1610,19 +1674,17 @@ export class Engine {
    * 2. Two exits (`twoExits`), when the first decides nothing.
    */
   private connectivity(): number {
-    const { grid, edges, clues } = this;
+    const { grid, edges } = this;
     if (this.lineCount === 0) return 0;
     if (this.blockOf.length === 0) this.initConnect();
     this.blocks();
     const { blockOf } = this;
-    let target = NONE;
-    for (let e = 0; e < grid.edgeCount; e++) {
-      if (edges[e] !== Line) continue;
-      if (target === NONE) target = blockOf[e];
-      else if (blockOf[e] !== target) return -1;
-    }
-    for (let i = 0; i < grid.cellCount; i++) {
-      if (clues[i] <= 0) continue;
+    const positive = this.positiveCells();
+    // Every line in one block: the first line's block holds them all.
+    const target = blockOf[edges.indexOf(Line)];
+    if (this.blockLines[target] !== this.lineCount) return -1;
+    for (let x = 0; x < positive.length; x++) {
+      const i = positive[x];
       let reached = false;
       for (let j = 0; j < 4 && !reached; j++) {
         const e = grid.cellEdges[i * 4 + j];
@@ -1643,6 +1705,16 @@ export class Engine {
     this.bcVia = new Int32Array(D);
     this.bcEdges = new Int32Array(E);
     this.blockOf = new Int32Array(E);
+    this.blockLines = new Int32Array(E);
+    this.dotNext = new Int32Array(D * 4).fill(NONE);
+    this.pieceQueue = new Int32Array(D);
+    this.cellMark = new Int32Array(C);
+    for (let d = 0; d < D; d++) {
+      for (let j = 0; j < 4; j++) {
+        const e = this.grid.dotEdges[d * 4 + j];
+        if (e !== NONE) this.dotNext[d * 4 + j] = otherDot(this.grid, e, d);
+      }
+    }
     this.faceParent = new Int32Array(C + 1);
     this.groupNext = new Int32Array(E);
     this.groupFirst = new Int32Array(E);
@@ -1660,52 +1732,57 @@ export class Engine {
    * crossed into `blockOf` (NONE for crossed edges): Tarjan's algorithm, with explicit stacks.
    */
   private blocks(): void {
-    const { grid, edges, bcDisc: disc, bcLow: low, bcSlot: slot, bcVia: via } = this;
-    const { stack: dots, bcEdges: stack, blockOf } = this;
+    const { grid, edges, bcDisc: disc, bcLow: low, bcSlot: slot, bcVia: via, dotNext } = this;
+    const { stack: dots, bcEdges: stack, blockOf, blockLines } = this;
+    const { dotEdges } = grid;
     disc.fill(0);
     blockOf.fill(NONE);
-    let time = 0;
+    // Only the part of the graph holding the lines: edges anywhere else are in no block of theirs.
+    const r = grid.edgeDots[edges.indexOf(Line) * 2];
+    let time = 1;
     let blocks = 0;
-    for (let r = 0; r < grid.dotCount; r++) {
-      if (disc[r] !== 0) continue;
-      let top = 0;
-      let etop = 0;
-      dots[top++] = r;
-      disc[r] = low[r] = ++time;
-      slot[r] = 0;
-      via[r] = NONE;
-      while (top > 0) {
-        const v = dots[top - 1];
-        if (slot[v] < 4) {
-          const e = grid.dotEdges[v * 4 + slot[v]++];
-          if (e === NONE || edges[e] === Cross || e === via[v]) continue;
-          const w = otherDot(grid, e, v);
-          if (disc[w] === 0) {
-            stack[etop++] = e;
-            via[w] = e;
-            disc[w] = low[w] = ++time;
-            slot[w] = 0;
-            dots[top++] = w;
-          } else if (disc[w] < disc[v]) {
-            stack[etop++] = e;
-            if (disc[w] < low[v]) low[v] = disc[w];
-          }
-          continue;
+    let top = 0;
+    let etop = 0;
+    dots[top++] = r;
+    disc[r] = low[r] = time;
+    slot[r] = 0;
+    via[r] = NONE;
+    while (top > 0) {
+      const v = dots[top - 1];
+      const k = slot[v];
+      if (k < 4) {
+        slot[v] = k + 1;
+        const e = dotEdges[v * 4 + k];
+        if (e === NONE || edges[e] === Cross || e === via[v]) continue;
+        const w = dotNext[v * 4 + k];
+        const dw = disc[w];
+        if (dw === 0) {
+          stack[etop++] = e;
+          via[w] = e;
+          disc[w] = low[w] = ++time;
+          slot[w] = 0;
+          dots[top++] = w;
+        } else if (dw < disc[v]) {
+          stack[etop++] = e;
+          if (dw < low[v]) low[v] = dw;
         }
-        top--;
-        const f = via[v];
-        if (f === NONE) continue;
-        const u = otherDot(grid, f, v);
-        if (low[v] < low[u]) low[u] = low[v];
-        if (low[v] >= disc[u]) {
-          // u separates v's subtree: the edges stacked since f form one block.
-          let g: number;
-          do {
-            g = stack[--etop];
-            blockOf[g] = blocks;
-          } while (g !== f);
-          blocks++;
-        }
+        continue;
+      }
+      top--;
+      if (top === 0) break;
+      const u = dots[top - 1];
+      const f = via[v];
+      if (low[v] < low[u]) low[u] = low[v];
+      if (low[v] >= disc[u]) {
+        // u separates v's subtree: the edges stacked since f form one block.
+        let g: number;
+        let lines = 0;
+        do {
+          g = stack[--etop];
+          blockOf[g] = blocks;
+          if (edges[g] === Line) lines++;
+        } while (g !== f);
+        blockLines[blocks++] = lines;
       }
     }
   }
@@ -1849,9 +1926,115 @@ export class Engine {
   private groupFeasible(g: number): boolean {
     const { inGroup, groupFirst, groupNext } = this;
     for (let e = groupFirst[g]; e !== NONE; e = groupNext[e]) inGroup[e] = 1;
-    const ok = this.connected();
+    const ok =
+      this.steps === null && this.groupSize[g] === 2
+        ? this.pairFeasible(groupFirst[g])
+        : this.connected();
     for (let e = groupFirst[g]; e !== NONE; e = groupNext[e]) inGroup[e] = 0;
     return ok;
+  }
+
+  /**
+   * `groupFeasible` for a group of two edges, without recorded steps. Every line and every open
+   * edge is in one block here (`cutOff` found nothing), so crossing both edges leaves two pieces,
+   * one at each end of `e`, the group's first edge. Walks both at once, a dot at a time, and stops
+   * when one is done, so it pays for the smaller piece only. If the walks meet, the pieces are one
+   * after all and `connected` decides.
+   */
+  private pairFeasible(e: number): boolean {
+    const { grid, reach, stack: qa, pieceQueue: qb } = this;
+    // All three marks before anything is marked: the counter's reset clears `reach` and `cellMark`.
+    const wa = this.nextWalk();
+    const wb = this.nextWalk();
+    const mark = this.nextWalk();
+    qa[0] = grid.edgeDots[e * 2];
+    qb[0] = grid.edgeDots[e * 2 + 1];
+    reach[qa[0]] = wa;
+    reach[qb[0]] = wb;
+    let ha = 0;
+    let ta = 1;
+    let hb = 0;
+    let tb = 1;
+    for (;;) {
+      if (ha === ta) return this.pieceFeasible(qa, ta, wa, mark);
+      if (hb === tb) return this.pieceFeasible(qb, tb, wb, mark);
+      ta = this.spread(qa[ha++], qa, ta, wa, wb);
+      if (ta >= 0) tb = this.spread(qb[hb++], qb, tb, wb, wa);
+      if (ta < 0 || tb < 0) return this.connected();
+    }
+  }
+
+  /**
+   * One step of `pairFeasible`'s walk marked `own`: queues the dots next to `d` over edges that are
+   * neither crossed nor in the group at `q[tail]` onwards. Returns the new tail, or -1 when one of
+   * them belongs to the other walk.
+   */
+  private spread(d: number, q: Int32Array, tail: number, own: number, other: number): number {
+    const { grid, edges, inGroup, reach, dotNext } = this;
+    for (let j = 0; j < 4; j++) {
+      const e = grid.dotEdges[d * 4 + j];
+      if (e === NONE || edges[e] === Cross || inGroup[e]) continue;
+      const o = dotNext[d * 4 + j];
+      if (reach[o] === own) continue;
+      if (reach[o] === other) return -1;
+      reach[o] = own;
+      q[tail++] = o;
+    }
+    return tail;
+  }
+
+  /**
+   * `pairFeasible` once the piece with dots `q[0..n)` (marked `w` in `reach`) is done; `mark` marks
+   * the clue cells already counted (in `cellMark`). The loop
+   * lies in this piece if it holds every line, in the other one if it holds none; with lines in
+   * both there is no loop. Every clue above 0 needs a side in the loop's piece that is neither
+   * crossed nor in the group.
+   */
+  private pieceFeasible(q: Int32Array, n: number, w: number, mark: number): boolean {
+    const { grid, edges, clues, inGroup, reach, cellMark, dotCells } = this;
+    // Both ends of a line here are here: count each line at both.
+    let lineEnds = 0;
+    for (let x = 0; x < n; x++) {
+      for (let j = 0; j < 4; j++) {
+        const e = grid.dotEdges[q[x] * 4 + j];
+        if (e !== NONE && edges[e] === Line) lineEnds++;
+      }
+    }
+    const lines = lineEnds / 2;
+    if (lines !== 0 && lines !== this.lineCount) return false;
+    if (lines === this.lineCount) {
+      // The loop is here: every clue above 0 needs a usable side here.
+      let found = 0;
+      for (let x = 0; x < n; x++) {
+        for (let j = 0; j < 4; j++) {
+          const e = grid.dotEdges[q[x] * 4 + j];
+          if (e === NONE || edges[e] === Cross || inGroup[e]) continue;
+          for (let k = 0; k < 2; k++) {
+            const c = grid.edgeCells[e * 2 + k];
+            if (c === NONE || clues[c] <= 0 || cellMark[c] === mark) continue;
+            cellMark[c] = mark;
+            found++;
+          }
+        }
+      }
+      return found === this.positiveCells().length;
+    }
+    // The loop is in the other piece: no clue above 0 may have all its usable sides here. Such a
+    // clue has a side with an end here (a group edge has one), so it is beside one of these dots.
+    for (let x = 0; x < n; x++) {
+      for (let j = 0; j < 4; j++) {
+        const c = dotCells[q[x] * 4 + j];
+        if (c === NONE || clues[c] <= 0 || cellMark[c] === mark) continue;
+        cellMark[c] = mark;
+        let elsewhere = false;
+        for (let s = 0; s < 4 && !elsewhere; s++) {
+          const e = grid.cellEdges[c * 4 + s];
+          elsewhere = edges[e] !== Cross && !inGroup[e] && reach[grid.edgeDots[e * 2]] !== w;
+        }
+        if (!elsewhere) return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -1910,7 +2093,8 @@ export class Engine {
     for (let k = 0; k < E; k++) {
       const e = (this.lookCursor + k) % E;
       if (this.edges[e] !== Unknown) continue;
-      for (const assumed of [Line, Cross]) {
+      for (let t = 0; t < 2; t++) {
+        const assumed = t === 0 ? Line : Cross;
         this.budget.tick();
         this.probes++;
         const m = this.mark();

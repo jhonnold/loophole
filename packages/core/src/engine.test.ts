@@ -6,6 +6,7 @@ import { createGrid, EdgeState } from "./grid.ts";
 import { generateLoop } from "./loop.ts";
 import { createPuzzle, deriveClues, NO_CLUE } from "./puzzle.ts";
 import { createRng } from "./rng.ts";
+import { verify } from "./verify.ts";
 
 function puzzle(width: number, height: number, clues: string) {
   return parsePuzzle({ v: 1, width, height, clues });
@@ -120,5 +121,31 @@ describe("Engine", () => {
       ),
       { numRuns: 300 },
     );
+  });
+
+  test("without steps or the connectivity group the root's disconnected board is still found, after lookahead", () => {
+    // A ring of 0s walls the middle off from a 1 outside it; tier 1 does not see that. The detect-only
+    // check waits until lookahead has found nothing (DECISIONS, WT19), but still rejects the root,
+    // so the verifier stops before searching.
+    const rows = [
+      "....1....",
+      ".0000000.",
+      ".0.....0.",
+      ".0.....0.",
+      ".0..2..0.",
+      ".0.....0.",
+      ".0.....0.",
+      ".0000000.",
+      ".........",
+    ];
+    const p = puzzle(9, 9, rows.join(""));
+    const budget = new Budget(Date.now, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
+    const engine = new Engine(p, budget, { connectivity: false });
+    expect(engine.local()).toBe(true);
+    expect(engine.solveRoot(true)).toBe(false);
+    expect(engine.probes).toBeGreaterThan(0);
+    const v = verify(p);
+    expect(v.status).toBe("none");
+    expect(v.stats.nodes).toBe(0);
   });
 });
