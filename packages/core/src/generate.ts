@@ -9,7 +9,7 @@ import { type SolveResult, solve } from "./solver.ts";
  * same version (PRD FR-10). Bump it whenever any output changes, including through a change to the
  * solver's rules, which decide which clues can go.
  */
-export const GENERATOR_VERSION = "1";
+export const GENERATOR_VERSION = "2";
 
 /** A clue's removal is tested with the edges this many cells around it unknown, the rest given. */
 const WINDOW_RADIUS = 3;
@@ -40,7 +40,7 @@ export interface GenerateOptions {
 }
 
 export interface GenerateStats {
-  /** Loops grown, counting rejected ones. 1 unless a loop was rejected. */
+  /** Loops made, counting rejected ones. 1 unless a loop was rejected. */
   readonly attempts: number;
   readonly clueCount: number;
   /** Clue removal tests made. */
@@ -62,10 +62,10 @@ export interface GenerateResult {
 /**
  * Generates a puzzle with exactly one solution (PRD FR-7 to FR-10).
  *
- * 1. Grow a random loop that meets the thresholds (`generateLoop`).
+ * 1. Make a random winding loop that meets the thresholds (`generateLoop`).
  * 2. Give every cell its clue (a cell with 4 lines gets none). If the rule
  *    solver cannot solve that (two loops can share every clue, as the L shapes on a 2×2 board do),
- *    try a new loop, grown one cell further past the thresholds than the last.
+ *    try a new loop, with one more cell added after shaping than the last.
  * 3. In random order, remove each clue if the solver can still decide the 7×7 window of cells
  *    around it with every edge outside the window given. This local test is cheap but generous.
  * 4. Solve the whole puzzle from scratch. While it gets stuck, put back removed clues next to the
@@ -91,7 +91,6 @@ export function generate(options: GenerateOptions): GenerateResult {
   const rng = createRng(seed);
   for (let attempts = 1; attempts <= MAX_ATTEMPTS; attempts++) {
     const solution = generateLoop(grid, rng, thresholds, attempts - 1);
-    if (solution === null) continue;
     const full = deriveClues(grid, solution).map((k) => (k === 4 ? NO_CLUE : k));
     const clues = full.slice();
     const work: Puzzle = { grid, clues };
