@@ -2,8 +2,16 @@ import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
 import { analyzeBoard } from "./analyze.ts";
 import { encodeEdges } from "./format.ts";
-import { createGrid, EdgeState } from "./grid.ts";
-import { generateLoop, LOOP_THRESHOLDS, type LoopThresholds, thresholdCount } from "./loop.ts";
+import { createGrid, EdgeState, type Grid, NONE } from "./grid.ts";
+import {
+  generateLoop,
+  LOOP_SHAPE_TARGET,
+  LOOP_THRESHOLDS,
+  type LoopShape,
+  type LoopThresholds,
+  loopShape,
+  thresholdCount,
+} from "./loop.ts";
 import { createPuzzle } from "./puzzle.ts";
 import { createRng } from "./rng.ts";
 import { loopCoverage } from "./test-support/loops.ts";
@@ -22,10 +30,29 @@ function checkLoop(width: number, height: number, seed: string, thresholds = LOO
   return loop;
 }
 
+/** The boundary of the cells marked `#` in `rows` (one string per row), as edge states. */
+function loopAround(rows: string[]): { grid: Grid; edges: Uint8Array } {
+  const grid = createGrid(rows[0].length, rows.length);
+  const inside = (cell: number) =>
+    cell !== NONE && rows[Math.floor(cell / grid.width)][cell % grid.width] === "#";
+  const edges = new Uint8Array(grid.edgeCount);
+  for (let e = 0; e < grid.edgeCount; e++) {
+    const a = inside(grid.edgeCells[e * 2]);
+    const b = inside(grid.edgeCells[e * 2 + 1]);
+    edges[e] = a !== b ? EdgeState.Line : EdgeState.Cross;
+  }
+  return { grid, edges };
+}
+
 describe("loop thresholds", () => {
   test("defaults are 40% coverage and 80% span, and frozen", () => {
     expect(LOOP_THRESHOLDS).toEqual({ minCoverage: 0.4, minSpan: 0.8 });
     expect(Object.isFrozen(LOOP_THRESHOLDS)).toBe(true);
+  });
+
+  test("the shape target is half the area, 75% of the dots, at most 20% solid, and frozen", () => {
+    expect(LOOP_SHAPE_TARGET).toEqual({ area: 0.5, dots: 0.75, solid: 0.2 });
+    expect(Object.isFrozen(LOOP_SHAPE_TARGET)).toBe(true);
   });
 
   test("thresholdCount rounds up, never below 1", () => {
@@ -48,6 +75,27 @@ describe("loop thresholds", () => {
         expect(k).toBeGreaterThanOrEqual(1);
         expect(k >= share * n - 1e-6 && (k === 1 || k - 1 < share * n)).toBe(true);
       }
+    }
+  });
+});
+
+describe("loopShape", () => {
+  test("measures hand-drawn loops", () => {
+    const cases: [string[], LoopShape][] = [
+      [["#"], { area: 1, dots: 1, solid: 0 }],
+      [["###"], { area: 1, dots: 1, solid: 0 }],
+      [["##", "##"], { area: 1, dots: 8 / 9, solid: 1 }],
+      [["#.", "##"], { area: 3 / 4, dots: 8 / 9, solid: 0 }],
+      [["###", "#.#", "#.#"], { area: 7 / 9, dots: 1, solid: 0 }],
+      [["...", ".#.", "..."], { area: 1 / 9, dots: 4 / 16, solid: 0 }],
+      [["###", "###", "..."], { area: 6 / 9, dots: 10 / 16, solid: 2 / 4 }],
+    ];
+    for (const [rows, want] of cases) {
+      const { grid, edges } = loopAround(rows);
+      const got = loopShape(grid, edges);
+      expect(got.area).toBeCloseTo(want.area, 12);
+      expect(got.dots).toBeCloseTo(want.dots, 12);
+      expect(got.solid).toBeCloseTo(want.solid, 12);
     }
   });
 });

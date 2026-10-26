@@ -12,6 +12,23 @@ export interface LoopThresholds {
 /** Default loop thresholds (PRD FR-8, §14 question 5). */
 export const LOOP_THRESHOLDS: LoopThresholds = Object.freeze({ minCoverage: 0.4, minSpan: 0.8 });
 
+/** The shape of a loop (`loopShape`). Shares are fractions from 0 to 1. */
+export interface LoopShape {
+  /** Share of the cells inside the loop. */
+  readonly area: number;
+  /** Share of the dots the loop passes through. */
+  readonly dots: number;
+  /** Share of the 2×2 blocks of cells that are all inside or all outside; 0 with no blocks. */
+  readonly solid: number;
+}
+
+/**
+ * The shape `generateLoop` aims for, the same for every puzzle: half the cells inside, the loop
+ * through three quarters of the dots, and at most a fifth of the 2×2 blocks solid (`solid` is a
+ * ceiling; below it costs nothing). `LOOP_THRESHOLDS` stay hard floors.
+ */
+export const LOOP_SHAPE_TARGET: LoopShape = Object.freeze({ area: 0.5, dots: 0.75, solid: 0.2 });
+
 /** Side and corner neighbours in ring order: N, NE, E, SE, S, SW, W, NW. Even slots are sides. */
 const RING = [
   [-1, 0],
@@ -30,6 +47,42 @@ const RING = [
  */
 export function thresholdCount(share: number, n: number): number {
   return Math.max(1, Math.ceil(share * n - 1e-9));
+}
+
+/**
+ * Measures one loop given as edge states. A cell is inside when an odd number of vertical line
+ * edges lie to its left. Each dot on a single loop has two of its edges on it, so the loop passes
+ * through as many dots as it has line edges.
+ */
+export function loopShape(grid: Grid, edges: Uint8Array): LoopShape {
+  const W = grid.width;
+  const H = grid.height;
+  const inside = new Uint8Array(grid.cellCount);
+  let area = 0;
+  for (let r = 0; r < H; r++) {
+    let v = 0;
+    for (let c = 0; c < W; c++) {
+      if (edges[grid.hEdgeCount + r * (W + 1) + c] === EdgeState.Line) v ^= 1;
+      inside[r * W + c] = v;
+      area += v;
+    }
+  }
+  let lines = 0;
+  for (const s of edges) if (s === EdgeState.Line) lines++;
+  let solid = 0;
+  for (let r = 0; r < H - 1; r++) {
+    for (let c = 0; c < W - 1; c++) {
+      const i = r * W + c;
+      const n = inside[i] + inside[i + 1] + inside[i + W] + inside[i + W + 1];
+      if (n === 0 || n === 4) solid++;
+    }
+  }
+  const blocks = (W - 1) * (H - 1);
+  return {
+    area: area / grid.cellCount,
+    dots: lines / grid.dotCount,
+    solid: blocks > 0 ? solid / blocks : 0,
+  };
 }
 
 /**
