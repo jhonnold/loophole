@@ -25,7 +25,7 @@ describe("loadConfig", () => {
         accessKeyId: "key",
         secretAccessKey: "secret",
       },
-      jobs: { generateTimeoutMs: 60_000, verifyTimeoutMs: 45_000 },
+      jobs: { generateTimeoutMs: 1_800_000, verifyTimeoutMs: 45_000 },
       publicUrl: "http://localhost:5173",
       trustProxy: false,
       turnstile: {

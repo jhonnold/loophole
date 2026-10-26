@@ -106,7 +106,7 @@ export class PrometheusWorkerMetrics implements WorkerMetrics {
       name: "loophole_job_duration_seconds",
       help: "Time from claiming a job to ending it, by kind and status.",
       labelNames: ["kind", "status"],
-      buckets: [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 30, 45, 60],
+      buckets: [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 30, 45, 60, 120, 300, 600, 1200, 1800],
       registers,
     });
     this.#lost = new Counter({

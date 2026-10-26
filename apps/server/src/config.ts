@@ -35,7 +35,7 @@ const EnvSchema = z.object({
   S3_ACCESS_KEY_ID: z.string().min(1),
   S3_SECRET_ACCESS_KEY: z.string().min(1),
   WORKER_ID: z.string().min(1).optional(),
-  GENERATE_TIMEOUT_MS: Ms.default(60_000),
+  GENERATE_TIMEOUT_MS: Ms.default(1_800_000),
   VERIFY_TIMEOUT_MS: Ms.default(45_000),
   PUBLIC_URL: z.url(),
   TRUST_PROXY: z.stringbool().default(false),
