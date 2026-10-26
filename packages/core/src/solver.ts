@@ -54,7 +54,10 @@ export function solve(puzzle: Puzzle, options: SolveOptions = {}): SolveResult {
     Number.POSITIVE_INFINITY,
   );
   const rules = options.rules ?? RULE_GROUPS;
-  const engine = new Engine(puzzle, budget, rules.includes("corners"));
+  const engine = new Engine(puzzle, budget, {
+    corners: rules.includes("corners"),
+    colouring: rules.includes("colouring"),
+  });
   const steps: Step[] = [];
   engine.steps = options.steps === false ? null : steps;
   engine.maxSteps = options.maxSteps ?? Number.POSITIVE_INFINITY;

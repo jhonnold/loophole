@@ -94,6 +94,11 @@ describe("solve: each rule", () => {
       { rule: "three-diagonal-one", changes: "13:2 5:2", cells: [0, 3], dots: [4] },
     ],
     [1, 4, ".31.", 0, { rule: "corner-chain", changes: "7:1", cells: [1, 2], dots: [4] }],
+    // Colouring (WT17): for each, the smallest puzzle, then the fewest clues, where it fires.
+    [2, 4, "1..11...", 3, { rule: "colour-1", changes: "17:2", cells: [4, 5], dots: [] }],
+    [1, 3, ".2.", 0, { rule: "colour-2", changes: "0:1", cells: [0, 1], dots: [] }],
+    [1, 4, ".32.", 0, { rule: "colour-3", changes: "8:1", cells: [1], dots: [] }],
+    [3, 3, "3..2.23..", 2, { rule: "colour-chain", changes: "2:1", cells: [2, 3, 5], dots: [] }],
   ];
 
   for (const [w, h, clues, index, expected] of cases) {
@@ -118,6 +123,29 @@ describe("solve: each rule", () => {
     expect(without.steps[0].rule).toBe("lookahead");
     expect(solve(p, { rules: [...RULE_GROUPS] })).toEqual(solve(p));
     expect(solve(p).steps[0].rule).toBe("corner-chain");
+  });
+
+  test("without steps it reaches the same edges and records none", () => {
+    const p = puzzle(3, 3, "0...11.3.");
+    const full = solve(p);
+    const bare = solve(p, { steps: false });
+    expect(bare.status).toBe(full.status);
+    expect(bare.edges).toEqual(full.edges);
+    expect(bare.steps).toEqual([]);
+  });
+
+  test("leaving the colouring group out drops its rules", () => {
+    // A 2 in a one-wide strip, between two outside cells: either it is inside (lines on both sides
+    // beside the outside) and so are the cells above and below it, or it is outside and both of
+    // those differ from it. Either way they are inside. No other rule, lookahead included, sees it.
+    const p = puzzle(1, 3, ".2.");
+    const without = solve(p, { rules: ["corners"] });
+    expect(without.status).toBe("stuck");
+    expect(without.steps).toEqual([]);
+    const all = solve(p);
+    expect(all.status).toBe("solved");
+    expect(all.steps[0].rule).toBe("colour-2");
+    expect(GROUP_RULES.colouring).toContain(all.steps[0].rule);
   });
 
   test("without steps it reaches the same edges and records none", () => {
@@ -239,9 +267,10 @@ describe("solve", () => {
         fc.integer({ min: 1, max: 9 }),
         fc.string({ minLength: 1, maxLength: 8 }),
         fc.double({ min: 0.2, max: 1, noNaN: true }),
+        fc.subarray([...RULE_GROUPS]),
         fc.boolean(),
         fc.boolean(),
-        (w, h, seed, keep, corners, lookahead) => {
+        (w, h, seed, keep, rules, lookahead, steps) => {
           const grid = createGrid(w, h);
           const rng = createRng(seed);
           const solution = generateLoop(grid, rng);
@@ -249,18 +278,21 @@ describe("solve", () => {
             k < 4 && rng.float() < keep ? k : NO_CLUE,
           );
           const p = createPuzzle(w, h, clues);
-          const options = { lookahead, rules: corners ? undefined : [] };
+          const options = { lookahead, rules, steps };
           const given = solution.map((s) => (rng.float() < 0.2 ? s : EdgeState.Unknown));
           const result = solve(p, { ...options, initial: given });
           expect(result.status).not.toBe("contradiction");
           result.edges.forEach((s, e) => {
             if (s !== EdgeState.Unknown) expect(s).toBe(solution[e]);
           });
-          // The result does not depend on the order deductions came in.
+          // The result does not depend on the order deductions came in, nor on whether steps are
+          // recorded (colouring stops at its first step then, and runs to the end otherwise).
           const part = result.edges.map((s, e) =>
             given[e] !== EdgeState.Unknown || rng.float() < 0.5 ? s : EdgeState.Unknown,
           );
-          expect(solve(p, { ...options, initial: part }).edges).toEqual(result.edges);
+          expect(solve(p, { ...options, steps: !steps, initial: part }).edges).toEqual(
+            result.edges,
+          );
         },
       ),
       { numRuns: 500 },

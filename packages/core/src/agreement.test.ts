@@ -24,9 +24,9 @@ function checkAgainstBruteForce(p: Puzzle): void {
     expect(encodeEdges(v.solutions[0])).not.toBe(encodeEdges(v.solutions[1]));
   }
 
-  // Every edge the rule solver decides agrees with every solution, with every rule group and with
-  // the corners group left out.
-  for (const rules of [undefined, []]) {
+  // Every edge the rule solver decides agrees with every solution, with every rule group, with
+  // each group alone and with none.
+  for (const rules of [undefined, ["corners"], ["colouring"], []] as const) {
     const r = solve(p, { rules });
     r.edges.forEach((state, e) => {
       if (state === EdgeState.Unknown) return;

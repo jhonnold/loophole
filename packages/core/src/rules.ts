@@ -26,6 +26,10 @@ export const RULE_IDS = [
   "three-diagonal-one",
   "corner-chain",
   "parity",
+  "colour-1",
+  "colour-2",
+  "colour-3",
+  "colour-chain",
   "lookahead",
 ] as const;
 
@@ -35,7 +39,7 @@ export type RuleId = (typeof RULE_IDS)[number];
  * Groups of rules that `solve` can leave out (`SolveOptions.rules`), so a difficulty level can use
  * a smaller set. The rules outside every group always run; lookahead has its own option.
  */
-export const RULE_GROUPS = ["corners"] as const;
+export const RULE_GROUPS = ["corners", "colouring"] as const;
 
 export type RuleGroup = (typeof RULE_GROUPS)[number];
 
@@ -50,6 +54,7 @@ export const GROUP_RULES: Readonly<Record<RuleGroup, readonly RuleId[]>> = {
     "three-diagonal-one",
     "corner-chain",
   ],
+  colouring: ["colour-1", "colour-2", "colour-3", "colour-chain"],
 };
 
 export const RULE_TEXT: Readonly<Record<RuleId, string>> = {
@@ -89,6 +94,14 @@ export const RULE_TEXT: Readonly<Record<RuleId, string>> = {
     "Working out which corners of the highlighted clues the loop passes through leaves one way for the marked edges.",
   parity:
     "Known edges show whether these two cells are on the same side of the loop, which decides the edge between them.",
+  "colour-1":
+    "Just one cell beside a 1 is on the other side of the loop (off the board is outside), which settles this edge.",
+  "colour-2":
+    "Two cells beside a 2 are on its side of the loop, two are not (off the board is outside), which settles this edge.",
+  "colour-3":
+    "Just one cell beside a 3 is on the same side of the loop as it (off the board is outside), which settles this edge.",
+  "colour-chain":
+    "Working out which side of the loop the cells beside the highlighted clues are on leaves one way for this edge.",
   lookahead:
     "Trying the other choice for this edge quickly leads to a contradiction, so it must be this way.",
 };
@@ -115,6 +128,10 @@ export const RULE_TITLE: Readonly<Record<RuleId, string>> = {
   "three-diagonal-one": "3 diagonal to a 1",
   "corner-chain": "Corners pass along",
   parity: "Inside and outside",
+  "colour-1": "Sides around a 1",
+  "colour-2": "Sides around a 2",
+  "colour-3": "Sides around a 3",
+  "colour-chain": "Sides pass along",
   lookahead: "Try and see",
 };
 
