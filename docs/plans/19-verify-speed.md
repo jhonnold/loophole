@@ -132,7 +132,7 @@ Clues 39.9 / 39.8 / 39.8 / 40.0 / 40.6%, restored 0.0%, every result `unique`, o
 - 1 500 boards up to 14×14 (random clue grids, planted loops with 20–90% of clues, one clue changed): `verify` status, solutions and node count with `deepenAfterNodes` default, 0, 1 and 50 (6 000 runs), and `solve` with steps, without steps, 4 rule subsets × lookahead on/off (36 000): 0 differences, except that `solve(…, { steps: false })` may stop on a different board when it ends in `contradiction`. Main does that too (against `steps: true`), and generation never solves a contradictory board (it always solves clue subsets of its own loop).
 - 160 generated puzzles (10–20) with 1–3 clues dropped or one changed, `deepenAfterNodes` default, 1 and 50: 0 differences (480).
 - Every set in the tables: identical node counts and answers.
-- The new engine property test passed 40 × 300 runs locally (12 000). Mutations it catches: no split on undo (20 failing tests), `ufSeen` not restored (1), no re-look at every clue after such an undo (1, via the new unit test), `unite` not queueing clue cells (2), a two-edge group always feasible (2), lines on both sides allowed (2). Harmless ones it does not: keeping cells queued after an undo (extra work), not skipping parity-set edges (extra work), dropping the deferred root check (`verify`'s search checks at every node anyway; `solve` without steps still finds those contradictions through lookahead in 200 000 random small boards).
+- The new engine property test passed 40 × 300 runs locally (12 000). Mutations it catches: no split on undo (20 failing tests), `ufSeen` not restored (1), no re-look at every clue after such an undo (1, via the new unit test), `unite` not queueing clue cells (2), a two-edge group always feasible (2), lines on both sides allowed (2). Harmless ones it does not: keeping cells queued after an undo (extra work), not skipping parity-set edges (extra work). Dropping the deferred root check does not change answers (`verify`'s search checks at every node; `solve` without steps still finds those contradictions through lookahead in 200 000 random small boards) but costs a search node on a board disconnected at the root, which the deferred-root-check test pins.
 
 ### Alternatives measured and not taken
 
@@ -160,6 +160,7 @@ Clues 39.9 / 39.8 / 39.8 / 40.0 / 40.6%, restored 0.0%, every result `unique`, o
 - Cheaper connectivity checks: done (step 3).
 - Allocations in hot loops: one change; the rest measured too small.
 - Solve/generation: `bench:generate --quick` 0.79–0.94× at 20–40×40, output identical.
+- Corner probes in `solve` (WT18's option A, left open for WT19): not taken up. Generation speed is adequate and A's hints were no better.
 
 ## Design
 
@@ -180,7 +181,7 @@ Applies only to an engine with `steps === null` when its first parity pass runs 
 - `connected()`: one walk from the first line's dot with walk marks (`reach[d] === walk`, `nextWalk()` resets every 2^30 walks), counting line ends met (each reached line twice); all lines reached iff `lineEnds === 2 * lineCount`. Clues: only the cells with a clue above 0 (`positiveCells()`, built once). The reason for a failure (`exitCells`, `exitDots`, read only while steps are recorded) is found afterwards by `exitReason`, the same first unreached line, else first unreached clue, as before.
 - `blocks()`: Tarjan from the first line's dot only (edges in other components stay `NONE`, as they are in no block with a line: same results for `connectivity`, `cutOff` and `hangingAt`), neighbour dots from a table (`dotNext`), line count per block (`blockLines`). `connectivity()` checks `blockLines[target] === lineCount` instead of scanning every edge.
 - `pairFeasible(e)` for two-edge groups without steps: when two-exits runs, `cutOff` has found nothing, so every line and open edge is in one block; crossing two edges between the same two faces cuts it into exactly two pieces, one at each end of `e`. Breadth-first walks from both ends, a dot each in turn, until one runs out (`spread`); then `pieceFeasible` on that piece: lines on both sides → infeasible; lines all here → every clue above 0 needs a usable side here (count marked clue cells); lines all on the other side → no clue above 0 beside this piece may have all its usable sides here. If the two walks meet (cannot happen when the reasoning holds), fall back to `connected()`. Groups of 3+ edges, and anything while steps are recorded, use `connected()` as before.
-- `propagate`: when `lookahead && !connectOn && steps === null`, the detect-only check moves from before lookahead to after lookahead returns 0. It sets nothing; a disconnected state stays disconnected as edges are added, so the root still fails, just later. Probe counts are unchanged (measured).
+- `propagate`: when `lookahead && !connectOn && steps === null`, the detect-only check moves from before lookahead to after lookahead returns 0. It sets nothing; a disconnected state stays disconnected as edges are added, so the root still fails, just later. On boards that pass the check at the root probe counts are unchanged (measured). On a board that is disconnected at the root and that tier 1 does not reject, lookahead now runs before the check finds it: a 100×100 ring of 0s goes from 1.5 to 14 ms (0 → 57 783 probes, still `none`; a few ms at 30×30). A test pins that the root is still rejected (`verify`: `none`, 0 nodes).
 
 ### Files
 
@@ -197,7 +198,7 @@ Applies only to an engine with `steps === null` when its first parity pass runs 
 
 ## Rules for the implementer
 
-- Mode EXECUTE; follow the steps in order; the code blocks are exact (they were run: `bun run check` passed with them, 843 pass, 3 skip; each step's own state was checked too). Each "Replace … with …" block occurs exactly once in the file at that point; apply them in order. Run `bun run format` after editing, then the step's checks.
+- Mode EXECUTE; follow the steps in order; the code blocks are exact (they were run: `bun run check` passed with them, 844 pass, 3 skip; each step's own state was checked too; the implementer then folded in the plan review's nits, so the engine differs from the planner's snapshots in the `Mark.colourPending` comment and in `pieceFeasible` taking its cell mark from `pairFeasible`, and the tests are the ones below). Each "Replace … with …" block occurs exactly once in the file at that point; apply them in order. Run `bun run format` after editing, then the step's checks.
 - Bun lives in `~/.bun/bin`: prefix commands with `export PATH="$HOME/.bun/bin:$PATH";`. Run `bun install --frozen-lockfile` first.
 - Do not clone the repo (`/tmp` is a 16 GB tmpfs shared with other worktrees); scratch scripts go in your scratchpad. The planner's full diff is `/tmp/claude-1000/-home-jhonnold-projects-loophole/a34715f6-7810-5a69-ba81-edd46bda034d/scratchpad/verify-speed/wt19-final.diff`, and the engine after step 2 alone is `…/verify-speed/engine.step2.ts`: the reference if a block below is ambiguous (do not `git apply` blindly; commit per step).
 - Commit at the four boundaries given (conventional commits). `bun run check` must pass at each.
@@ -384,7 +385,13 @@ with
   /** The trailed union-find (see `trailed`): its trail length and `ufSeen` then. */
   readonly uf: number;
   readonly ufSeen: number;
-  /** Whether colouring had cells left to look at then. */
+  /**
+   * Whether colouring had cells left to look at then. Latent hazard: if a colouring pass runs
+   * between such a mark and its `undo` with no union in between, it drains the queue (or drops it
+   * on a contradiction), `undo` then splits nothing and those cells are not looked at again. No
+   * caller does this: marks are taken after `propagate`'s colouring pass, or inside probes, which
+   * never colour. A caller that did would have to make `undo` set `colourAll`.
+   */
   readonly colourPending: boolean;
 }
 
@@ -776,16 +783,17 @@ import { createRng } from "./rng.ts";
     // An engine that records no steps keeps parity's union-find (and colouring's relations in it)
     // between passes and undoes it with the edges, as the verifier's search does; one that records
     // steps rebuilds it on every pass. Given the same sets and undos, they agree after every one.
-    // With connectivity on too, as after `deepen`.
+    // With connectivity on too, as after `deepen`. Few clues and 15–60 moves a run, so most boards
+    // are open at the root and about half the undos split unions.
     const budget = () => new Budget(Date.now, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
     fc.assert(
       fc.property(
         fc.integer({ min: 1, max: 8 }),
         fc.integer({ min: 1, max: 8 }),
         fc.string({ minLength: 1, maxLength: 8 }),
-        fc.double({ min: 0.2, max: 0.9, noNaN: true }),
+        fc.double({ min: 0.05, max: 0.5, noNaN: true }),
         fc.boolean(),
-        fc.array(fc.tuple(fc.nat({ max: 3 }), fc.nat(), fc.boolean()), { maxLength: 40 }),
+        fc.array(fc.tuple(fc.nat({ max: 3 }), fc.nat(), fc.boolean()), { minLength: 15, maxLength: 60 }),
         (w, h, seed, keep, connectivity, moves) => {
           const grid = createGrid(w, h);
           const rng = createRng(seed);
@@ -830,7 +838,7 @@ import { createRng } from "./rng.ts";
   });
 ```
 
-The first test fails if `undo` forgets `colourAll` (the mark is taken while every clue is still to be looked at); the second runs a trailed and a rebuilding engine in lockstep through random sets and undos, with and without connectivity (300 runs, about 0.15 s). It does not compare against an engine solving from scratch: tier 1 has a known order dependence (`generate.ts`, "One theoretical gap is left": a premature-loop crossing skipped because closing would have completed the solution is not looked at again when a line is added elsewhere), which main shows too.
+The first test fails if `undo` forgets `colourAll` (the mark is taken while every clue is still to be looked at); the second runs a trailed and a rebuilding engine in lockstep through random sets and undos, with and without connectivity (300 runs, about 0.17 s; few clues and 15–60 moves a run give about 2 800 undos, about 1 400 of which split unions, against about 320 and 135 with 0–40 moves and 20–90% of clues). It does not compare against an engine solving from scratch: tier 1 has a known order dependence (`generate.ts`, "One theoretical gap is left": a premature-loop crossing skipped because closing would have completed the solution is not looked at again when a line is added elsewhere), which main shows too.
 
 ### 2.3 `packages/core/src/agreement.test.ts`
 
@@ -1364,8 +1372,10 @@ with
    */
   private pairFeasible(e: number): boolean {
     const { grid, reach, stack: qa, pieceQueue: qb } = this;
+    // All three marks before anything is marked: the counter's reset clears `reach` and `cellMark`.
     const wa = this.nextWalk();
     const wb = this.nextWalk();
+    const mark = this.nextWalk();
     qa[0] = grid.edgeDots[e * 2];
     qb[0] = grid.edgeDots[e * 2 + 1];
     reach[qa[0]] = wa;
@@ -1375,8 +1385,8 @@ with
     let hb = 0;
     let tb = 1;
     for (;;) {
-      if (ha === ta) return this.pieceFeasible(qa, ta, wa);
-      if (hb === tb) return this.pieceFeasible(qb, tb, wb);
+      if (ha === ta) return this.pieceFeasible(qa, ta, wa, mark);
+      if (hb === tb) return this.pieceFeasible(qb, tb, wb, mark);
       ta = this.spread(qa[ha++], qa, ta, wa, wb);
       if (ta >= 0) tb = this.spread(qb[hb++], qb, tb, wb, wa);
       if (ta < 0 || tb < 0) return this.connected();
@@ -1403,12 +1413,13 @@ with
   }
 
   /**
-   * `pairFeasible` once the piece with dots `q[0..n)` (marked `w` in `reach`) is done. The loop
+   * `pairFeasible` once the piece with dots `q[0..n)` (marked `w` in `reach`) is done; `mark` marks
+   * the clue cells already counted (in `cellMark`). The loop
    * lies in this piece if it holds every line, in the other one if it holds none; with lines in
    * both there is no loop. Every clue above 0 needs a side in the loop's piece that is neither
    * crossed nor in the group.
    */
-  private pieceFeasible(q: Int32Array, n: number, w: number): boolean {
+  private pieceFeasible(q: Int32Array, n: number, w: number, mark: number): boolean {
     const { grid, edges, clues, inGroup, reach, cellMark, dotCells } = this;
     // Both ends of a line here are here: count each line at both.
     let lineEnds = 0;
@@ -1420,7 +1431,6 @@ with
     }
     const lines = lineEnds / 2;
     if (lines !== 0 && lines !== this.lineCount) return false;
-    const mark = this.nextWalk();
     if (lines === this.lineCount) {
       // The loop is here: every clue above 0 needs a usable side here.
       let found = 0;
@@ -1479,7 +1489,42 @@ with
         this.probes++;
 ```
 
-Verify: `bun run check` (843 pass, 3 skip); `bun run --cwd packages/core bench`: statuses and nodes as in the table. Commit.
+Verify: `bun run check` (844 pass, 3 skip); `bun run --cwd packages/core bench`: statuses and nodes as in the table. Commit.
+
+### 3.2 `packages/core/src/engine.test.ts`
+
+Add the import `import { verify } from "./verify.ts";` after the `createRng` import, and after the lockstep test (inside the `describe`) add:
+
+```ts
+
+  test("without steps or the connectivity group the root's disconnected board is still found, after lookahead", () => {
+    // A ring of 0s walls the middle off from a 1 outside it; tier 1 does not see that. The detect-only
+    // check waits until lookahead has found nothing (DECISIONS, WT19), but still rejects the root,
+    // so the verifier stops before searching.
+    const rows = [
+      "....1....",
+      ".0000000.",
+      ".0.....0.",
+      ".0.....0.",
+      ".0..2..0.",
+      ".0.....0.",
+      ".0.....0.",
+      ".0000000.",
+      ".........",
+    ];
+    const p = puzzle(9, 9, rows.join(""));
+    const budget = new Budget(Date.now, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
+    const engine = new Engine(p, budget, { connectivity: false });
+    expect(engine.local()).toBe(true);
+    expect(engine.solveRoot(true)).toBe(false);
+    expect(engine.probes).toBeGreaterThan(0);
+    const v = verify(p);
+    expect(v.status).toBe("none");
+    expect(v.stats.nodes).toBe(0);
+  });
+```
+
+It fails if the deferred check is dropped (the root then survives lookahead and `verify` searches one node).
 
 ## Step 4 — DECISIONS
 
@@ -1498,11 +1543,11 @@ Append the three entries below to `docs/DECISIONS.md`, after the last WT18 entry
 ## 2026-10-26 · WT19 `verify-speed` · Cheaper connectivity walks; the root's check waits for lookahead
 - **Question:** With parity incremental, connectivity is most of the verifier's deepened search (blocks, two-exits and their walks about 80%), and the detect-only check runs after every lookahead deduction at the root. What can be cheaper without changing what they find?
 - **Decision:** `connected` walks once with walk marks instead of clearing arrays, counts line ends on the way (all lines reached iff twice the line count) and looks only at the cells with a clue above 0; it works out why it failed (for a step's reason) only when steps are recorded. `blocks` runs Tarjan from the first line's dot only, with a table of neighbour dots, and counts lines per block, so `connectivity` checks one count instead of scanning every edge. A two-exits group of two edges is checked by walking both pieces left when they are crossed, a dot each in turn, and stopping when the smaller one is done (every line and open edge is in one block then, so there are exactly two pieces; if the walks meet, the full walk decides). Without steps and without the connectivity group, `propagate` leaves the detect-only check until lookahead finds nothing: it sets nothing, and a disconnected board stays disconnected as edges are added.
-- **Reason:** On top of the previous entry: 0.84–0.98× (deepened 20×20 searches 0.84–0.85×, generated puzzles 0.88–0.89×); a deepened 30×30 search costs 47–49 µs a node (main 158–164 µs, the pre-WT18 verifier's shallow search 67–70 µs). Under the server's 30 s budget two of four 30×30 boards main left `unknown` now finish (`multiple` in 16 and 22 s); none went the other way. Probe and node counts unchanged.
+- **Reason:** On top of the previous entry: 0.84–0.98× (deepened 20×20 searches 0.84–0.85×, generated puzzles 0.88–0.89×); a deepened 30×30 search costs 47–49 µs a node (main 158–164 µs, the pre-WT18 verifier's shallow search 67–70 µs). Under the server's 30 s budget two of four 30×30 boards main left `unknown` now finish (`multiple` in 16 and 22 s); none went the other way. Probe and node counts unchanged on boards that pass the root's connectivity check; on a board that is disconnected at the root and that tier 1 does not reject, the root's lookahead now runs before the check finds it (100×100 ring of 0s: 1.5 → 14 ms, 0 → 57 783 probes, still `none`; a few ms at 30×30).
 
 ## 2026-10-26 · WT19 `verify-speed` · The verifier keeps its search order and its 200-node threshold; `bench` gets hard cases
 - **Question:** Should the deepening threshold, the deepened search's schedule or the branching edge change now that a node costs less?
-- **Decision:** No. The threshold stays 200: 100 is within ±10%, and 500, 1 000 and 3 000 are 1.2–5.2× slower on the new solver's puzzles and no faster on long searches. Connectivity stays at every pass of every deepened node: only once per node, every other depth, or without two-exits gave mixed times and, for the last two, a board that ran out of nodes. The search still branches on the first open edge in reading order, cross first: `multiple` returns the first two solutions in that order, and the editor suggests a clue from them, so another order would change answers. Not taken either: batching lookahead's deductions (probes doubled, 1.06–1.43× slower), leaving the deepened root's connectivity until lookahead finds nothing (1.17–1.43×), checking the clock every 16 probes (about 4% of root-heavy runs, but it changes the documented budget behaviour). The roadmap's "skip colouring when no edge is open" has nothing to skip (with no open edge the loop has closed or tier 1 fails first), and the 3s patterns and corner rules already apply in every search node. `bench` gains the clue-gap corpus, empty and draft boards and generated puzzles less one or two clues at 10–30, with a 50 000-node cap so it stays a half-minute run.
+- **Decision:** No. The threshold stays 200: 100 is within ±10%, and 500, 1 000 and 3 000 are 1.2–5.2× slower on the new solver's puzzles and no faster on long searches. Connectivity stays at every pass of every deepened node: only once per node, every other depth, or without two-exits gave mixed times and, for the last two, a board that ran out of nodes. The search still branches on the first open edge in reading order, cross first: `multiple` returns the first two solutions in that order, and the editor suggests a clue from them, so another order would change answers. Not taken either: batching lookahead's deductions (probes doubled, 1.06–1.43× slower), leaving the deepened root's connectivity until lookahead finds nothing (1.17–1.43×), checking the clock every 16 probes (about 4% of root-heavy runs, but it changes the documented budget behaviour), corner probes in `solve` (WT18's option A: generation speed is adequate and A's hints were no better). The roadmap's "skip colouring when no edge is open" has nothing to skip (with no open edge the loop has closed or tier 1 fails first), and the 3s patterns and corner rules already apply in every search node. `bench` gains the clue-gap corpus, empty and draft boards and generated puzzles less one or two clues at 10–30, with a 50 000-node cap so it stays a half-minute run.
 - **Reason:** Measured after the two entries above (paired, `scratchpad/verify-speed`). The deepened search still costs 1.8–4× the same engine's shallow search per node where connectivity barely prunes (`blocks` about 40%, two-exits' faces and groups about 22% of it), but less per node than main's shallow search did; an incremental face union-find for two-exits is the next lever.
 ```
 
@@ -1511,14 +1556,14 @@ Append the three entries below to `docs/DECISIONS.md`, after the last WT18 entry
 | Criterion | Check | PRD |
 |---|---|---|
 | Same answers as main: status and solutions, and the same search | `stress.ts` (6 000 `verify` runs at 4 thresholds, 480 on damaged generated puzzles: status, solutions, node counts), every set in the tables; `agreement.test.ts`, `verify.test.ts`, `clue-gaps.test.ts` unchanged and passing | FR-4, FR-5 |
-| Trailed and rebuilt union-find agree through any sets and undos | `engine.test.ts` lockstep property (300 runs; 12 000 locally), colour re-look test; mutations listed above caught | NFR-3 |
+| Trailed and rebuilt union-find agree through any sets and undos | `engine.test.ts` lockstep property (300 runs; 12 000 locally), deferred-root-check test, colour re-look test; mutations listed above caught | NFR-3 |
 | `solve` without steps finds the same status as with them | `agreement.test.ts` (70 930 puzzles, all groups and none); `solver.test.ts` "larger planted boards" (steps vs no steps, unchanged) | FR-3 |
 | Hints and generation unchanged | goldens in `generate.test.ts` unchanged; 120 seeds identical (puzzle, stats, steps) | FR-6, FR-10 |
 | Verification no slower than main beyond noise, faster where it matters | paired table: every set 0.12–1.00× (full30 1.00–1.02) except p10 (1.02–1.08 on 50 µs boards, A/A spread ±4.5%); `bench` lines equal or faster with identical statuses and nodes | NFR-1 |
 | WT18's 20×20 regression fixed | `v5w2_drop1_20` 0.54× main; worst board 1.22 s against main 2.50 s and pre-WT18 1.79 s | NFR-1 |
 | No `unknown` where main was definite under the 30 s budget | `timelim.ts`: 2 `unknown` → definite, 0 the other way | NFR-1, FR-27 |
 | Generation within NFR-1 and identical | `bench:generate --quick` p95 ≤ 1.8 s to 30×30, 5.9 s at 40×40 | NFR-1, FR-10 |
-| Gate | `bun run check` at each commit (843 pass, 3 skip); no API change | NFR-3 |
+| Gate | `bun run check` at each commit (843 pass, 3 skip after step 2, 844 after step 3); no API change | NFR-3 |
 
 ## Open questions
 
