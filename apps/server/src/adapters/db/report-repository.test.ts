@@ -21,7 +21,7 @@ function setup() {
       puzzle: createPuzzle(2, 1, clues),
       origin: "generated",
       status: "published",
-      level: 1,
+      level: "hard",
       solutionKey: "k",
       traceKey: null,
       createdAt: 0,

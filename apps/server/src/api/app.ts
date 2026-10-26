@@ -291,6 +291,7 @@ function toPuzzleDto(r: PuzzleRecord) {
     id: r.id,
     puzzle: serializePuzzle(r.puzzle),
     origin: r.origin,
+    level: r.level,
     createdAt: iso(r.createdAt),
   };
 }
@@ -301,6 +302,7 @@ function toPuzzleSummary(r: PuzzleRecord) {
     width: r.puzzle.grid.width,
     height: r.puzzle.grid.height,
     origin: r.origin,
+    level: r.level,
     createdAt: iso(r.createdAt),
   };
 }

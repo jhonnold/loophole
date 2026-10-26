@@ -7,6 +7,7 @@ const PUZZLE: Schemas["Puzzle"] = {
   id: "p1",
   puzzle: { v: 1, width: 2, height: 2, clues: "2222", seed: "s", meta: { generator: "1" } },
   origin: "generated",
+  level: "hard",
   createdAt: "2026-10-25T12:00:00.000Z",
 };
 

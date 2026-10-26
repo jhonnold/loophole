@@ -60,7 +60,7 @@ describe("AttemptManager.start", () => {
         puzzleId: "d25",
         day: "2026-10-25",
         area: 4,
-        level: 1,
+        level: "hard",
         startedAt: T0,
         finishedAt: null,
         timeMs: null,
@@ -275,7 +275,7 @@ describe("AttemptManager.summary (FR-24)", () => {
     const both = manager.summary("u1");
     expect(both.streak).toBe(2);
     expect(both.attempts.map((a) => a.attempt.puzzleId)).toEqual(["d25"]);
-    expect(both.bests).toEqual([{ area: 4, level: 1, timeMs: 60_000 }]);
+    expect(both.bests).toEqual([{ area: 4, level: "hard", timeMs: 60_000 }]);
 
     // Two days later without playing, the streak is gone.
     clock.time = MIDNIGHT + 86_400_000;

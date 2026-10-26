@@ -119,21 +119,21 @@ describe("GET /api/daily (FR-22)", () => {
       live: true,
       nextAt: "2026-10-26T00:00:00.000Z",
       puzzles: [
-        { size: 7, puzzleId: "d25" },
-        { size: 10, puzzleId: null },
-        { size: 20, puzzleId: null },
-        { size: 40, puzzleId: null },
+        { size: 7, level: "hard", puzzleId: "d25" },
+        { size: 10, level: "hard", puzzleId: null },
+        { size: 20, level: "hard", puzzleId: null },
+        { size: 40, level: "hard", puzzleId: null },
       ],
     });
     const past = (await (await send("GET", "/api/daily?day=2026-10-24")).json()) as DailySet;
     expect(past).toMatchObject({ day: "2026-10-24", live: false });
-    expect(past.puzzles[0]).toEqual({ size: 7, puzzleId: "d24" });
+    expect(past.puzzles[0]).toEqual({ size: 7, level: "hard", puzzleId: "d24" });
     await expectProblem(await send("GET", "/api/daily?day=2026-10-26"), 404);
     await expectProblem(await send("GET", "/api/daily?day=2026-02-30"), 400);
     clock.time = MIDNIGHT;
     const next = (await (await send("GET", "/api/daily")).json()) as DailySet;
     expect(next).toMatchObject({ day: "2026-10-26", live: true });
-    expect(next.puzzles[0]).toEqual({ size: 7, puzzleId: "d26" });
+    expect(next.puzzles[0]).toEqual({ size: 7, level: "hard", puzzleId: "d26" });
   });
 
   test("a daily is served with clues only, no seed or generator version, and only from its day (FR-25)", async () => {
@@ -183,7 +183,7 @@ describe("ranked attempts (FR-17, FR-25)", () => {
         puzzleId: "d25",
         day: "2026-10-25",
         area: 4,
-        level: 1,
+        level: "hard",
         status: "playing",
         startedAt: new Date(T0).toISOString(),
         finishedAt: null,
@@ -211,7 +211,7 @@ describe("ranked attempts (FR-17, FR-25)", () => {
       day: "2026-10-25",
       streak: 1,
       attempts: [{ puzzleId: "d25", rank: 1 }],
-      bests: [{ area: 4, level: 1, timeMs: 64_000 }],
+      bests: [{ area: 4, level: "hard", timeMs: 64_000 }],
     });
     expect(summary.week).toHaveLength(7);
   });
@@ -363,7 +363,7 @@ describe("leaderboards (FR-23)", () => {
     const board = await res.json();
     expect(board).toEqual({
       area: 4,
-      level: 1,
+      level: "hard",
       total: 2,
       entries: [
         { rank: 1, name: "tsuru", timeMs: 50_000, me: false },
@@ -378,7 +378,7 @@ describe("leaderboards (FR-23)", () => {
     const guest = (await (
       await send("GET", "/api/leaderboards/areas/4?limit=1")
     ).json()) as Leaderboard;
-    expect(guest).toMatchObject({ area: 4, level: 1, total: 2, me: null });
+    expect(guest).toMatchObject({ area: 4, level: "hard", total: 2, me: null });
     expect(guest.entries).toEqual([{ rank: 1, name: "tsuru", timeMs: 50_000, me: false }]);
     await expectProblem(await send("GET", "/api/leaderboards/daily/d26"), 404);
     await expectProblem(await send("GET", "/api/leaderboards/areas/0"), 400);

@@ -23,11 +23,17 @@ describe("JobManager", () => {
       id: "j-1",
       kind: "generate",
       status: "queued",
-      input: { width: 10, height: 7, seed: "abc" },
+      input: { width: 10, height: 7, seed: "abc", level: "hard" },
       createdAt: 42,
     });
     expect(manager.get("j-1")).toEqual(job);
     expect(manager.get("nope")).toBeNull();
+  });
+
+  test("enqueueGenerate takes the level asked for, hard by default (FR-7)", () => {
+    const { manager } = setup();
+    const job = manager.enqueueGenerate({ width: 5, height: 5, level: "easy" });
+    expect(job.kind === "generate" && job.input.level).toBe("easy");
   });
 
   test("enqueueGenerate picks a random seed when none is given", () => {

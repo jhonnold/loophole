@@ -11,7 +11,7 @@ import {
   fakeSeeds,
   sequentialIds,
 } from "../test-support/fakes.ts";
-import { DailyManager } from "./daily-manager.ts";
+import { DailyManager, dailyLevel } from "./daily-manager.ts";
 import { DailyStockManager } from "./daily-stock-manager.ts";
 import { JobManager } from "./job-manager.ts";
 import { PuzzleManager } from "./puzzle-manager.ts";
@@ -68,8 +68,12 @@ describe("DailyStockManager.stock (FR-22)", () => {
     expect(queue.get("j-1")).toMatchObject({
       kind: "generate",
       status: "queued",
-      input: { width: 7, height: 7, seed: "2026-10-25/7/0", day: "2026-10-25" },
+      input: { width: 7, height: 7, seed: "2026-10-25/7/0", day: "2026-10-25", level: "hard" },
     });
+    // Each size class at its own level (one level per size, PRD FR-22).
+    for (const job of queue.jobs.values()) {
+      if (job.kind === "generate") expect(job.input.level).toBe(dailyLevel(job.input.width));
+    }
     expect(queue.get("j-8")?.input).toMatchObject({ width: 40, day: "2026-10-26" });
     expect(repo.get("2026-10-26", 40)).toMatchObject({ attempt: 0, jobId: "j-8", puzzleId: null });
     // Running again while the jobs wait queues nothing more.
@@ -93,7 +97,7 @@ describe("DailyStockManager.stock (FR-22)", () => {
       clues: ".".repeat(49),
     });
     expect(stock.stock().missingToday).toEqual([10, 20, 40]);
-    expect(dailies.forDay().puzzles[0]).toEqual({ size: 7, puzzleId: "j-1" });
+    expect(dailies.forDay().puzzles[0]).toEqual({ size: 7, level: "hard", puzzleId: "j-1" });
 
     // Tomorrow's is stored the day before and stays hidden until midnight.
     await stock.complete("j-5", "2026-10-26", generated(7));

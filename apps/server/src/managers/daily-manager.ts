@@ -1,11 +1,29 @@
+import { DEFAULT_LEVEL, type Level } from "@loophole/core";
 import type { DailyRecord } from "../domain.ts";
 import type { Clock, DailyRepository } from "../ports.ts";
 import { addDays, dayStart, utcDay } from "./days.ts";
 import { DailyNotFoundError } from "./errors.ts";
 import type { PuzzleManager } from "./puzzle-manager.ts";
 
-/** The daily size classes (PRD §14 question 6, design kit): each day has a W×W puzzle of each. */
-export const DAILY_SIZES: readonly number[] = [7, 10, 20, 40];
+/**
+ * The daily size classes (PRD §14 question 6, design kit) and the level each one's puzzle is made
+ * at (PRD FR-22, FR-23): each day has a W×W puzzle of each, at that level. One level per size
+ * class; all hard for now (DECISIONS, WT21 "Levels on the server").
+ */
+export const DAILY_CLASSES: readonly { readonly size: number; readonly level: Level }[] = [
+  { size: 7, level: "hard" },
+  { size: 10, level: "hard" },
+  { size: 20, level: "hard" },
+  { size: 40, level: "hard" },
+];
+
+/** The daily size classes, smallest first. */
+export const DAILY_SIZES: readonly number[] = DAILY_CLASSES.map((c) => c.size);
+
+/** The level a size class's daily puzzle is made at; hard for a size without a daily. */
+export function dailyLevel(size: number): Level {
+  return DAILY_CLASSES.find((c) => c.size === size)?.level ?? DEFAULT_LEVEL;
+}
 
 /** A day's daily puzzles. */
 export interface DailySet {
@@ -14,8 +32,15 @@ export interface DailySet {
   readonly live: boolean;
   /** When the next day's puzzles come out: the next 00:00 UTC. */
   readonly nextAt: number;
-  /** One per size class, smallest first; `puzzleId` is null while the puzzle isn't ready. */
-  readonly puzzles: readonly { readonly size: number; readonly puzzleId: string | null }[];
+  /**
+   * One per size class, smallest first; `puzzleId` is null while the puzzle isn't ready. `level` is
+   * the stored puzzle's, or the size class's while there is none.
+   */
+  readonly puzzles: readonly {
+    readonly size: number;
+    readonly level: Level;
+    readonly puzzleId: string | null;
+  }[];
 }
 
 export interface DailyManagerDeps {
@@ -54,8 +79,12 @@ export class DailyManager {
       puzzles: DAILY_SIZES.map((size) => {
         const puzzleId = rows.get(size)?.puzzleId ?? null;
         // An admin may have unpublished a broken daily.
-        const visible = puzzleId !== null && puzzles.get(puzzleId) !== null;
-        return { size, puzzleId: visible ? puzzleId : null };
+        const record = puzzleId === null ? null : puzzles.get(puzzleId);
+        return {
+          size,
+          level: record?.level ?? dailyLevel(size),
+          puzzleId: record === null ? null : puzzleId,
+        };
       }),
     };
   }

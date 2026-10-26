@@ -1,4 +1,4 @@
-import type { Puzzle } from "@loophole/core";
+import type { Level, Puzzle } from "@loophole/core";
 import type {
   AccountTokenPurpose,
   AccountTokenRecord,
@@ -498,8 +498,8 @@ export class FakeAttemptRepository implements AttemptRepository {
     return [...new Set(days.map((a) => a.day))];
   }
 
-  bests(userId: string): { area: number; level: number; timeMs: number }[] {
-    const best = new Map<string, { area: number; level: number; timeMs: number }>();
+  bests(userId: string): { area: number; level: Level; timeMs: number }[] {
+    const best = new Map<string, { area: number; level: Level; timeMs: number }>();
     for (const a of this.#ranked().filter((r) => r.userId === userId)) {
       const key = `${a.area}/${a.level}`;
       const old = best.get(key);
@@ -520,7 +520,7 @@ export class FakeAttemptRepository implements AttemptRepository {
 
   bucketBoard(
     area: number,
-    level: number,
+    level: Level,
     viewerId: string | null,
     limit: number,
   ): LeaderboardSlice {

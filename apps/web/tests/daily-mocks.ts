@@ -31,7 +31,7 @@ export function attempt(changes: Partial<Schemas["Attempt"]> = {}): Schemas["Att
     puzzleId: DAILY_ID,
     day: TODAY,
     area: 49,
-    level: 1,
+    level: "hard",
     status: "playing",
     startedAt: new Date().toISOString(),
     finishedAt: null,
@@ -46,7 +46,7 @@ export function attempt(changes: Partial<Schemas["Attempt"]> = {}): Schemas["Att
 /** The Solved artboard's board: the top three, a gap, then the player and their neighbours. */
 export const BOARD: Schemas["Leaderboard"] = {
   area: 49,
-  level: 1,
+  level: "hard",
   total: 480,
   entries: [
     { rank: 1, name: "kuroneko", timeMs: 72_000, me: false },
@@ -103,10 +103,10 @@ export async function mockDailyApi(page: Page, options: MockOptions = {}) {
       live: !ended,
       nextAt: `${dayAfter(served.current)}T00:00:00.000Z`,
       puzzles: [
-        { size: 7, puzzleId: DAILY_ID },
-        { size: 10, puzzleId: null },
-        { size: 20, puzzleId: null },
-        { size: 40, puzzleId: null },
+        { size: 7, level: "hard", puzzleId: DAILY_ID },
+        { size: 10, level: "hard", puzzleId: null },
+        { size: 20, level: "hard", puzzleId: null },
+        { size: 40, level: "hard", puzzleId: null },
       ],
     }),
   );
@@ -115,6 +115,7 @@ export async function mockDailyApi(page: Page, options: MockOptions = {}) {
       id: DAILY_ID,
       puzzle: small7?.wire,
       origin: "generated",
+      level: "hard",
       createdAt: `${TODAY}T00:00:00.000Z`,
     }),
   );
@@ -128,7 +129,7 @@ export async function mockDailyApi(page: Page, options: MockOptions = {}) {
         finished: back > 0,
       })),
       attempts: current === null ? [] : [current],
-      bests: [{ area: 49, level: 1, timeMs: 171_000 }],
+      bests: [{ area: 49, level: "hard", timeMs: 171_000 }],
     }),
   );
   await page.route(`**/api/users/u1/attempts/${DAILY_ID}`, (route) => {

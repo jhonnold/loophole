@@ -27,11 +27,12 @@ export function runTask(task: Task, onProgress: (progress: number) => void): Tas
   };
   switch (task.kind) {
     case "generate": {
-      const { width, height, seed } = task.input;
+      const { width, height, seed, level } = task.input;
       const result = generate({
         width,
         height,
         seed,
+        level,
         onProgress: ({ done, total }) => report((REMOVAL_SHARE * done) / total),
       });
       return {

@@ -29,7 +29,7 @@ function setup() {
       puzzle: createPuzzle(2, 2),
       origin: "generated",
       status: "published",
-      level: 1,
+      level: "hard",
       solutionKey: `puzzles/${id}/solution.txt`,
       traceKey: null,
       createdAt: 0,
@@ -51,7 +51,7 @@ function attempt(changes: Partial<AttemptRecord> = {}): AttemptRecord {
     puzzleId: "p1",
     day: "2026-10-25",
     area: 49,
-    level: 1,
+    level: "hard",
     startedAt: 1000,
     finishedAt: null,
     timeMs: null,
@@ -98,7 +98,7 @@ describe("SqliteAttemptRepository", () => {
     repo.insert(attempt({ puzzleId: "p3", day: "2026-10-26", area: 100 }));
     expect(repo.listForDay("u1", "2026-10-25").map((a) => a.puzzleId)).toEqual(["p2"]);
     expect(repo.finishedDays("u1").sort()).toEqual(["2026-10-24", "2026-10-25"]);
-    expect(repo.bests("u1")).toEqual([{ area: 49, level: 1, timeMs: 7000 }]);
+    expect(repo.bests("u1")).toEqual([{ area: 49, level: "hard", timeMs: 7000 }]);
     expect(repo.bests("u2")).toEqual([]);
   });
 
@@ -144,14 +144,14 @@ describe("SqliteAttemptRepository", () => {
     repo.insert(solved("u2", 3000, { puzzleId: "p1" }));
     repo.insert(solved("u3", 1000, { puzzleId: "p3", area: 100 }));
     repo.insert(solved("u4", 500, { puzzleId: "p2", ranked: false }));
-    expect(repo.bucketBoard(49, 1, "u2", 10)).toEqual({
+    expect(repo.bucketBoard(49, "hard", "u2", 10)).toEqual({
       total: 2,
       entries: [
         { rank: 1, userId: "u1", name: null, timeMs: 2000 },
         { rank: 2, userId: "u2", name: null, timeMs: 3000 },
       ],
     });
-    expect(repo.bucketBoard(49, 2, null, 10).total).toBe(0);
+    expect(repo.bucketBoard(49, "easy", null, 10).total).toBe(0);
   });
 
   test("deleting the account deletes its attempts, taking it off every board (NFR-6)", () => {

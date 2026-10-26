@@ -25,7 +25,11 @@ describe("DailyManager (FR-22)", () => {
       day: "2026-10-25",
       live: true,
       nextAt: MIDNIGHT,
-      puzzles: DAILY_SIZES.map((size) => ({ size, puzzleId: size === 7 ? "d7" : null })),
+      puzzles: DAILY_SIZES.map((size) => ({
+        size,
+        level: "hard",
+        puzzleId: size === 7 ? "d7" : null,
+      })),
     });
   });
 
@@ -37,7 +41,7 @@ describe("DailyManager (FR-22)", () => {
     expect(() => manager.forDay("2026-10-26")).toThrow(DailyNotFoundError);
     clock.time = MIDNIGHT;
     expect(manager.today()).toBe("2026-10-26");
-    expect(manager.forDay().puzzles[0]).toEqual({ size: 7, puzzleId: "tomorrow" });
+    expect(manager.forDay().puzzles[0]).toEqual({ size: 7, level: "hard", puzzleId: "tomorrow" });
     expect(manager.forDay("2026-10-25")).toMatchObject({
       live: false,
       nextAt: MIDNIGHT + 86_400_000,

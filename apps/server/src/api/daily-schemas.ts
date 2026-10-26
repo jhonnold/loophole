@@ -1,6 +1,7 @@
 import { z } from "@hono/zod-openapi";
+import { LEVELS } from "@loophole/core";
 import { isDay } from "../managers/days.ts";
-import { EdgesSchema } from "./schemas.ts";
+import { EdgesSchema, LevelSchema } from "./schemas.ts";
 
 // Request and response bodies of the daily puzzle, ranked attempt, leaderboard and display name
 // routes (daily.ts).
@@ -31,6 +32,7 @@ export const DailySetSchema = z
     puzzles: z.array(
       z.object({
         size: z.int().min(1).max(100).openapi({ description: "The puzzle is size × size." }),
+        level: LevelSchema,
         puzzleId: z.union([Id, z.null()]).openapi({
           description: "Null while the puzzle isn't ready. Open it with GET /api/puzzles/{id}.",
         }),
@@ -55,7 +57,7 @@ export const AttemptSchema = z
     puzzleId: Id,
     day: Day,
     area: z.int().min(1).openapi({ description: "Width × height: the leaderboard bucket." }),
-    level: z.int(),
+    level: LevelSchema,
     status: z.enum(["playing", "finished"]),
     startedAt: Timestamp,
     finishedAt: z.union([Timestamp, z.null()]),
@@ -101,7 +103,7 @@ export const DailySummarySchema = z
       .openapi({ description: "The last seven days, oldest first." }),
     attempts: z.array(AttemptSchema).openapi({ description: "Today's attempts." }),
     bests: z
-      .array(z.object({ area: z.int(), level: z.int(), timeMs: Ms }))
+      .array(z.object({ area: z.int(), level: LevelSchema, timeMs: Ms }))
       .openapi({ description: "Best ranked time per leaderboard bucket." }),
   })
   .openapi("DailySummary");
@@ -124,7 +126,7 @@ export const BucketBoardParamSchema = z.object({
 });
 
 export const BucketBoardQuerySchema = LeaderboardQuerySchema.extend({
-  level: z.coerce.number().int().min(1).max(100).default(1).openapi({ example: 1 }),
+  level: z.enum(LEVELS).default("hard").openapi({ example: "hard" }),
 });
 
 const LeaderboardEntrySchema = z
@@ -141,7 +143,7 @@ const LeaderboardEntrySchema = z
 export const LeaderboardSchema = z
   .object({
     area: z.int(),
-    level: z.int(),
+    level: LevelSchema,
     total: z.int().min(0).openapi({ description: "How many players are on the board." }),
     entries: z.array(LeaderboardEntrySchema).openapi({
       description:

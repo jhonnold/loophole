@@ -7,7 +7,7 @@ const ATTEMPT: Attempt = {
   puzzleId: "d1",
   day: "2026-10-25",
   area: 49,
-  level: 1,
+  level: "hard",
   status: "finished",
   startedAt: "2026-10-25T10:00:00.000Z",
   finishedAt: "2026-10-25T10:03:18.000Z",

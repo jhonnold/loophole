@@ -1,3 +1,4 @@
+import type { Level } from "@loophole/core";
 import type { LeaderboardEntry, LeaderboardSlice } from "../domain.ts";
 import type { AttemptRepository } from "../ports.ts";
 import type { DailyManager } from "./daily-manager.ts";
@@ -8,7 +9,7 @@ import type { PuzzleManager } from "./puzzle-manager.ts";
 export interface Leaderboard {
   /** The bucket (PRD FR-23): width × height, and the level. */
   readonly area: number;
-  readonly level: number;
+  readonly level: Level;
   /** How many players are on it. */
   readonly total: number;
   /** The top rows, then the viewer's row and its neighbours, by rank. */
@@ -46,7 +47,7 @@ export class LeaderboardManager {
   }
 
   /** The all-time board of one bucket: each player's best ranked time. */
-  forBucket(area: number, level: number, viewerId: string | null, limit: number): Leaderboard {
+  forBucket(area: number, level: Level, viewerId: string | null, limit: number): Leaderboard {
     const slice = this.#deps.attempts.bucketBoard(area, level, viewerId, limit);
     return board(area, level, slice, viewerId);
   }
@@ -54,7 +55,7 @@ export class LeaderboardManager {
 
 function board(
   area: number,
-  level: number,
+  level: Level,
   slice: LeaderboardSlice,
   viewerId: string | null,
 ): Leaderboard {

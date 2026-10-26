@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import type { Level } from "@loophole/core";
 import type { AttemptRecord, LeaderboardSlice } from "../../domain.ts";
 import type { AttemptRepository } from "../../ports.ts";
 
@@ -8,7 +9,7 @@ type AttemptRow = {
   puzzle_id: string;
   day: string;
   area: number;
-  level: number;
+  level: Level;
   started_at: number;
   finished_at: number | null;
   time_ms: number | null;
@@ -75,7 +76,7 @@ export class SqliteAttemptRepository implements AttemptRepository {
     this.#finishedDays = db.query<{ day: string }, { user: string }>(
       "SELECT DISTINCT day FROM attempts WHERE user_id = $user AND finished_at IS NOT NULL",
     );
-    this.#bests = db.query<{ area: number; level: number; time_ms: number }, { user: string }>(
+    this.#bests = db.query<{ area: number; level: Level; time_ms: number }, { user: string }>(
       `SELECT area, level, MIN(time_ms) AS time_ms FROM attempts
        WHERE user_id = $user AND ranked = 1 GROUP BY area, level ORDER BY area, level`,
     );
@@ -94,7 +95,7 @@ export class SqliteAttemptRepository implements AttemptRepository {
     // `finished_at` is when the player set their best time.
     this.#bucketBoard = db.query<
       BoardRow,
-      { area: number; level: number; viewer: string | null; limit: number }
+      { area: number; level: Level; viewer: string | null; limit: number }
     >(
       `WITH best AS (
          SELECT user_id, MIN(time_ms) AS time_ms, finished_at FROM attempts
@@ -155,7 +156,7 @@ export class SqliteAttemptRepository implements AttemptRepository {
     return this.#finishedDays.all({ user: userId }).map((r) => r.day);
   }
 
-  bests(userId: string): { area: number; level: number; timeMs: number }[] {
+  bests(userId: string): { area: number; level: Level; timeMs: number }[] {
     return this.#bests
       .all({ user: userId })
       .map((r) => ({ area: r.area, level: r.level, timeMs: r.time_ms }));
@@ -167,7 +168,7 @@ export class SqliteAttemptRepository implements AttemptRepository {
 
   bucketBoard(
     area: number,
-    level: number,
+    level: Level,
     viewerId: string | null,
     limit: number,
   ): LeaderboardSlice {

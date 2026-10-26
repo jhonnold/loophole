@@ -55,7 +55,7 @@ function setup(options: { webDir?: string; maxQueued?: number } = {}) {
       solution: SOLUTION,
       steps: [],
     });
-  return { app, repo, queue, clock, savePuzzle };
+  return { app, repo, queue, clock, puzzles, savePuzzle };
 }
 
 const postJson = (body: unknown) => ({
@@ -91,10 +91,26 @@ describe("puzzles", () => {
       id,
       puzzle: { v: 1, width: 2, height: 2, clues: "2222", seed: "s", meta: { generator: "1" } },
       origin: "generated",
+      level: "hard",
       createdAt: "2026-10-25T12:00:00.000Z",
     });
     expect(text).not.toContain(SOLUTION);
     expect(text).not.toContain("solution");
+  });
+
+  test("a puzzle made below hard is served with its level, in the DTO and in meta (FR-7)", async () => {
+    const { app, puzzles } = setup();
+    const wire = serializePuzzle(
+      createPuzzle(2, 2, [2, 2, 2, 2], { seed: "s", meta: { generator: "6", level: "easy" } }),
+    );
+    await puzzles.saveGenerated("easy-1", { puzzle: wire, solution: SOLUTION, steps: [] });
+    const body = await (await app.request("/api/puzzles/easy-1")).json();
+    expect(body).toMatchObject({
+      level: "easy",
+      puzzle: { meta: { generator: "6", level: "easy" } },
+    });
+    const list = await (await app.request("/api/puzzles")).json();
+    expect(list).toMatchObject({ items: [{ id: "easy-1", level: "easy" }] });
   });
 
   test("GET /api/puzzles/{id} is 404 for unknown and unpublished puzzles", async () => {
@@ -115,7 +131,14 @@ describe("puzzles", () => {
     const res = await app.request("/api/puzzles?limit=1");
     expect(await res.json()).toEqual({
       items: [
-        { id: b, width: 2, height: 2, origin: "generated", createdAt: "2026-10-25T12:00:01.000Z" },
+        {
+          id: b,
+          width: 2,
+          height: 2,
+          origin: "generated",
+          level: "hard",
+          createdAt: "2026-10-25T12:00:01.000Z",
+        },
       ],
     });
     const all = (await (await app.request("/api/puzzles")).json()) as { items: { id: string }[] };
@@ -196,7 +219,17 @@ describe("jobs", () => {
       startedAt: null,
       finishedAt: null,
     });
-    expect(queue.get("j-1")?.input).toEqual({ width: 10, height: 7, seed: "x" });
+    expect(queue.get("j-1")?.input).toEqual({ width: 10, height: 7, seed: "x", level: "hard" });
+  });
+
+  test("POST /api/jobs/generate takes a level (FR-7)", async () => {
+    const { app, queue } = setup();
+    const res = await app.request(
+      "/api/jobs/generate",
+      postJson({ width: 7, height: 7, level: "medium" }),
+    );
+    expect(res.status).toBe(202);
+    expect(queue.get("j-2")?.input).toMatchObject({ width: 7, height: 7, level: "medium" });
   });
 
   test("POST /api/jobs/generate validates the body", async () => {
@@ -209,6 +242,7 @@ describe("jobs", () => {
       { width: 5, height: 5, seed: "" },
       { width: 5, height: 5, seed: "x".repeat(129) },
       { width: 5, height: 5, extra: true },
+      { width: 5, height: 5, level: "expert" },
     ]) {
       const problem = await expectProblem(
         await app.request("/api/jobs/generate", postJson(body)),

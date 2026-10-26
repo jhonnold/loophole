@@ -1,4 +1,4 @@
-import type { PuzzleWireV1 } from "@loophole/core";
+import { DEFAULT_LEVEL, type Level, type PuzzleWireV1 } from "@loophole/core";
 import type { GenerateInput, Job, JobInput } from "../domain.ts";
 import type { Clock, JobQueue } from "../ports.ts";
 import { QueueFullError } from "./errors.ts";
@@ -16,6 +16,8 @@ export interface GenerateRequest {
   readonly height: number;
   /** Picked at random when absent. */
   readonly seed?: string;
+  /** Hard (core's `DEFAULT_LEVEL`) when absent. */
+  readonly level?: Level;
 }
 
 /** Queues background jobs and reports on them. The worker process runs them (`JobRunManager`). */
@@ -31,7 +33,12 @@ export class JobManager {
     const seed = request.seed ?? this.#deps.newId();
     return this.#enqueue({
       kind: "generate",
-      input: { width: request.width, height: request.height, seed },
+      input: {
+        width: request.width,
+        height: request.height,
+        seed,
+        level: request.level ?? DEFAULT_LEVEL,
+      },
     });
   }
 

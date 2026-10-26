@@ -1,4 +1,4 @@
-import type { Puzzle, PuzzleWireV1, Step, VerifyStatus } from "@loophole/core";
+import type { Level, Puzzle, PuzzleWireV1, Step, VerifyStatus } from "@loophole/core";
 
 /** Where a stored puzzle came from. */
 export type PuzzleOrigin = "generated" | "submitted";
@@ -9,12 +9,19 @@ export type PuzzleStatus = "published" | "unpublished";
 /** A stored puzzle. The solution and the solver trace live in the blob store, not here. */
 export interface PuzzleRecord {
   readonly id: string;
-  /** Clues, seed and `meta.generator` (the generator version), as the core models them. */
+  /**
+   * Clues, seed, `meta.generator` (the generator version) and, below the default level,
+   * `meta.level`, as the core models them. `meta.level` always matches `level`, so hints use the
+   * puzzle's level (core's `findHint`).
+   */
   readonly puzzle: Puzzle;
   readonly origin: PuzzleOrigin;
   readonly status: PuzzleStatus;
-  /** Difficulty level. Every puzzle is level 1 until levels exist (PRD FR-29). */
-  readonly level: number;
+  /**
+   * The level a generated puzzle was made at (PRD FR-7), as the generator reported it. Submitted
+   * puzzles and those from before levels are hard (core's `DEFAULT_LEVEL`).
+   */
+  readonly level: Level;
   /** Blob key of the solution, in the wire format's edge-state encoding. */
   readonly solutionKey: string;
   /** Blob key of the solver's step log (JSON), when there is one. */
@@ -40,6 +47,8 @@ export interface GenerateInput {
   readonly seed: string;
   /** Set when the puzzle is a daily puzzle: its UTC day, `YYYY-MM-DD` (PRD FR-22). */
   readonly day?: string;
+  /** The level to generate at (PRD FR-7). Left out in jobs queued before levels: hard. */
+  readonly level?: Level;
 }
 
 export interface VerifyInput {
@@ -242,9 +251,9 @@ export interface AttemptRecord {
   readonly puzzleId: string;
   /** The daily's UTC day. */
   readonly day: string;
-  /** Leaderboard bucket: width × height, and the puzzle's level (PRD FR-23, FR-29). */
+  /** Leaderboard bucket: width × height, and the puzzle's level (PRD FR-23). */
   readonly area: number;
-  readonly level: number;
+  readonly level: Level;
   readonly startedAt: number;
   /** Null while the attempt is being played. */
   readonly finishedAt: number | null;

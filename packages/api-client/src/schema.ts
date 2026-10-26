@@ -2275,7 +2275,7 @@ export interface paths {
             parameters: {
                 query?: {
                     limit?: number;
-                    level?: number;
+                    level?: "easy" | "medium" | "hard";
                 };
                 header?: never;
                 path: {
@@ -2599,6 +2599,7 @@ export interface components {
             width: number;
             height: number;
             origin: components["schemas"]["PuzzleOrigin"];
+            level: components["schemas"]["Level"];
             /**
              * Format: date-time
              * @example 2026-10-25T12:00:00.000Z
@@ -2607,6 +2608,11 @@ export interface components {
         };
         /** @enum {string} */
         PuzzleOrigin: "generated" | "submitted";
+        /**
+         * @description Difficulty level (PRD FR-7): which rules the generator's solver may use and how many clues stay, easiest first. Hints use the puzzle's level. Submitted puzzles count as hard.
+         * @enum {string}
+         */
+        Level: "easy" | "medium" | "hard";
         /** @description An error, as RFC 9457 problem details. */
         Problem: {
             type: string;
@@ -2624,6 +2630,7 @@ export interface components {
             id: string;
             puzzle: components["schemas"]["PuzzleWire"];
             origin: components["schemas"]["PuzzleOrigin"];
+            level: components["schemas"]["Level"];
             /**
              * Format: date-time
              * @example 2026-10-25T12:00:00.000Z
@@ -2707,8 +2714,13 @@ export interface components {
         GenerateRequest: {
             width: number;
             height: number;
-            /** @description Same seed, size and generator version give the same puzzle. */
+            /** @description Same seed, size, level and generator version give the same puzzle. */
             seed?: string;
+            /**
+             * @description Default hard. A board too small for the level's rules gets the next level up; the puzzle's `level` says which.
+             * @enum {string}
+             */
+            level?: "easy" | "medium" | "hard";
         };
         AuthConfig: {
             /** @description Site key for the sign-up CAPTCHA. */
@@ -2903,6 +2915,7 @@ export interface components {
             puzzles: {
                 /** @description The puzzle is size × size. */
                 size: number;
+                level: components["schemas"]["Level"];
                 /** @description Null while the puzzle isn't ready. Open it with GET /api/puzzles/{id}. */
                 puzzleId: string | null;
             }[];
@@ -2929,7 +2942,7 @@ export interface components {
             /** @description Best ranked time per leaderboard bucket. */
             bests: {
                 area: number;
-                level: number;
+                level: components["schemas"]["Level"];
                 timeMs: number;
             }[];
         };
@@ -2943,7 +2956,7 @@ export interface components {
             day: string;
             /** @description Width × height: the leaderboard bucket. */
             area: number;
-            level: number;
+            level: components["schemas"]["Level"];
             /** @enum {string} */
             status: "playing" | "finished";
             /**
@@ -2977,7 +2990,7 @@ export interface components {
         /** @description Ranked solves by time, without hinted ones (PRD FR-23). */
         Leaderboard: {
             area: number;
-            level: number;
+            level: components["schemas"]["Level"];
             /** @description How many players are on the board. */
             total: number;
             /** @description The top `limit` rows, then the logged-in player's row and its neighbours, by rank. */

@@ -1,4 +1,4 @@
-import type { Puzzle } from "@loophole/core";
+import type { Level, Puzzle } from "@loophole/core";
 import type {
   AccountTokenPurpose,
   AccountTokenRecord,
@@ -265,19 +265,14 @@ export interface AttemptRepository {
   /** Every day on which the user finished an attempt, ranked or not; any order. */
   finishedDays(userId: string): string[];
   /** The user's best ranked time in each bucket. */
-  bests(userId: string): { area: number; level: number; timeMs: number }[];
+  bests(userId: string): { area: number; level: Level; timeMs: number }[];
   /** Ranked solves of one puzzle, fastest first: the top `limit` and `viewerId`'s neighbourhood. */
   puzzleBoard(puzzleId: string, viewerId: string | null, limit: number): LeaderboardSlice;
   /**
    * Each player's best ranked time in one bucket, fastest first: the top `limit` and `viewerId`'s
    * neighbourhood.
    */
-  bucketBoard(
-    area: number,
-    level: number,
-    viewerId: string | null,
-    limit: number,
-  ): LeaderboardSlice;
+  bucketBoard(area: number, level: Level, viewerId: string | null, limit: number): LeaderboardSlice;
 }
 
 /** Names players chose to show on leaderboards. */
