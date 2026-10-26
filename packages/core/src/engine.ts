@@ -20,6 +20,11 @@
  * 5. lookahead: assume an edge, run tier 1 (and with `probeCorners`, which `deepen` turns on, the
  *    corner rules too), and take the opposite on a contradiction
  * After any change the engine goes back to tier 1, so steps come out roughly easiest first.
+ *
+ * When no steps are recorded (the verifier, generation's clue tests) the order of deductions does
+ * not matter, only the fixpoint, so parity and colouring work incrementally: parity's union-find
+ * is trailed and undone with the edges, and colouring looks again only at the clues a union
+ * touched.
  */
 import { EdgeState, type Grid, NONE } from "./grid.ts";
 import { NO_CLUE, type Puzzle } from "./puzzle.ts";
@@ -63,6 +68,17 @@ export interface Mark {
   readonly closed: boolean;
   /** `cornerScan` then, so undoing past the first corner pass makes the next one scan again. */
   readonly scan: number;
+  /** The trailed union-find (see `trailed`): its trail length and `ufSeen` then. */
+  readonly uf: number;
+  readonly ufSeen: number;
+  /**
+   * Whether colouring had cells left to look at then. Latent hazard: if a colouring pass runs
+   * between such a mark and its `undo` with no union in between, it drains the queue (or drops it
+   * on a contradiction), `undo` then splits nothing and those cells are not looked at again. No
+   * caller does this: marks are taken after `propagate`'s colouring pass, or inside probes, which
+   * never colour. A caller that did would have to make `undo` set `colourAll`.
+   */
+  readonly colourPending: boolean;
 }
 
 /*
@@ -165,6 +181,22 @@ export class Engine {
   private readonly ufParent: Int32Array;
   private readonly ufParity: Uint8Array;
   private ufFound = 0;
+  /**
+   * Without recorded steps (the verifier, generation's clue tests) the union-find is trailed
+   * instead of rebuilt on every parity pass: union by size, no path compression, each set's nodes in
+   * a ring (`ufNext`, `ufSize`), every union pushed on `ufTrail` so `undo` can split it again.
+   * Colouring's relations go into it too and stay until undone. Null until the first parity pass,
+   * which decides.
+   */
+  private trailed: boolean | null = null;
+  /** Edges on the trail before this position are in the trailed union-find. */
+  private ufSeen = 0;
+  /** Roots attached under another root, in order (trailed mode). */
+  private readonly ufTrail: number[] = [];
+  /** Open edges a union found between the two sets it joined (trailed mode). */
+  private readonly decided: number[] = [];
+  /** Trailed mode: the next colouring pass looks at every clue cell, not just the queued ones. */
+  private colourAll = true;
   /**
    * Colouring. These arrays are allocated on the first colouring pass (`initColour`), so a puzzle
    * the earlier tiers finish pays nothing. Once a pass adds its first relation, each union-find
@@ -371,6 +403,9 @@ export class Engine {
       corners: this.cornerTrail.length,
       closed: this.closed,
       scan: this.cornerScan,
+      uf: this.ufTrail.length,
+      ufSeen: this.ufSeen,
+      colourPending: this.colourAll || this.colourLen > 0,
     };
   }
 
@@ -394,6 +429,14 @@ export class Engine {
     }
     this.closed = m.closed;
     if (m.scan < this.cornerScan) this.cornerScan = m.scan;
+    if (this.ufTrail.length > m.uf) {
+      this.splitTo(m.uf);
+      // Cells queued since the mark were queued by unions now undone. If none was queued then,
+      // every cell was at its fixpoint; otherwise look at all of them again.
+      if (m.colourPending) this.colourAll = true;
+      else while (this.colourLen > 0) this.dequeueColour();
+    }
+    this.ufSeen = m.ufSeen;
     this.clearQueue();
     while (this.cqLen > 0) this.dequeueCorner();
     if (this.cornerSeen > m.edges) this.cornerSeen = m.edges;
@@ -909,10 +952,16 @@ export class Engine {
    * Every cell is inside or outside the loop, and everything beyond the border is outside. A line
    * separates cells of different sides, a cross joins cells of the same side. Union-find with
    * parity over the cells plus one "outside" node (index cellCount) links cells whose relative
-   * side is known; an open edge between two linked cells is then decided. Returns the number of
-   * edges set, or -1 on a contradiction.
+   * side is known; an open edge between two linked cells is then decided. Rebuilt on every pass
+   * while steps are recorded, so each pass decides its edges in index order; otherwise trailed
+   * (`parityTrailed`). Returns the number of edges set, or -1 on a contradiction.
    */
   private parity(): number {
+    if (this.trailed === null) {
+      this.trailed = this.steps === null;
+      if (this.trailed) this.initTrailed();
+    }
+    if (this.trailed) return this.parityTrailed();
     const { grid, edges, ufParent, ufParity } = this;
     const C = grid.cellCount;
     for (let i = 0; i <= C; i++) {
@@ -958,7 +1007,118 @@ export class Engine {
     return count;
   }
 
-  /** Root of `x`'s set; leaves the parity of `x` relative to the root in `ufFound`. */
+  /** Sets up the trailed union-find: every node alone. Allocates the colouring arrays too. */
+  private initTrailed(): void {
+    if (this.ufNext.length === 0) this.initColour();
+    const n = this.grid.cellCount + 1;
+    for (let x = 0; x < n; x++) {
+      this.ufParent[x] = x;
+      this.ufParity[x] = 0;
+      this.ufNext[x] = x;
+      this.ufSize[x] = 1;
+    }
+  }
+
+  /**
+   * Parity with the trailed union-find: adds the edges set since the last pass, then decides the
+   * open edges between the sets those unions joined. Same result as rebuilding (the relations are
+   * the same, and no open edge is left inside a set after a pass). Returns the number of edges set,
+   * or -1 on a contradiction.
+   */
+  private parityTrailed(): number {
+    const { grid, edges, edgeTrail } = this;
+    for (; this.ufSeen < edgeTrail.length; this.ufSeen++) {
+      const e = edgeTrail[this.ufSeen];
+      const x = edges[e] === Line ? 1 : 0;
+      if (!this.unite(sideNode(grid, e, 0), sideNode(grid, e, 1), x)) {
+        this.decided.length = 0;
+        return -1;
+      }
+    }
+    const set = this.assignDecided();
+    // The edges just set join nodes already in one set: nothing to add for them.
+    if (set > 0) this.ufSeen = edgeTrail.length;
+    return set;
+  }
+
+  /**
+   * Trailed mode: records "nodes u and v are on different sides exactly when x is 1". False when the
+   * union-find already says otherwise. When it joins two sets, first notes in `decided` the open
+   * edges between them (found from the smaller set) and queues the clue cells at or beside the
+   * smaller set's nodes for colouring (every cell with nodes in both sets has one there).
+   */
+  private unite(u: number, v: number, x: number): boolean {
+    const { grid, edges, ufParent, ufParity, ufSize, ufNext } = this;
+    let small = this.ufFind(u);
+    const pu = this.ufFound;
+    let large = this.ufFind(v);
+    const pv = this.ufFound;
+    if (small === large) return (pu ^ pv) === x;
+    if (ufSize[small] > ufSize[large]) {
+      const t = small;
+      small = large;
+      large = t;
+    }
+    const C = grid.cellCount;
+    let n = small;
+    do {
+      if (this.colourOn) this.queueAround(n);
+      const list = n === C ? this.borderEdges : grid.cellEdges;
+      const from = n === C ? 0 : n * 4;
+      const to = n === C ? list.length : from + 4;
+      for (let k = from; k < to; k++) {
+        const e = list[k];
+        if (edges[e] !== Unknown) continue;
+        const a = sideNode(grid, e, 0);
+        if (this.ufFind(a === n ? sideNode(grid, e, 1) : a) === large) this.decided.push(e);
+      }
+      n = ufNext[n];
+    } while (n !== small);
+    ufParent[small] = large;
+    ufParity[small] = pu ^ pv ^ x;
+    this.joinRings(small, large);
+    this.ufTrail.push(small);
+    return true;
+  }
+
+  /** Trailed mode: sets the edges in `decided`, whose sides are now in one set. -1 on a contradiction. */
+  private assignDecided(): number {
+    const { grid, decided } = this;
+    let set = 0;
+    for (let k = 0; k < decided.length; k++) {
+      const e = decided[k];
+      this.ufFind(sideNode(grid, e, 0));
+      const pa = this.ufFound;
+      this.ufFind(sideNode(grid, e, 1));
+      if (!this.assign(e, pa !== this.ufFound ? Line : Cross)) {
+        decided.length = 0;
+        return -1;
+      }
+      set++;
+    }
+    decided.length = 0;
+    return set;
+  }
+
+  /** Trailed mode: undoes unions until `ufTrail` has `length` entries. */
+  private splitTo(length: number): void {
+    const { ufTrail, ufParent, ufParity, ufSize, ufNext } = this;
+    while (ufTrail.length > length) {
+      const s = ufTrail.pop() as number;
+      const l = ufParent[s];
+      ufSize[l] -= ufSize[s];
+      const t = ufNext[s];
+      ufNext[s] = ufNext[l];
+      ufNext[l] = t;
+      ufParent[s] = s;
+      ufParity[s] = 0;
+    }
+  }
+
+  /**
+   * Root of `x`'s set; leaves the parity of `x` relative to the root in `ufFound`. Compresses the
+   * path unless the union-find is trailed (`undo` could not put it back).
+   */
   private ufFind(x: number): number {
     const { ufParent, ufParity } = this;
     let root = x;
@@ -966,6 +1126,10 @@ export class Engine {
     while (ufParent[root] !== root) {
       p ^= ufParity[root];
       root = ufParent[root];
+    }
+    if (this.trailed) {
+      this.ufFound = p;
+      return root;
     }
     // Path compression: point every node on the way straight at the root.
     let cur = x;
@@ -993,6 +1157,7 @@ export class Engine {
    * sets it has nodes in. Returns the number of edges set, or -1 on a contradiction.
    */
   private colour(): number {
+    if (this.trailed) return this.colourTrailed();
     if (this.ufNext.length === 0) this.initColour();
     const { colourCells } = this;
     const recording = this.steps !== null;
@@ -1022,6 +1187,25 @@ export class Engine {
       if (!ok || (recording && this.colourSet > 0)) {
         while (this.colourLen > 0) this.dequeueColour();
         if (!ok) return -1;
+      }
+    }
+    return this.colourSet;
+  }
+
+  /**
+   * Colouring on the trailed union-find: its relations stay, so only the cells whose nodes a union
+   * has joined since (queued by `unite`) need another look, or every cell after `colourAll`.
+   */
+  private colourTrailed(): number {
+    if (this.colourAll) {
+      this.colourAll = false;
+      for (let x = 0; x < this.colourCells.length; x++) this.queueColour(this.colourCells[x]);
+    }
+    this.colourSet = 0;
+    while (this.colourLen > 0) {
+      if (!this.colourCell(this.dequeueColour())) {
+        while (this.colourLen > 0) this.dequeueColour();
+        return -1;
       }
     }
     return this.colourSet;
@@ -1164,6 +1348,14 @@ export class Engine {
    */
   private colourJoin(i: number, known: number, a: number, b: number, x: number): boolean {
     const { ufParent, ufParity, ufSize, ufNext, cNode } = this;
+    if (this.trailed) {
+      // The union-find is trailed: `unite` finds the edges to decide and the cells to queue.
+      if (!this.unite(cNode[a], cNode[b], x)) return false;
+      const set = this.assignDecided();
+      if (set < 0) return false;
+      this.colourSet += set;
+      return true;
+    }
     let small = this.ufFind(cNode[a]);
     const pa = this.ufFound;
     let large = this.ufFind(cNode[b]);
