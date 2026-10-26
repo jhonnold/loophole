@@ -133,6 +133,13 @@ describe("solve", () => {
     expect(solve(p).status).toBe("solved");
   });
 
+  test("checks for an early loop at both ends of a path that a line joined", () => {
+    // clue-gaps-5-81#5 from the WT14 corpus. Joining two paths makes their far ends the new path's
+    // ends without queueing them; lookahead then missed a loop closing there too early, and the
+    // solver got stuck.
+    expect(solve(puzzle(5, 5, ".3.22.1.1.3..2..222132.10")).status).toBe("solved");
+  });
+
   test("continues from a partial board and leaves its edges alone", () => {
     const p = puzzle(2, 2, "2222");
     const solution = decodeEdges(p.grid, "112211121121");

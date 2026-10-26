@@ -8,9 +8,9 @@ import { verify } from "./verify.ts";
 /**
  * Ids of the corpus entries the rule solver solves. Empty when the corpus was made (WT14): every
  * entry was stuck. A solver change that solves more adds their ids, like a golden value; a missing
- * id means a rule got weaker.
+ * id means a rule got weaker. WT15's premature-loop fix solves the first three.
  */
-const SOLVED: string[] = [];
+const SOLVED: string[] = ["clue-gaps-5-81#5", "clue-gaps-10-8#26", "clue-gaps-10-8#27"];
 
 const corpus = clueGapCorpus();
 

@@ -44,7 +44,7 @@ function checkResult(r: GenerateResult, seed: string, thresholds = LOOP_THRESHOL
 }
 
 describe("generate: golden values (FR-10)", () => {
-  // Frozen output for GENERATOR_VERSION "2". If one changes, the generator's output changed: bump
+  // Frozen output for GENERATOR_VERSION "3". If one changes, the generator's output changed: bump
   // GENERATOR_VERSION and update these (docs/DECISIONS.md, WT3).
   const cases: [number, number, string, string][] = [
     [1, 1, ".", "1111"],
@@ -97,7 +97,7 @@ describe("generate: golden values (FR-10)", () => {
   test('20x20 seed "golden" (digest)', () => {
     const r = generate({ width: 20, height: 20, seed: "golden" });
     expect(hashSeed(serializePuzzleJson(r.puzzle) + encodeEdges(r.solution))).toEqual([
-      1637745618, 2430984644, 1904902262, 590195424,
+      3043905915, 124454878, 3022035990, 3169070646,
     ]);
   });
 });

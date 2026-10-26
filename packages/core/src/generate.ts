@@ -9,7 +9,7 @@ import { type SolveResult, solve } from "./solver.ts";
  * same version (PRD FR-10). Bump it whenever any output changes, including through a change to the
  * solver's rules, which decide which clues can go.
  */
-export const GENERATOR_VERSION = "2";
+export const GENERATOR_VERSION = "3";
 
 /** A clue's removal is tested with the edges this many cells around it unknown, the rest given. */
 const WINDOW_RADIUS = 3;

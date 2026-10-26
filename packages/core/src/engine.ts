@@ -237,6 +237,14 @@ export class Engine {
     mate[eb] = ea;
     plen[ea] = len;
     plen[eb] = len;
+    // The path's ends may be dots no change touched. If they are next to each other, the edge
+    // between them would close the path early: queue them for the premature-loop check.
+    const gap = Math.abs(ea - eb);
+    const W1 = grid.width + 1;
+    if (gap === W1 || (gap === 1 && Math.floor(ea / W1) === Math.floor(eb / W1))) {
+      this.enqueue(grid.cellCount + ea);
+      this.enqueue(grid.cellCount + eb);
+    }
     return true;
   }
 
