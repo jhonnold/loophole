@@ -1,6 +1,7 @@
 <script lang="ts">
   import { auth } from "$lib/auth/index.ts";
   import SiteHeader from "$lib/components/SiteHeader.svelte";
+  import SsoButton from "$lib/components/SsoButton.svelte";
   import Turnstile from "$lib/components/Turnstile.svelte";
 
   let email = $state("");
@@ -47,6 +48,7 @@
     </p>
   {:else}
     <p>Accounts are optional: every puzzle plays without one.</p>
+    <SsoButton />
     <form onsubmit={submit}>
       <label>
         Email

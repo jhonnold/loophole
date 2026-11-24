@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { createApiClient } from "@loophole/api-client";
 import { get } from "svelte/store";
-import { createAuth, failureMessage, tokenFromHash, type User } from "./auth.ts";
+import { createAuth, failureMessage, oidcErrorFromHash, tokenFromHash, type User } from "./auth.ts";
 
 const USER: User = {
   id: "u1",
   email: "ann@example.com",
   emailVerified: false,
+  hasPassword: true,
   isAdmin: false,
   createdAt: "2026-10-25T12:00:00.000Z",
 };
@@ -111,7 +112,7 @@ describe("auth store", () => {
     expect(await auth.resetPassword("tok", "new-password")).toEqual({ ok: true });
     expect(get(auth)).toEqual({ status: "guest" });
     await auth.logIn("ann@example.com", "hunter22");
-    expect(await auth.deleteAccount("hunter22")).toEqual({ ok: true });
+    expect(await auth.deleteAccount({ password: "hunter22" })).toEqual({ ok: true });
     expect(get(auth)).toEqual({ status: "guest" });
     expect(requests.at(-1)).toEqual({
       route: "DELETE /api/account",
@@ -185,5 +186,39 @@ describe("helpers", () => {
     expect(tokenFromHash("")).toBeNull();
     expect(tokenFromHash("#token=")).toBeNull();
     expect(tokenFromHash("#other=1")).toBeNull();
+  });
+});
+
+describe("single sign-on", () => {
+  test("oidcName is the provider's name, or null when it's off or the API is down", async () => {
+    const on = setup({
+      "GET /api/auth/config": [200, { turnstileSiteKey: "k", oidc: { name: "Authelia" } }],
+    });
+    expect(await on.auth.oidcName()).toBe("Authelia");
+    expect(await on.auth.turnstileSiteKey()).toBe("k");
+    const off = setup({ "GET /api/auth/config": [200, { turnstileSiteKey: "k", oidc: null }] });
+    expect(await off.auth.oidcName()).toBeNull();
+    const down = setup({});
+    expect(await down.auth.oidcName()).toBeNull();
+  });
+
+  test("oidcErrorFromHash explains each reason the API sends back", () => {
+    expect(oidcErrorFromHash("")).toBeNull();
+    expect(oidcErrorFromHash("#token=abc")).toBeNull();
+    expect(oidcErrorFromHash("#oidc_error=unavailable")).toContain("Couldn't reach");
+    expect(oidcErrorFromHash("#oidc_error=no-email")).toContain("didn't share an email");
+    expect(oidcErrorFromHash("#oidc_error=email-unverified")).toContain(
+      "Log in with your password",
+    );
+    expect(oidcErrorFromHash("#oidc_error=failed")).toContain("didn't work");
+  });
+
+  test("an account without a password is deleted with its email", async () => {
+    const { auth, requests } = setup({ "DELETE /api/account": [204] });
+    expect(await auth.deleteAccount({ email: "ann@example.com" })).toEqual({ ok: true });
+    expect(requests.at(-1)).toEqual({
+      route: "DELETE /api/account",
+      body: { email: "ann@example.com" },
+    });
   });
 });

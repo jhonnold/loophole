@@ -14,6 +14,7 @@ function setup() {
       id,
       email: `${id}@example.com`,
       passwordHash: "h",
+      hasPassword: true,
       emailVerifiedAt: null,
       isAdmin: false,
       createdAt: 0,

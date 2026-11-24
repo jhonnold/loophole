@@ -8,6 +8,7 @@ function user(id: string, email: string): UserRecord {
     id,
     email,
     passwordHash: `hash-${id}`,
+    hasPassword: true,
     emailVerifiedAt: null,
     isAdmin: false,
     createdAt: 1000,
@@ -43,6 +44,7 @@ describe("SqliteUserRepository", () => {
     expect(repo.setAdmin("b@example.com", true)).toBe(false);
     expect(repo.get("u1")).toMatchObject({
       passwordHash: "new-hash",
+      hasPassword: true,
       emailVerifiedAt: 5000,
       isAdmin: true,
     });

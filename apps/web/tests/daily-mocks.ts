@@ -22,6 +22,7 @@ export const USER: Schemas["User"] = {
   id: "u1",
   email: "ann@example.com",
   emailVerified: true,
+  hasPassword: true,
   isAdmin: false,
   createdAt: "2026-10-01T00:00:00.000Z",
 };

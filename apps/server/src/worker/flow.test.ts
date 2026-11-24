@@ -57,6 +57,7 @@ function setup(verifyTimeoutMs = 10_000) {
     id: "u1",
     email: "ann@example.com",
     passwordHash: "x",
+    hasPassword: true,
     emailVerifiedAt: 1,
     isAdmin: false,
     createdAt: 1,

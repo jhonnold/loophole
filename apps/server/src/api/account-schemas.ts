@@ -20,6 +20,10 @@ export const UserSchema = z
     id: z.string(),
     email: z.string(),
     emailVerified: z.boolean(),
+    hasPassword: z.boolean().openapi({
+      description:
+        "False for an account made through single sign-on until a password reset sets one; it is deleted by typing its email instead.",
+    }),
     isAdmin: z.boolean(),
     createdAt: z.iso.datetime(),
   })
@@ -32,6 +36,19 @@ export const SessionSchema = z
 export const AuthConfigSchema = z
   .object({
     turnstileSiteKey: z.string().openapi({ description: "Site key for the sign-up CAPTCHA." }),
+    oidc: z
+      .union([
+        z.object({
+          name: z
+            .string()
+            .openapi({ description: "The identity provider's name, for the button." }),
+        }),
+        z.null(),
+      ])
+      .openapi({
+        description:
+          "Single sign-on: log in by opening `/api/auth/oidc/start`. Null when it isn't set up.",
+      }),
   })
   .openapi("AuthConfig");
 
@@ -62,5 +79,8 @@ export const ResetPasswordRequestSchema = z
   .openapi("ResetPasswordRequest");
 
 export const DeleteAccountRequestSchema = z
-  .strictObject({ password: Password })
-  .openapi("DeleteAccountRequest");
+  .union([z.strictObject({ password: Password }), z.strictObject({ email: z.string().max(254) })])
+  .openapi("DeleteAccountRequest", {
+    description:
+      "The account's password or, for an account without one (`hasPassword` false), its email.",
+  });

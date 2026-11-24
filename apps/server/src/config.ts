@@ -6,6 +6,7 @@ import {
   TURNSTILE_TEST_SITE_KEY,
 } from "./adapters/captcha/turnstile.ts";
 import type { SmtpSettings } from "./adapters/mail/smtp-mailer.ts";
+import type { OidcSettings } from "./adapters/oidc/oidc-client.ts";
 import type { JobRunSettings } from "./managers/job-run-manager.ts";
 
 /**
@@ -23,6 +24,10 @@ const Port = z.coerce.number().int().min(1).max(65535);
 /** A port, or 0 for "don't listen". */
 const OptionalPort = z.coerce.number().int().min(0).max(65535).default(0);
 const Ms = z.coerce.number().int().positive();
+
+/** An empty value counts as unset (Compose passes `${VAR}` of an unset variable as ""). */
+const Unset = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((v) => (v === "" ? undefined : v), schema);
 
 const EnvSchema = z.object({
   HOST: z.string().default("127.0.0.1"),
@@ -56,7 +61,13 @@ const EnvSchema = z.object({
   METRICS_HOST: z.string().min(1).default("127.0.0.1"),
   API_METRICS_PORT: OptionalPort,
   WORKER_METRICS_PORT: OptionalPort,
+  OIDC_ISSUER: Unset(z.url().optional()),
+  OIDC_CLIENT_ID: Unset(z.string().min(1).optional()),
+  OIDC_CLIENT_SECRET: Unset(z.string().min(1).optional()),
+  OIDC_NAME: Unset(z.string().min(1).max(40).default("Authelia")),
 });
+
+const OIDC_VARIABLES = ["OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET"] as const;
 
 export interface Config {
   readonly host: string;
@@ -103,6 +114,13 @@ export interface Config {
     readonly apiPort: number;
     readonly workerPort: number;
   };
+  /** Single sign-on through an OpenID Connect provider, or null when it isn't set up (PRD FR-30). */
+  readonly oidc: OidcConfig | null;
+}
+
+export interface OidcConfig extends OidcSettings {
+  /** Shown on the login button: "Log in with <name>". */
+  readonly name: string;
 }
 
 /** Reads the server's settings from environment variables (see `.env.example`). Throws on bad values. */
@@ -154,6 +172,16 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
       problems.push("MAIL_FROM is the development address. Set an address at your own domain.");
     }
   }
+  // Single sign-on is optional: all of its settings, or none.
+  const oidcSet = OIDC_VARIABLES.filter((name) => e[name] !== undefined);
+  if (oidcSet.length > 0 && oidcSet.length < OIDC_VARIABLES.length) {
+    throw new Error(
+      `Single sign-on needs all of ${OIDC_VARIABLES.join(", ")}; only ${oidcSet.join(", ")} ${oidcSet.length === 1 ? "is" : "are"} set.`,
+    );
+  }
+  if (!local && e.OIDC_ISSUER !== undefined && new URL(e.OIDC_ISSUER).protocol !== "https:") {
+    problems.push("OIDC_ISSUER must be https.");
+  }
   if (problems.length > 0) {
     throw new Error(
       `PUBLIC_URL (${e.PUBLIC_URL}) is not localhost, so these development settings are refused:\n  ${problems.join("\n  ")}`,
@@ -204,5 +232,17 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
       apiPort: e.API_METRICS_PORT,
       workerPort: e.WORKER_METRICS_PORT,
     },
+    oidc:
+      e.OIDC_ISSUER === undefined ||
+      e.OIDC_CLIENT_ID === undefined ||
+      e.OIDC_CLIENT_SECRET === undefined
+        ? null
+        : {
+            issuer: e.OIDC_ISSUER,
+            clientId: e.OIDC_CLIENT_ID,
+            clientSecret: e.OIDC_CLIENT_SECRET,
+            name: e.OIDC_NAME,
+            redirectUri: `${e.PUBLIC_URL.replace(/\/+$/, "")}/api/auth/oidc/callback`,
+          },
   };
 }

@@ -4,6 +4,7 @@ import {
   type AccountTokenRecord,
   type AttemptRecord,
   type DailyRecord,
+  type IdentityRecord,
   JOB_PRIORITY,
   type Job,
   type LeaderboardEntry,
@@ -26,9 +27,13 @@ import type {
   Clock,
   DailyRepository,
   DisplayNameRepository,
+  IdentityRepository,
   JobEnd,
   JobQueue,
   NewJob,
+  OidcIdentity,
+  OidcPending,
+  OidcProvider,
   PasswordHasher,
   ProgressRepository,
   PuzzleRepository,
@@ -347,7 +352,7 @@ export class FakeUserRepository implements UserRepository {
   }
 
   setPasswordHash(id: string, passwordHash: string): void {
-    this.#update(id, { passwordHash });
+    this.#update(id, { passwordHash, hasPassword: true });
   }
 
   markEmailVerified(id: string, at: number): void {
@@ -368,6 +373,50 @@ export class FakeUserRepository implements UserRepository {
   #update(id: string, changes: Partial<UserRecord>): void {
     const user = this.users.get(id);
     if (user !== undefined) this.users.set(id, { ...user, ...changes });
+  }
+}
+
+export class FakeIdentityRepository implements IdentityRepository {
+  readonly identities = new Map<string, IdentityRecord>();
+
+  getUserId(issuer: string, subject: string): string | null {
+    return this.identities.get(`${issuer} ${subject}`)?.userId ?? null;
+  }
+
+  insert(identity: IdentityRecord): boolean {
+    const key = `${identity.issuer} ${identity.subject}`;
+    if (this.identities.has(key)) return false;
+    this.identities.set(key, identity);
+    return true;
+  }
+}
+
+/** The identity `FakeOidcProvider` logs in by default. */
+export const ANN_IDENTITY: OidcIdentity = {
+  issuer: "https://idp.test",
+  subject: "sub-ann",
+  email: "ann@example.com",
+  emailVerified: true,
+};
+
+/**
+ * An identity provider that logs in `identity` (null: refuses) when the callback's `state` matches
+ * the pending login's, and can't be reached while `available` is false.
+ */
+export class FakeOidcProvider implements OidcProvider {
+  identity: OidcIdentity | null = ANN_IDENTITY;
+  available = true;
+  #count = 0;
+
+  async begin(): Promise<{ url: string; pending: OidcPending } | null> {
+    if (!this.available) return null;
+    const n = ++this.#count;
+    const pending = { state: `state-${n}`, nonce: `nonce-${n}`, codeVerifier: `verifier-${n}` };
+    return { url: `https://idp.test/authorize?state=${pending.state}`, pending };
+  }
+
+  async finish(callback: URLSearchParams, pending: OidcPending): Promise<OidcIdentity | null> {
+    return callback.get("state") === pending.state ? this.identity : null;
   }
 }
 

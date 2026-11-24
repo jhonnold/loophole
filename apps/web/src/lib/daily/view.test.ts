@@ -7,6 +7,7 @@ const USER: User = {
   id: "u1",
   email: "ann@example.com",
   emailVerified: true,
+  hasPassword: true,
   isAdmin: false,
   createdAt: "2026-10-25T00:00:00.000Z",
 };

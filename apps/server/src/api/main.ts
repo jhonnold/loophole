@@ -8,6 +8,7 @@ import { SqliteAttemptRepository } from "../adapters/db/attempt-repository.ts";
 import { SqliteDailyRepository } from "../adapters/db/daily-repository.ts";
 import { openDatabase } from "../adapters/db/database.ts";
 import { SqliteDisplayNameRepository } from "../adapters/db/display-name-repository.ts";
+import { SqliteIdentityRepository } from "../adapters/db/identity-repository.ts";
 import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
 import { SqliteProgressRepository } from "../adapters/db/progress-repository.ts";
 import { SqlitePuzzleRepository } from "../adapters/db/puzzle-repository.ts";
@@ -23,6 +24,7 @@ import {
   PrometheusApiMetrics,
   serveMetrics,
 } from "../adapters/metrics/prometheus.ts";
+import { OidcClient } from "../adapters/oidc/oidc-client.ts";
 import { argon2idHasher } from "../adapters/password-hasher.ts";
 import { randomToken } from "../adapters/random-token.ts";
 import { MemoryRateLimiter } from "../adapters/rate-limiter.ts";
@@ -35,6 +37,7 @@ import { HealthManager } from "../managers/health-manager.ts";
 import { HintManager } from "../managers/hint-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
 import { LeaderboardManager } from "../managers/leaderboard-manager.ts";
+import { OidcLoginManager } from "../managers/oidc-login-manager.ts";
 import { ProgressManager } from "../managers/progress-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { ReportManager } from "../managers/report-manager.ts";
@@ -92,6 +95,22 @@ const accounts = new AccountManager({
   newToken: randomToken,
   publicUrl: config.publicUrl,
 });
+const oidc =
+  config.oidc === null
+    ? undefined
+    : {
+        name: config.oidc.name,
+        manager: new OidcLoginManager({
+          provider: new OidcClient(config.oidc),
+          users,
+          identities: new SqliteIdentityRepository(db),
+          sessions,
+          passwords: argon2idHasher,
+          clock: systemClock,
+          newId: () => crypto.randomUUID(),
+          newToken: randomToken,
+        }),
+      };
 const dailyRepo = new SqliteDailyRepository(db);
 const dailies = new DailyManager({
   dailies: dailyRepo,
@@ -156,6 +175,7 @@ const app = createApp({
   limiter,
   trustProxy: config.trustProxy,
   turnstileSiteKey: config.turnstile.siteKey,
+  oidc,
   webDir: config.webDir,
   health,
   metrics,
@@ -175,6 +195,7 @@ const server = Bun.serve({
   fetch: app.fetch,
 });
 console.log(`API listening on ${server.url}`);
+if (config.oidc !== null) console.log(`Single sign-on through ${config.oidc.issuer}`);
 if (config.metrics.apiPort !== 0) {
   const metricsServer = serveMetrics(registry, config.metrics.host, config.metrics.apiPort);
   console.log(`API metrics on ${metricsServer.url}metrics`);

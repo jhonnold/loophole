@@ -12,6 +12,7 @@ import { SqliteAttemptRepository } from "../adapters/db/attempt-repository.ts";
 import { SqliteDailyRepository } from "../adapters/db/daily-repository.ts";
 import { openDatabase } from "../adapters/db/database.ts";
 import { SqliteDisplayNameRepository } from "../adapters/db/display-name-repository.ts";
+import { SqliteIdentityRepository } from "../adapters/db/identity-repository.ts";
 import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
 import { SqliteProgressRepository } from "../adapters/db/progress-repository.ts";
 import { SqlitePuzzleRepository } from "../adapters/db/puzzle-repository.ts";
@@ -31,6 +32,7 @@ import { HealthManager } from "../managers/health-manager.ts";
 import { HintManager } from "../managers/hint-manager.ts";
 import { JobManager } from "../managers/job-manager.ts";
 import { LeaderboardManager } from "../managers/leaderboard-manager.ts";
+import { OidcLoginManager } from "../managers/oidc-login-manager.ts";
 import { ProgressManager } from "../managers/progress-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { ReportManager } from "../managers/report-manager.ts";
@@ -94,6 +96,20 @@ export function openApiDocument() {
     limiter,
     trustProxy: false,
     turnstileSiteKey: TURNSTILE_TEST_SITE_KEY,
+    // Set up, so the document lists the single sign-on routes; the provider is never called.
+    oidc: {
+      name: "Authelia",
+      manager: new OidcLoginManager({
+        provider: { begin: async () => null, finish: async () => null },
+        users,
+        identities: new SqliteIdentityRepository(db),
+        sessions,
+        passwords: argon2idHasher,
+        clock: systemClock,
+        newId: () => crypto.randomUUID(),
+        newToken: randomToken,
+      }),
+    },
     puzzles,
     hints: new HintManager({ puzzles, attempts }),
     dailies,

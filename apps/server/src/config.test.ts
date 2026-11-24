@@ -171,6 +171,50 @@ describe("loadConfig", () => {
       MAIL_FROM: "Loophole <hi@loophole.example>",
     });
     expect(config.publicUrl).toBe("https://loophole.example");
+    expect(config.oidc).toBeNull();
+  });
+
+  describe("single sign-on", () => {
+    const OIDC = {
+      OIDC_ISSUER: "https://auth.example",
+      OIDC_CLIENT_ID: "loophole",
+      OIDC_CLIENT_SECRET: "s3cret",
+    };
+
+    test("is off without its settings, also when Compose passes them empty", () => {
+      expect(loadConfig(S3).oidc).toBeNull();
+      const empty = { OIDC_ISSUER: "", OIDC_CLIENT_ID: "", OIDC_CLIENT_SECRET: "", OIDC_NAME: "" };
+      expect(loadConfig({ ...S3, ...empty }).oidc).toBeNull();
+    });
+
+    test("reads its settings and builds the redirect URI from PUBLIC_URL", () => {
+      expect(loadConfig({ ...S3, PUBLIC_URL: "http://localhost:5173/", ...OIDC }).oidc).toEqual({
+        issuer: "https://auth.example",
+        clientId: "loophole",
+        clientSecret: "s3cret",
+        name: "Authelia",
+        redirectUri: "http://localhost:5173/api/auth/oidc/callback",
+      });
+      expect(loadConfig({ ...S3, ...OIDC, OIDC_NAME: "Homelab" }).oidc?.name).toBe("Homelab");
+    });
+
+    test("refuses some of its settings without the others", () => {
+      expect(() => loadConfig({ ...S3, OIDC_ISSUER: OIDC.OIDC_ISSUER })).toThrow(
+        /needs all of OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET; only OIDC_ISSUER is set/,
+      );
+      expect(() => loadConfig({ ...S3, ...OIDC, OIDC_CLIENT_SECRET: "" })).toThrow(/needs all/);
+    });
+
+    test("refuses a plain-http issuer for a site that isn't on localhost", () => {
+      expect(() =>
+        loadConfig({
+          ...S3,
+          PUBLIC_URL: "https://loophole.example",
+          ...OIDC,
+          OIDC_ISSUER: "http://auth.example",
+        }),
+      ).toThrow(/OIDC_ISSUER must be https/);
+    });
   });
 
   test("requires PUBLIC_URL: there is no default", () => {

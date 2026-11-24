@@ -954,7 +954,7 @@ export interface paths {
                         "application/problem+json": components["schemas"]["Problem"];
                     };
                 };
-                /** @description Not logged in, or wrong password. */
+                /** @description Not logged in, or wrong password (or email, for an account without one). */
                 401: {
                     headers: {
                         [name: string]: unknown;
@@ -983,6 +983,100 @@ export interface paths {
                 };
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/oidc/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Log in through single sign-on
+         * @description Open in the browser (not with fetch). Sends the browser to the identity provider, which sends it back to the callback. Only when `AuthConfig.oidc` is set; otherwise 404.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description To the identity provider, or to `/login#oidc_error=unavailable` when it can't be reached. */
+                302: {
+                    headers: {
+                        Location?: string;
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Too many attempts; `Retry-After` says when to try again. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/oidc/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where the identity provider sends the browser back
+         * @description Takes the provider's query parameters (`code`, `state`, `iss`, or `error`). Logs in to the account tied to the identity or with its email, or makes a new one, and sets a new session cookie.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description To `/` when logged in, else to `/login#oidc_error=<failed|no-email|email-unverified>`. */
+                302: {
+                    headers: {
+                        Location?: string;
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Too many attempts; `Retry-After` says when to try again. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2734,6 +2828,11 @@ export interface components {
         AuthConfig: {
             /** @description Site key for the sign-up CAPTCHA. */
             turnstileSiteKey: string;
+            /** @description Single sign-on: log in by opening `/api/auth/oidc/start`. Null when it isn't set up. */
+            oidc: {
+                /** @description The identity provider's name, for the button. */
+                name: string;
+            } | null;
         };
         /** @description `user` is null when no one is logged in. */
         Session: {
@@ -2744,6 +2843,8 @@ export interface components {
             id: string;
             email: string;
             emailVerified: boolean;
+            /** @description False for an account made through single sign-on until a password reset sets one; it is deleted by typing its email instead. */
+            hasPassword: boolean;
             isAdmin: boolean;
             /** Format: date-time */
             createdAt: string;
@@ -2784,8 +2885,11 @@ export interface components {
             /** @description 8 to 128 characters. */
             password: string;
         };
+        /** @description The account's password or, for an account without one (`hasPassword` false), its email. */
         DeleteAccountRequest: {
             password: string;
+        } | {
+            email: string;
         };
         ProgressList: {
             items: components["schemas"]["ProgressSummary"][];

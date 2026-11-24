@@ -9,7 +9,8 @@
   import { forgetAccount, forgetSyncedProgress } from "$lib/sync/index.ts";
 
   let resent = $state(false);
-  let password = $state("");
+  // The password, or the email for an account without one (made through single sign-on).
+  let confirmation = $state("");
   let error = $state("");
   let logOutError = $state("");
   let busy = $state(false);
@@ -71,11 +72,13 @@
     } else logOutError = result.message;
   }
 
-  async function deleteAccount(event: SubmitEvent, userId: string) {
+  async function deleteAccount(event: SubmitEvent, userId: string, hasPassword: boolean) {
     event.preventDefault();
     busy = true;
     error = "";
-    const result = await auth.deleteAccount(password);
+    const result = await auth.deleteAccount(
+      hasPassword ? { password: confirmation } : { email: confirmation },
+    );
     busy = false;
     if (result.ok) {
       forgetAccount(userId);
@@ -166,11 +169,18 @@
       published stay up for others to play, no longer linked to you. Progress you saved here without
       an account stays.
     </p>
-    <form onsubmit={(e) => deleteAccount(e, user.id)}>
-      <label>
-        Password
-        <input type="password" autocomplete="current-password" required maxlength="128" bind:value={password} />
-      </label>
+    <form onsubmit={(e) => deleteAccount(e, user.id, user.hasPassword)}>
+      {#if user.hasPassword}
+        <label>
+          Password
+          <input type="password" autocomplete="current-password" required maxlength="128" bind:value={confirmation} />
+        </label>
+      {:else}
+        <label>
+          Type your email to confirm
+          <input type="email" autocomplete="off" required maxlength="254" bind:value={confirmation} />
+        </label>
+      {/if}
       {#if error}<p class="error" role="alert">{error}</p>{/if}
       <button class="danger" type="submit" disabled={busy}>Delete my account</button>
     </form>

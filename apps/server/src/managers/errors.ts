@@ -114,3 +114,17 @@ export class DisplayNameTakenError extends Error {
     this.name = "DisplayNameTakenError";
   }
 }
+
+/**
+ * Why a single sign-on login failed: the provider refused it or it could not be checked
+ * (`failed`), the provider gave no email (`no-email`), or it gave an email it hasn't verified that
+ * an existing account uses (`email-unverified`).
+ */
+export type OidcLoginFailure = "failed" | "no-email" | "email-unverified";
+
+export class OidcLoginError extends Error {
+  constructor(readonly reason: OidcLoginFailure) {
+    super(`Single sign-on failed: ${reason}.`);
+    this.name = "OidcLoginError";
+  }
+}

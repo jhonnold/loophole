@@ -136,13 +136,21 @@ export type TaskOutcome =
   | { readonly status: "timeout" }
   | { readonly status: "cancelled" };
 
-/** A registered player (PRD §5). Holds only what NFR-6 allows: the email and the password hash. */
+/**
+ * A registered player (PRD §5). Holds only what NFR-6 allows: the email, the password hash and, for
+ * single sign-on, the identity provider's id for the player (`IdentityRecord`).
+ */
 export interface UserRecord {
   readonly id: string;
   /** Trimmed and lower-cased; unique. */
   readonly email: string;
-  /** argon2id, in PHC string format. */
+  /**
+   * argon2id, in PHC string format. An account made through single sign-on gets the hash of a
+   * random password nobody knows, so password login fails for it like any wrong password.
+   */
   readonly passwordHash: string;
+  /** False for an account made through single sign-on until a password reset sets one. */
+  readonly hasPassword: boolean;
   /** When the email was confirmed, or null while it is unverified. */
   readonly emailVerifiedAt: number | null;
   /** Set only by the admin script (`bun run admin`), for unpublishing and system health. */
@@ -156,6 +164,16 @@ export interface SessionRecord {
   readonly userId: string;
   readonly createdAt: number;
   readonly expiresAt: number;
+}
+
+/** A login through an OpenID Connect provider, tied to an account (PRD FR-30). */
+export interface IdentityRecord {
+  /** The provider's issuer URL, as its ID tokens name it. */
+  readonly issuer: string;
+  /** The provider's stable id for the player (`sub`); never reused for anyone else. */
+  readonly subject: string;
+  readonly userId: string;
+  readonly createdAt: number;
 }
 
 export type AccountTokenPurpose = "verify-email" | "reset-password";

@@ -1,24 +1,49 @@
 import { describe, expect, test } from "bun:test";
 import { MemoryBlobStore } from "../adapters/blob/memory-blob-store.ts";
 import { openDatabase } from "../adapters/db/database.ts";
+import { SqliteIdentityRepository } from "../adapters/db/identity-repository.ts";
 import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
 import { SqlitePuzzleRepository } from "../adapters/db/puzzle-repository.ts";
 import { JobManager } from "../managers/job-manager.ts";
+import { OidcLoginManager } from "../managers/oidc-login-manager.ts";
 import { PuzzleManager } from "../managers/puzzle-manager.ts";
 import { accountDeps } from "../test-support/accounts.ts";
 import { dailyDeps } from "../test-support/daily.ts";
-import { FakeClock, sequentialIds } from "../test-support/fakes.ts";
+import {
+  ANN_IDENTITY,
+  FakeClock,
+  FakeOidcProvider,
+  fakePasswordHasher,
+  sequentialIds,
+} from "../test-support/fakes.ts";
 import { healthManager } from "../test-support/health.ts";
 import { sqliteProgress } from "../test-support/progress.ts";
 import { submissionDeps } from "../test-support/submissions.ts";
 import { createApp } from "./app.ts";
+import { OIDC_COOKIE } from "./oidc.ts";
 import type { Problem } from "./problem.ts";
 import { SESSION_COOKIE } from "./session-cookie.ts";
 
-function setup(options: { trustProxy?: boolean } = {}) {
+function setup(options: { trustProxy?: boolean; oidc?: boolean } = {}) {
   const db = openDatabase(":memory:");
   const clock = new FakeClock(Date.UTC(2026, 9, 25, 12));
   const deps = accountDeps(db, clock);
+  const provider = new FakeOidcProvider();
+  const oidc = options.oidc
+    ? {
+        name: "Authelia",
+        manager: new OidcLoginManager({
+          provider,
+          users: deps.users,
+          identities: new SqliteIdentityRepository(db),
+          sessions: deps.sessions,
+          passwords: fakePasswordHasher,
+          clock,
+          newId: sequentialIds("sso"),
+          newToken: sequentialIds("random"),
+        }),
+      }
+    : undefined;
   const puzzles = new PuzzleManager({
     puzzles: new SqlitePuzzleRepository(db),
     blobs: new MemoryBlobStore(),
@@ -39,6 +64,7 @@ function setup(options: { trustProxy?: boolean } = {}) {
     jobs,
     ...submissionDeps(db, clock, puzzles, jobs),
     ...deps,
+    oidc,
     trustProxy: options.trustProxy ?? false,
   });
 
@@ -76,7 +102,7 @@ function setup(options: { trustProxy?: boolean } = {}) {
     return match[1];
   };
 
-  return { app, clock, deps, send, signUp, logIn, mailedToken };
+  return { app, clock, deps, provider, send, signUp, logIn, mailedToken };
 }
 
 /** The session cookie a response sets: its value and attributes. */
@@ -121,6 +147,7 @@ describe("sign-up, verification, login and logout", () => {
       id: "u-1",
       email: "ann@example.com",
       emailVerified: true,
+      hasPassword: true,
       isAdmin: false,
       createdAt: "2026-10-25T12:00:00.000Z",
     });
@@ -148,7 +175,7 @@ describe("sign-up, verification, login and logout", () => {
 
   test("GET /api/auth/config gives the Turnstile site key", async () => {
     const res = await setup().send("GET", "/api/auth/config");
-    expect(await res.json()).toEqual({ turnstileSiteKey: "test-site-key" });
+    expect(await res.json()).toEqual({ turnstileSiteKey: "test-site-key", oidc: null });
   });
 
   test("an unknown session cookie means logged out and is cleared", async () => {
@@ -394,5 +421,125 @@ describe("rate limits", () => {
     for (let i = 0; i < 10; i++) expect((await forgot(`10.0.0.${i}, 192.0.2.1`)).status).toBe(204);
     expect((await forgot("10.0.0.1, 192.0.2.1")).status).toBe(429);
     expect((await forgot("192.0.2.1, 192.0.2.2")).status).toBe(204);
+  });
+});
+
+describe("single sign-on", () => {
+  /** Starts a login: the provider URL it sends the browser to, and the pending-login cookie. */
+  async function start(send: ReturnType<typeof setup>["send"]) {
+    const res = await send("GET", "/api/auth/oidc/start");
+    expect(res.status).toBe(302);
+    const set = res.headers.getSetCookie().find((c) => c.startsWith(`${OIDC_COOKIE}=`));
+    if (set === undefined) throw new Error("no login cookie set");
+    return { location: res.headers.get("Location"), set, cookie: set.split(";")[0] };
+  }
+
+  /** The provider sending the browser back with `state`, carrying `cookies`. */
+  const callback = (send: ReturnType<typeof setup>["send"], state: string, cookies?: string) =>
+    send("GET", `/api/auth/oidc/callback?code=c&state=${state}`, undefined, {
+      headers: cookies === undefined ? {} : { Cookie: cookies },
+    });
+
+  test("is off, and its routes 404, without its settings", async () => {
+    const { send } = setup();
+    expect(await (await send("GET", "/api/auth/config")).json()).toMatchObject({ oidc: null });
+    await expectProblem(await send("GET", "/api/auth/oidc/start"), 404);
+    await expectProblem(await send("GET", "/api/auth/oidc/callback?code=c"), 404);
+  });
+
+  test("the config names the provider for the button", async () => {
+    const { send } = setup({ oidc: true });
+    expect(await (await send("GET", "/api/auth/config")).json()).toEqual({
+      turnstileSiteKey: "test-site-key",
+      oidc: { name: "Authelia" },
+    });
+  });
+
+  test("start sends the browser to the provider with a short-lived login cookie", async () => {
+    const { send } = setup({ oidc: true });
+    const { location, set } = await start(send);
+    expect(location).toBe("https://idp.test/authorize?state=state-1");
+    for (const attr of ["HttpOnly", "Secure", "SameSite=Lax", "Path=/", "Max-Age=600"]) {
+      expect(set).toContain(attr);
+    }
+  });
+
+  test("the callback logs in to a new account and sends the browser home", async () => {
+    const { send } = setup({ oidc: true });
+    const { cookie } = await start(send);
+    const res = await callback(send, "state-1", cookie);
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toBe("/");
+    expect(res.headers.getSetCookie().find((c) => c.startsWith(`${OIDC_COOKIE}=`))).toContain(
+      "Max-Age=0",
+    );
+    const session = await send("GET", "/api/session", undefined, {
+      cookie: sessionCookie(res),
+    });
+    expect(await session.json()).toEqual({
+      user: {
+        id: "sso-1",
+        email: "ann@example.com",
+        emailVerified: true,
+        hasPassword: false,
+        isAdmin: false,
+        createdAt: "2026-10-25T12:00:00.000Z",
+      },
+    });
+  });
+
+  test("a callback this browser didn't start, or with another state, logs no one in", async () => {
+    const { send } = setup({ oidc: true });
+    const { cookie } = await start(send);
+    for (const res of [
+      await callback(send, "state-1"),
+      await callback(send, "state-1", `${OIDC_COOKIE}=not-ours`),
+      await callback(send, "forged", cookie),
+    ]) {
+      expect(res.status).toBe(302);
+      expect(res.headers.get("Location")).toBe("/login#oidc_error=failed");
+      expect(res.headers.getSetCookie().some((c) => c.startsWith(`${SESSION_COOKIE}=`))).toBe(
+        false,
+      );
+    }
+  });
+
+  test("failures land on the login page with their reason", async () => {
+    const { send, signUp, provider } = setup({ oidc: true });
+    provider.available = false;
+    const down = await send("GET", "/api/auth/oidc/start");
+    expect(down.headers.get("Location")).toBe("/login#oidc_error=unavailable");
+
+    provider.available = true;
+    await signUp();
+    provider.identity = { ...ANN_IDENTITY, emailVerified: false };
+    const { cookie } = await start(send);
+    const res = await callback(send, "state-1", cookie);
+    expect(res.headers.get("Location")).toBe("/login#oidc_error=email-unverified");
+  });
+
+  test("an account without a password is deleted by typing its email", async () => {
+    const { send, deps } = setup({ oidc: true });
+    const { cookie } = await start(send);
+    const token = sessionCookie(await callback(send, "state-1", cookie));
+    await expectProblem(
+      await send("DELETE", "/api/account", { email: "bob@example.com" }, { cookie: token }),
+      401,
+    );
+    const res = await send(
+      "DELETE",
+      "/api/account",
+      { email: "ann@example.com" },
+      { cookie: token },
+    );
+    expect(res.status).toBe(204);
+    expect(deps.users.getByEmail("ann@example.com")).toBeNull();
+  });
+
+  test("starting and finishing logins are limited per address", async () => {
+    const { send } = setup({ oidc: true });
+    for (let i = 0; i < 20; i++)
+      expect((await send("GET", "/api/auth/oidc/start")).status).toBe(302);
+    await expectProblem(await send("GET", "/api/auth/oidc/callback?code=c"), 429);
   });
 });
