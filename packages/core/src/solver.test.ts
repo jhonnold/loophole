@@ -210,6 +210,16 @@ describe("solve", () => {
     expect(result.steps.map((s) => s.rule)).toEqual(["clue-zero"]);
   });
 
+  test("stops at the first step that draws a line with stopAtLine", () => {
+    const p = puzzle(2, 2, "0...");
+    const full = solve(p);
+    const result = solve(p, { stopAtLine: true });
+    const first = full.steps.findIndex((s) => s.changes.some((c) => c.state === EdgeState.Line));
+    expect(first).toBeGreaterThan(0);
+    expect(result.status).toBe("incomplete");
+    expect(result.steps).toEqual(full.steps.slice(0, first + 1));
+  });
+
   test("stops when the time limit passes", () => {
     let t = 0;
     const result = solve(puzzle(3, 3, "........."), { timeLimitMs: 0, now: () => t++ });
