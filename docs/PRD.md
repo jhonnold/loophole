@@ -86,6 +86,7 @@ Priority: **P0** = required for launch, **P1** = soon after.
 - FR-18 (P0). Email + password sign-up and login. Passwords hashed with argon2id.
 - FR-19 (P0). Sign-up is protected by a CAPTCHA.
 - FR-20 (P0). Email verification and password reset.
+- FR-30 (P2). Optional single sign-on through one OpenID Connect provider (such as a self-hosted Authelia), set up by the operator (added 2026-11-24). Its first login makes a confirmed account with no password and no CAPTCHA, or logs in to the account that already has the email when the provider has verified it. Password login stays.
 - FR-21 (P0). Auto-saved in-progress state per puzzle, synced across devices; guests use local storage and can migrate to an account.
 
 ### 7.6 Daily puzzle and leaderboards
@@ -109,7 +110,7 @@ Priority: **P0** = required for launch, **P1** = soon after.
 - NFR-3 Correctness: solver, verifier, and generator are covered by unit and property tests; CI blocks merges on failure.
 - NFR-4 Security: argon2id, CSRF protection, secure cookies, rate limits on auth endpoints, parameterized queries, input validation of puzzle uploads.
 - NFR-5 Accessibility: keyboard play on desktop, sufficient contrast in both themes, no information conveyed by color alone.
-- NFR-6 Privacy: store only email, password hash, and gameplay data. Provide account deletion.
+- NFR-6 Privacy: store only email, password hash, and gameplay data, plus, for single sign-on (FR-30), the provider's issuer and its id for the player. Provide account deletion.
 
 ## 9. Technical considerations
 
