@@ -130,7 +130,7 @@ Ranked attempts need a logged-in player with a confirmed email: `POST /api/users
 
 ## Production
 
-Loophole runs as one Docker image with two commands, the API (which also serves the built web app) and the worker, next to Garage, all on one host with `compose.prod.yml`. Hosting is up to you (PRD §14); the host needs Docker with Compose and a TLS reverse proxy such as Caddy or nginx.
+Loophole runs as one Docker image with two commands, the API (which also serves the built web app) and the worker, next to Garage, all on one host with `compose.prod.yml`. Hosting is up to you (PRD §14); the host needs Docker with Compose and a TLS reverse proxy such as Caddy or nginx. Every push to main also publishes the image as `ghcr.io/jhonnold/loophole:<short sha>` (and `:main`), for a deployment that pulls a pinned image instead of building one: set `image:` to that tag and drop `build:`.
 
 1. Copy `.env.production.example` to `.env.production` and `.env.garage.example` to `.env.garage`, and fill in every value: in the first, the https `PUBLIC_URL`, real Turnstile keys, a random `DAILY_SEED_SECRET`, your SMTP server and a Garage key of your own for the app; in the second, Garage's own secrets (each file says how to make its values). Only the API and the worker read `.env.production`, and only Garage reads `.env.garage`. The API and the worker refuse to start with development values (Turnstile's test keys, the development daily secret, Garage's development key, an http `PUBLIC_URL`, no `SMTP_HOST`, the development `MAIL_FROM`). For a mail relay inside the Docker network that doesn't offer STARTTLS (such as a `mailpit` service), set `SMTP_REQUIRE_TLS=false`.
 2. Build the image and start Garage, then create its layout, the app's key and bucket:
