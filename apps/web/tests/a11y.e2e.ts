@@ -4,6 +4,7 @@ import { FIXTURE_SOLUTIONS } from "../src/lib/test-support/solutions.ts";
 import { mockAdminApi } from "./admin-mocks.ts";
 import { board } from "./board.ts";
 import { attempt, mockDailyApi, TODAY } from "./daily-mocks.ts";
+import { mockSsoApi, SSO_USER } from "./sso-mocks.ts";
 
 // Automated accessibility checks (PRD NFR-5): axe-core's WCAG 2.2 A and AA rules, contrast
 // included, on the main screens in both themes, on a phone and a desktop. Screens that need the
@@ -44,6 +45,12 @@ const SCREENS: Screen[] = [
   { name: "create", path: "/create" },
   { name: "log in", path: "/login" },
   { name: "sign up", path: "/signup" },
+  {
+    name: "log in, single sign-on failed",
+    path: "/login#oidc_error=email-unverified",
+    mock: (p) => mockSsoApi(p),
+  },
+  { name: "account, no password", path: "/account", mock: (p) => mockSsoApi(p, SSO_USER) },
   { name: "forgot password", path: "/forgot-password" },
   {
     name: "daily, ranked start",

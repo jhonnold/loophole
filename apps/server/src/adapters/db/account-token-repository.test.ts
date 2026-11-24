@@ -10,6 +10,7 @@ function setup() {
     id: "u1",
     email: "a@example.com",
     passwordHash: "h",
+    hasPassword: true,
     emailVerifiedAt: null,
     isAdmin: false,
     createdAt: 0,

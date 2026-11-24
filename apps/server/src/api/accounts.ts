@@ -2,6 +2,7 @@ import { createRoute, type OpenAPIHono } from "@hono/zod-openapi";
 import type { Context, MiddlewareHandler } from "hono";
 import type { UserRecord } from "../domain.ts";
 import type { AccountManager } from "../managers/account-manager.ts";
+import type { OidcLoginManager } from "../managers/oidc-login-manager.ts";
 import type { SessionManager } from "../managers/session-manager.ts";
 import type { RateLimiter, RateRule } from "../ports.ts";
 import {
@@ -32,6 +33,8 @@ export interface AccountRouteDeps {
   /** Take the client's address from X-Forwarded-For (see `clientAddress`). */
   readonly trustProxy: boolean;
   readonly turnstileSiteKey: string;
+  /** Single sign-on, when it is set up; the login page shows a button named `name`. */
+  readonly oidc?: { readonly manager: OidcLoginManager; readonly name: string };
 }
 
 const MINUTE = 60_000;
@@ -170,7 +173,9 @@ const deleteAccountRoute = createRoute({
   responses: {
     204: { description: "Deleted and logged out." },
     400: invalid,
-    401: problemResponse("Not logged in, or wrong password."),
+    401: problemResponse(
+      "Not logged in, or wrong password (or email, for an account without one).",
+    ),
     403: crossSite,
     429: tooMany,
   },
@@ -186,14 +191,8 @@ export function registerAccountRoutes(app: OpenAPIHono, deps: AccountRouteDeps):
     name: SESSION_COOKIE,
   });
 
-  const byAddress =
-    (name: keyof typeof ADDRESS_LIMITS): MiddlewareHandler =>
-    async (c, next) => {
-      const key = `${name}:${rateLimitKey(clientAddress(c, trustProxy))}`;
-      const decision = limiter.hit(key, ADDRESS_LIMITS[name]);
-      if (decision.allowed) return next();
-      return tooManyRequests(c, decision.retryAfterMs);
-    };
+  const byAddress = (name: keyof typeof ADDRESS_LIMITS) =>
+    limitByAddress(limiter, trustProxy, name, ADDRESS_LIMITS[name]);
 
   app.use("/api/auth/signup", byAddress("signup"));
   app.use("/api/auth/login", byAddress("login"));
@@ -203,7 +202,15 @@ export function registerAccountRoutes(app: OpenAPIHono, deps: AccountRouteDeps):
   app.use("/api/auth/reset-password", byAddress("token"));
   app.on("DELETE", "/api/account", byAddress("deleteAccount"));
 
-  app.openapi(configRoute, (c) => c.json({ turnstileSiteKey: deps.turnstileSiteKey }, 200));
+  app.openapi(configRoute, (c) =>
+    c.json(
+      {
+        turnstileSiteKey: deps.turnstileSiteKey,
+        oidc: deps.oidc === undefined ? null : { name: deps.oidc.name },
+      },
+      200,
+    ),
+  );
 
   app.openapi(sessionRoute, async (c) => {
     const user = await currentUser(c, sessions);
@@ -260,10 +267,24 @@ export function registerAccountRoutes(app: OpenAPIHono, deps: AccountRouteDeps):
   app.openapi(deleteAccountRoute, async (c) => {
     const user = await currentUser(c, sessions);
     if (user === null) return problem(c, 401, "Not logged in");
-    await accounts.deleteAccount(user.id, c.req.valid("json").password);
+    await accounts.deleteAccount(user.id, c.req.valid("json"));
     clearSessionCookie(c);
     return c.body(null, 204);
   });
+}
+
+/** Middleware that allows `rule.limit` requests per client address per window, under `name`. */
+export function limitByAddress(
+  limiter: RateLimiter,
+  trustProxy: boolean,
+  name: string,
+  rule: RateRule,
+): MiddlewareHandler {
+  return async (c, next) => {
+    const decision = limiter.hit(`${name}:${rateLimitKey(clientAddress(c, trustProxy))}`, rule);
+    if (decision.allowed) return next();
+    return tooManyRequests(c, decision.retryAfterMs);
+  };
 }
 
 /** A 429 problem with `Retry-After` in whole seconds. */
@@ -279,6 +300,7 @@ function toUserDto(u: UserRecord) {
     id: u.id,
     email: u.email,
     emailVerified: u.emailVerifiedAt !== null,
+    hasPassword: u.hasPassword,
     isAdmin: u.isAdmin,
     createdAt: new Date(u.createdAt).toISOString(),
   };

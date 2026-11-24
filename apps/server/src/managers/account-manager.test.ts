@@ -75,6 +75,7 @@ describe("AccountManager sign-up and verification", () => {
       id: "u-1",
       email: "ann@example.com",
       passwordHash: "hashed:hunter22",
+      hasPassword: true,
       emailVerifiedAt: null,
       isAdmin: false,
       createdAt: 1_000_000,
@@ -256,15 +257,57 @@ describe("AccountManager password reset and deletion", () => {
     const { users, accounts, sessions, signUp } = setup();
     await signUp();
     await accounts.logIn("ann@example.com", "hunter22", null);
-    await expect(accounts.deleteAccount("u-1", "nope")).rejects.toBeInstanceOf(
-      InvalidCredentialsError,
-    );
+    for (const wrong of [{ password: "nope" }, { email: "ann@example.com" }, {}]) {
+      await expect(accounts.deleteAccount("u-1", wrong)).rejects.toBeInstanceOf(
+        InvalidCredentialsError,
+      );
+    }
     expect(users.get("u-1")).not.toBeNull();
-    await accounts.deleteAccount("u-1", "hunter22");
+    await accounts.deleteAccount("u-1", { password: "hunter22" });
     expect(users.get("u-1")).toBeNull();
     expect(await sessions.authenticate("session-1")).toBeNull();
-    await expect(accounts.deleteAccount("u-1", "hunter22")).rejects.toBeInstanceOf(
+    await expect(accounts.deleteAccount("u-1", { password: "hunter22" })).rejects.toBeInstanceOf(
       InvalidCredentialsError,
     );
+  });
+
+  test("an account without a password is deleted by typing its email", async () => {
+    const { users, accounts } = setup();
+    users.insert({
+      id: "u-9",
+      email: "sso@example.com",
+      passwordHash: "hashed:random",
+      hasPassword: false,
+      emailVerifiedAt: 1,
+      isAdmin: false,
+      createdAt: 1,
+    });
+    for (const wrong of [{ email: "other@example.com" }, { password: "random" }, {}]) {
+      await expect(accounts.deleteAccount("u-9", wrong)).rejects.toBeInstanceOf(
+        InvalidCredentialsError,
+      );
+    }
+    await accounts.deleteAccount("u-9", { email: " SSO@example.com " });
+    expect(users.get("u-9")).toBeNull();
+  });
+
+  test("a password reset gives an account without a password one", async () => {
+    const { users, accounts, mailer } = setup();
+    users.insert({
+      id: "u-9",
+      email: "sso@example.com",
+      passwordHash: "hashed:random",
+      hasPassword: false,
+      emailVerifiedAt: 1,
+      isAdmin: false,
+      createdAt: 1,
+    });
+    await accounts.requestPasswordReset("sso@example.com");
+    await accounts.resetPassword(lastLinkToken(mailer), "new-password");
+    expect(users.get("u-9")).toMatchObject({
+      hasPassword: true,
+      passwordHash: "hashed:new-password",
+    });
+    expect((await accounts.logIn("sso@example.com", "new-password", null)).user.id).toBe("u-9");
   });
 });

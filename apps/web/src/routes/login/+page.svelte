@@ -1,12 +1,19 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import { auth } from "$lib/auth/index.ts";
+  import { auth, oidcErrorFromHash } from "$lib/auth/index.ts";
   import SiteHeader from "$lib/components/SiteHeader.svelte";
+  import SsoButton from "$lib/components/SsoButton.svelte";
 
   let email = $state("");
   let password = $state("");
   let error = $state("");
   let busy = $state(false);
+
+  // A failed single sign-on comes back here with its reason in the fragment.
+  onMount(() => {
+    error = oidcErrorFromHash(location.hash) ?? "";
+  });
 
   async function submit(event: SubmitEvent) {
     event.preventDefault();
@@ -27,6 +34,7 @@
 
 <main class="auth">
   <h1>Log in</h1>
+  <SsoButton />
   <form onsubmit={submit}>
     <label>
       Email

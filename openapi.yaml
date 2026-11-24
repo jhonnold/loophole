@@ -385,8 +385,21 @@ components:
         turnstileSiteKey:
           type: string
           description: Site key for the sign-up CAPTCHA.
+        oidc:
+          anyOf:
+            - type: object
+              properties:
+                name:
+                  type: string
+                  description: The identity provider's name, for the button.
+              required:
+                - name
+            - type: "null"
+          description: "Single sign-on: log in by opening `/api/auth/oidc/start`. Null
+            when it isn't set up."
       required:
         - turnstileSiteKey
+        - oidc
     Session:
       type: object
       properties:
@@ -406,6 +419,10 @@ components:
           type: string
         emailVerified:
           type: boolean
+        hasPassword:
+          type: boolean
+          description: False for an account made through single sign-on until a password
+            reset sets one; it is deleted by typing its email instead.
         isAdmin:
           type: boolean
         createdAt:
@@ -415,6 +432,7 @@ components:
         - id
         - email
         - emailVerified
+        - hasPassword
         - isAdmin
         - createdAt
       description: The logged-in player. Only the email is personal data.
@@ -497,15 +515,26 @@ components:
         - password
       additionalProperties: false
     DeleteAccountRequest:
-      type: object
-      properties:
-        password:
-          type: string
-          minLength: 1
-          maxLength: 128
-      required:
-        - password
-      additionalProperties: false
+      anyOf:
+        - type: object
+          properties:
+            password:
+              type: string
+              minLength: 1
+              maxLength: 128
+          required:
+            - password
+          additionalProperties: false
+        - type: object
+          properties:
+            email:
+              type: string
+              maxLength: 254
+          required:
+            - email
+          additionalProperties: false
+      description: The account's password or, for an account without one
+        (`hasPassword` false), its email.
     ProgressList:
       type: object
       properties:
@@ -1688,7 +1717,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
         "401":
-          description: Not logged in, or wrong password.
+          description: Not logged in, or wrong password (or email, for an account without
+            one).
           content:
             application/problem+json:
               schema:
@@ -1699,6 +1729,46 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+        "429":
+          description: Too many attempts; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/auth/oidc/start:
+    get:
+      summary: Log in through single sign-on
+      description: Open in the browser (not with fetch). Sends the browser to the
+        identity provider, which sends it back to the callback. Only when
+        `AuthConfig.oidc` is set; otherwise 404.
+      responses:
+        "302":
+          description: To the identity provider, or to `/login#oidc_error=unavailable`
+            when it can't be reached.
+          headers:
+            Location:
+              schema:
+                type: string
+        "429":
+          description: Too many attempts; `Retry-After` says when to try again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/auth/oidc/callback:
+    get:
+      summary: Where the identity provider sends the browser back
+      description: Takes the provider's query parameters (`code`, `state`, `iss`, or
+        `error`). Logs in to the account tied to the identity or with its email,
+        or makes a new one, and sets a new session cookie.
+      responses:
+        "302":
+          description: To `/` when logged in, else to
+            `/login#oidc_error=<failed|no-email|email-unverified>`.
+          headers:
+            Location:
+              schema:
+                type: string
         "429":
           description: Too many attempts; `Retry-After` says when to try again.
           content:

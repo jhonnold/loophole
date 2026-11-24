@@ -19,6 +19,7 @@ describe("openDatabase and migrate", () => {
       "attempts",
       "dailies",
       "display_names",
+      "identities",
       "jobs",
       "progress",
       "puzzles",
@@ -41,6 +42,7 @@ describe("openDatabase and migrate", () => {
       { version: 6 },
       { version: 7 },
       { version: 8 },
+      { version: 9 },
     ]);
   });
 

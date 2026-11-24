@@ -64,6 +64,7 @@ function setup(options: { webDir?: string; maxQueued?: number; maxPending?: numb
       id,
       email: `${id}@example.com`,
       passwordHash: "h",
+      hasPassword: true,
       emailVerifiedAt: null,
       isAdmin: false,
       createdAt: clock.now(),

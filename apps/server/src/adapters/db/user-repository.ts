@@ -10,9 +10,10 @@ type UserRow = {
   email_verified_at: number | null;
   is_admin: number;
   created_at: number;
+  has_password: number;
 };
 
-const COLUMNS = "id, email, password_hash, email_verified_at, is_admin, created_at";
+const COLUMNS = "id, email, password_hash, email_verified_at, is_admin, created_at, has_password";
 
 /** Users in SQLite. Deleting a user cascades to their sessions, tokens and gameplay rows. */
 export class SqliteUserRepository implements UserRepository {
@@ -26,14 +27,14 @@ export class SqliteUserRepository implements UserRepository {
 
   constructor(db: Database) {
     this.#insert = db.query<void, UserRow>(
-      `INSERT INTO users (${COLUMNS}) VALUES ($id, $email, $password_hash, $email_verified_at, $is_admin, $created_at) ON CONFLICT (email) DO NOTHING`,
+      `INSERT INTO users (${COLUMNS}) VALUES ($id, $email, $password_hash, $email_verified_at, $is_admin, $created_at, $has_password) ON CONFLICT (email) DO NOTHING`,
     );
     this.#get = db.query<UserRow, { id: string }>(`SELECT ${COLUMNS} FROM users WHERE id = $id`);
     this.#getByEmail = db.query<UserRow, { email: string }>(
       `SELECT ${COLUMNS} FROM users WHERE email = $email`,
     );
     this.#setPasswordHash = db.query<void, { id: string; hash: string }>(
-      "UPDATE users SET password_hash = $hash WHERE id = $id",
+      "UPDATE users SET password_hash = $hash, has_password = 1 WHERE id = $id",
     );
     this.#markEmailVerified = db.query<void, { id: string; at: number }>(
       "UPDATE users SET email_verified_at = $at WHERE id = $id AND email_verified_at IS NULL",
@@ -83,6 +84,7 @@ function toRow(u: UserRecord): UserRow {
     email_verified_at: u.emailVerifiedAt,
     is_admin: u.isAdmin ? 1 : 0,
     created_at: u.createdAt,
+    has_password: u.hasPassword ? 1 : 0,
   };
 }
 
@@ -91,6 +93,7 @@ function fromRow(row: UserRow): UserRecord {
     id: row.id,
     email: row.email,
     passwordHash: row.password_hash,
+    hasPassword: row.has_password === 1,
     emailVerifiedAt: row.email_verified_at,
     isAdmin: row.is_admin === 1,
     createdAt: row.created_at,

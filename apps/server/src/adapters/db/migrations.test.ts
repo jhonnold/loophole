@@ -76,3 +76,22 @@ describe("008: job order", () => {
     ]);
   });
 });
+
+describe("009: identities", () => {
+  test("accounts made before single sign-on have a password, and keep their rows", () => {
+    const db = migratedFrom(9, (db) => {
+      db.run(
+        "INSERT INTO users (id, email, password_hash, created_at) VALUES ('u1', 'a@example.com', 'h', 1)",
+      );
+      db.run(
+        "INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES ('t', 'u1', 1, 2)",
+      );
+    });
+    expect(db.query("SELECT id, has_password FROM users").all()).toEqual([
+      { id: "u1", has_password: 1 },
+    ]);
+    expect(db.query("SELECT token_hash FROM sessions").all()).toEqual([{ token_hash: "t" }]);
+    expect(() => db.run("UPDATE users SET has_password = 2")).toThrow(/CHECK constraint/);
+    expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
+  });
+});

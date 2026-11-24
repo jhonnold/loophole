@@ -56,6 +56,12 @@ export interface SignUpRequest {
   readonly remoteIp: string | null;
 }
 
+/** What the player gave to confirm deleting their account: the password, or the email when it has none. */
+export interface DeleteConfirmation {
+  readonly password?: string;
+  readonly email?: string;
+}
+
 /** Emails are compared trimmed and lower-cased. */
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -90,6 +96,7 @@ export class AccountManager {
       id: newId(),
       email,
       passwordHash,
+      hasPassword: true,
       emailVerifiedAt: null,
       isAdmin: false,
       createdAt: clock.now(),
@@ -157,15 +164,20 @@ export class AccountManager {
   }
 
   /**
-   * Deletes the account and everything stored for it (NFR-6), after checking the password.
+   * Deletes the account and everything stored for it (NFR-6), after checking the password, or, for
+   * an account without one (made through single sign-on), that the player typed its email.
    * Throws `InvalidCredentialsError` or `RateLimitedError`.
    */
-  async deleteAccount(userId: string, password: string): Promise<void> {
+  async deleteAccount(userId: string, confirmation: DeleteConfirmation): Promise<void> {
     const { users } = this.#deps;
     const user = users.get(userId);
     if (user === null) throw new InvalidCredentialsError();
     this.#limit(`login:${user.email}`, LOGIN_PER_EMAIL);
-    if (!(await this.#checkPassword(user, password))) throw new InvalidCredentialsError();
+    const confirmed = user.hasPassword
+      ? confirmation.password !== undefined &&
+        (await this.#checkPassword(user, confirmation.password))
+      : confirmation.email !== undefined && normalizeEmail(confirmation.email) === user.email;
+    if (!confirmed) throw new InvalidCredentialsError();
     users.delete(userId);
   }
 

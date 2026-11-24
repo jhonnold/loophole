@@ -4,6 +4,7 @@ import type {
   AccountTokenRecord,
   AttemptRecord,
   DailyRecord,
+  IdentityRecord,
   Job,
   JobInput,
   JobKind,
@@ -128,6 +129,7 @@ export interface UserRepository {
   get(id: string): UserRecord | null;
   /** `email` must already be normalized (trimmed, lower-cased). */
   getByEmail(email: string): UserRecord | null;
+  /** Sets the password and marks the account as having one. */
   setPasswordHash(id: string, passwordHash: string): void;
   /** Marks the email verified at `at`, unless it already is. */
   markEmailVerified(id: string, at: number): void;
@@ -135,6 +137,43 @@ export interface UserRepository {
   setAdmin(email: string, isAdmin: boolean): boolean;
   /** Deletes the user and, through ON DELETE CASCADE, every row that belongs to them. */
   delete(id: string): void;
+}
+
+export interface IdentityRepository {
+  /** The account this provider identity logs in to, or null. */
+  getUserId(issuer: string, subject: string): string | null;
+  /** Ties an identity to an account. Returns false, storing nothing, when it is already tied. */
+  insert(identity: IdentityRecord): boolean;
+}
+
+/** What the login cookie keeps while the player is away at the identity provider. */
+export interface OidcPending {
+  readonly state: string;
+  readonly nonce: string;
+  /** The PKCE code verifier; the provider saw only its hash. */
+  readonly codeVerifier: string;
+}
+
+/** Who the identity provider says logged in. */
+export interface OidcIdentity {
+  readonly issuer: string;
+  readonly subject: string;
+  readonly email: string | null;
+  readonly emailVerified: boolean;
+}
+
+/** An OpenID Connect provider for single sign-on (PRD FR-30): Authelia in the homelab. */
+export interface OidcProvider {
+  /**
+   * Where to send the player's browser, and what to keep until they come back; null when the
+   * provider can't be reached.
+   */
+  begin(): Promise<{ readonly url: string; readonly pending: OidcPending } | null>;
+  /**
+   * Checks the provider's answer (the callback's query parameters) against `pending` and returns
+   * who logged in, or null when the login was refused, forged or could not be checked.
+   */
+  finish(callback: URLSearchParams, pending: OidcPending): Promise<OidcIdentity | null>;
 }
 
 export interface SessionRepository {
@@ -312,7 +351,7 @@ export interface DailySeeder {
 }
 
 /** Why an authentication step was refused, for the auth failure count. */
-export type AuthFailure = "login" | "captcha" | "link" | "csrf";
+export type AuthFailure = "login" | "captcha" | "link" | "csrf" | "oidc";
 
 /** What the HTTP API counts for monitoring (Prometheus in production, DECISIONS "Metrics"). */
 export interface ApiMetrics {

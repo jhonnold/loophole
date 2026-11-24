@@ -18,6 +18,11 @@ export interface Auth extends Readable<AuthState> {
   refresh(): Promise<void>;
   /** The Turnstile site key for the sign-up form, or null if the API can't be reached. */
   turnstileSiteKey(): Promise<string | null>;
+  /**
+   * The single sign-on provider's name, or null when it isn't set up or the API can't be reached.
+   * Logging in through it is a link to `OIDC_START`.
+   */
+  oidcName(): Promise<string | null>;
   signUp(email: string, password: string, captchaToken: string): Promise<AuthResult>;
   logIn(email: string, password: string): Promise<AuthResult>;
   logOut(): Promise<AuthResult>;
@@ -25,7 +30,25 @@ export interface Auth extends Readable<AuthState> {
   resendVerification(email: string): Promise<AuthResult>;
   requestPasswordReset(email: string): Promise<AuthResult>;
   resetPassword(token: string, password: string): Promise<AuthResult>;
-  deleteAccount(password: string): Promise<AuthResult>;
+  /** Deletes the account, confirmed by its password, or by its email when it has none. */
+  deleteAccount(confirmation: { password: string } | { email: string }): Promise<AuthResult>;
+}
+
+/** Opened in the browser (a full page load) to log in through single sign-on. */
+export const OIDC_START = "/api/auth/oidc/start";
+
+const OIDC_ERRORS: Record<string, string> = {
+  unavailable: "Couldn't reach the login provider. Try again in a moment.",
+  "no-email": "The login provider didn't share an email address, so you couldn't be logged in.",
+  "email-unverified":
+    "An account with this email already exists, and the login provider hasn't confirmed the email. Log in with your password instead.",
+};
+
+/** The message for a failed single sign-on (`#oidc_error=…` on the login page), or null. */
+export function oidcErrorFromHash(hash: string): string | null {
+  const reason = new URLSearchParams(hash.replace(/^#/, "")).get("oidc_error");
+  if (reason === null) return null;
+  return OIDC_ERRORS[reason] ?? "Logging in with the login provider didn't work. Try again.";
 }
 
 const OFFLINE = "Couldn't reach the server. Check your connection and try again.";
@@ -64,6 +87,14 @@ export function createAuth(client: ApiClient): Auth {
     }
   }
 
+  async function config() {
+    try {
+      return (await client.GET("/api/auth/config")).data ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async function refresh(): Promise<void> {
     try {
       const { data } = await client.GET("/api/session");
@@ -79,12 +110,11 @@ export function createAuth(client: ApiClient): Auth {
     refresh,
 
     async turnstileSiteKey() {
-      try {
-        const { data } = await client.GET("/api/auth/config");
-        return data?.turnstileSiteKey ?? null;
-      } catch {
-        return null;
-      }
+      return (await config())?.turnstileSiteKey ?? null;
+    },
+
+    async oidcName() {
+      return (await config())?.oidc?.name ?? null;
     },
 
     signUp: (email, password, captchaToken) =>
@@ -132,8 +162,8 @@ export function createAuth(client: ApiClient): Auth {
       return result;
     },
 
-    async deleteAccount(password) {
-      const result = await run(() => client.DELETE("/api/account", { body: { password } }));
+    async deleteAccount(confirmation) {
+      const result = await run(() => client.DELETE("/api/account", { body: confirmation }));
       if (result.ok) guest();
       return result;
     },

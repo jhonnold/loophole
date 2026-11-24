@@ -33,6 +33,7 @@ import { sameOriginOnly } from "./csrf.ts";
 import { type DailyRouteDeps, registerDailyRoutes } from "./daily.ts";
 import { type HealthRouteDeps, registerHealthRoutes } from "./health.ts";
 import { observe } from "./observe.ts";
+import { registerOidcRoutes } from "./oidc.ts";
 import { problem, problemResponse } from "./problem.ts";
 import { registerProgressRoutes } from "./progress.ts";
 import { type ReportRouteDeps, registerReportRoutes } from "./reports.ts";
@@ -236,6 +237,14 @@ export function createApp(deps: AppDeps): OpenAPIHono {
   });
 
   registerAccountRoutes(app, deps);
+  if (deps.oidc !== undefined) {
+    registerOidcRoutes(app, {
+      oidc: deps.oidc,
+      limiter: deps.limiter,
+      trustProxy: deps.trustProxy,
+      metrics,
+    });
+  }
   registerProgressRoutes(app, deps);
   registerSubmissionRoutes(app, deps);
   registerReportRoutes(app, deps);

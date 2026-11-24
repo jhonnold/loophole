@@ -219,6 +219,12 @@ kbd {
   color: var(--shu);
 }
 
+.auth a.button {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink);
+}
+
 .auth button:disabled {
   opacity: 0.6;
   cursor: default;
