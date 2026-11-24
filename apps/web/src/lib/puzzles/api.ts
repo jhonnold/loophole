@@ -1,5 +1,5 @@
 import type { ApiClient, Schemas } from "@loophole/api-client";
-import { EdgeState, encodeEdges, type Hint, parsePuzzle } from "@loophole/core";
+import { EdgeState, encodeEdges, type Hint, parsePuzzle, type Step } from "@loophole/core";
 import type { PuzzleSource, PuzzleSummary } from "./source.ts";
 
 /** How many recent server puzzles the list shows. */
@@ -25,19 +25,20 @@ function toHint(h: Schemas["Hint"]): Hint {
     case "reveal":
       return h;
     case "step":
-      return {
-        kind: "step",
-        step: {
-          rule: h.rule,
-          changes: h.changes.map((c) => ({
-            edge: c.edge,
-            state: c.state === "line" ? EdgeState.Line : EdgeState.Cross,
-          })),
-          cells: h.cells,
-          dots: h.dots,
-        },
-      };
+      return { kind: "step", step: toStep(h), before: h.before.map(toStep) };
   }
+}
+
+function toStep(s: Schemas["HintStep"]): Step {
+  return {
+    rule: s.rule,
+    changes: s.changes.map((c) => ({
+      edge: c.edge,
+      state: c.state === "line" ? EdgeState.Line : EdgeState.Cross,
+    })),
+    cells: s.cells,
+    dots: s.dots,
+  };
 }
 
 /** Puzzles from the server's API: recent published puzzles, clues only, and hints. */

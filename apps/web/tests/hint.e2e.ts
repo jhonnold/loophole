@@ -21,22 +21,30 @@ const grid = puzzle.grid;
 const solution = decodeEdges(grid, FIXTURE_SOLUTIONS["small-7"]);
 const empty = new Uint8Array(grid.edgeCount);
 
-/** The step a hint on `edges` shows, worked out here the same way the app does. */
-function expectedStep(edges: Uint8Array): Step {
+/** The hint on `edges`, worked out here the same way the app does: a line and the steps before it. */
+function expectedHint(edges: Uint8Array): { step: Step; before: readonly Step[] } {
   const hint = findHint(puzzle, solution, edges);
   if (hint.kind !== "step") throw new Error(`expected a step, got ${hint.kind}`);
-  return hint.step;
+  return hint;
+}
+
+/** Every edge a hint's move sets: the crosses before its line, then the line's step. */
+function hintChanges(edges: Uint8Array) {
+  const { step, before } = expectedHint(edges);
+  return [...before, step].flatMap((s) => s.changes);
 }
 
 /**
- * A board on which the next hint is `rule`: small-7's solver steps replayed from an empty board up
- * to the first point where that rule comes next.
+ * A board on which the next hint uses `rule`, for its line or a step before it: small-7's solver
+ * steps replayed from an empty board up to the first point where that happens.
  */
 function boardBefore(rule: RuleId): Uint8Array {
   const edges = new Uint8Array(grid.edgeCount);
   for (const step of solve(puzzle).steps) {
     const hint = findHint(puzzle, solution, edges);
-    if (hint.kind === "step" && hint.step.rule === rule) return edges;
+    if (hint.kind === "step" && [...hint.before, hint.step].some((s) => s.rule === rule)) {
+      return edges;
+    }
     for (const c of step.changes) edges[c.edge] = c.state;
   }
   throw new Error(`small-7 never needs ${rule}`);
@@ -54,26 +62,28 @@ function threeWrongCrosses(): Uint8Array {
   return edges;
 }
 
-// Every rule small-7 uses, so the long texts (corners, colouring, connectivity) are among them.
-const RULES: RuleId[] = [
-  "clue-zero",
-  "clue-satisfied",
+// Every rule small-7's hints use, so the long texts (corners, colouring, connectivity) are among
+// them. The first ones draw a hint's line and title its card; the rest only cross edges, so they
+// show in the card's "First:" list.
+const LINE_RULES: RuleId[] = [
   "clue-needs-all",
-  "dot-full",
   "dot-continue",
-  "dot-dead-end",
-  "corner-1",
   "corner-3",
-  "premature-loop",
   "line-into-1",
   "line-into-3",
   "two-passes-on",
-  "ones-side-by-side",
-  "three-diagonal-one",
   "colour-2",
   "colour-chain",
-  "cut-off",
   "two-exits",
+];
+const CROSS_RULES: RuleId[] = [
+  "clue-zero",
+  "clue-satisfied",
+  "dot-full",
+  "dot-dead-end",
+  "corner-1",
+  "premature-loop",
+  "cut-off",
   "lookahead",
 ];
 
@@ -119,15 +129,18 @@ for (const [width, height] of [
       await openWith(page, empty);
       const before = await board(page).boundingBox();
       await page.getByRole("button", { name: "Hint" }).click();
-      const step = expectedStep(empty);
+      const { step, before: first } = expectedHint(empty);
+      const changes = hintChanges(empty);
       await expect(page.getByRole("heading", { name: RULE_TITLE[step.rule] })).toBeVisible();
-      await expect(ghosts(page)).toHaveCount(step.changes.length);
+      await expect(page.getByText(`First: ${RULE_TITLE[first[0].rule]}`)).toBeVisible();
+      await expect(ghosts(page)).toHaveCount(changes.length);
       // The card takes the tray's place without moving the board.
       await expect(page.getByRole("navigation", { name: "Puzzle tools" })).toHaveCount(0);
       expect(await board(page).boundingBox()).toEqual(before);
       await page.getByRole("button", { name: "Apply move" }).click();
-      const crossed = step.changes.filter((c) => c.state === EdgeState.Cross).length;
+      const crossed = changes.filter((c) => c.state === EdgeState.Cross).length;
       await expect(crosses(page)).toHaveCount(crossed);
+      await expect(lines(page)).toHaveCount(changes.length - crossed);
       await expect(ghosts(page)).toHaveCount(0);
       await expect(page.getByRole("navigation", { name: "Puzzle tools" })).toBeVisible();
     });
@@ -143,15 +156,22 @@ for (const [width, height] of [
     });
 
     test("every hint card fits under the board without moving it (NFR-2)", async ({ page }) => {
-      const cases: [string, Uint8Array][] = [
-        ...RULES.map((rule): [string, Uint8Array] => [RULE_TITLE[rule], boardBefore(rule)]),
-        ["This × doesn't fit", threeWrongCrosses()],
+      // [title, a rule the "First:" list names or null, board]
+      const ruleCase = (rule: RuleId, listed: boolean): [string, string | null, Uint8Array] => {
+        const edges = boardBefore(rule);
+        return [RULE_TITLE[expectedHint(edges).step.rule], listed ? RULE_TITLE[rule] : null, edges];
+      };
+      const cases: [string, string | null, Uint8Array][] = [
+        ...LINE_RULES.map((rule) => ruleCase(rule, false)),
+        ...CROSS_RULES.map((rule) => ruleCase(rule, true)),
+        ["This × doesn't fit", null, threeWrongCrosses()],
       ];
-      for (const [title, edges] of cases) {
+      for (const [title, listed, edges] of cases) {
         await openWith(page, edges);
         const before = await board(page).boundingBox();
         await page.getByRole("button", { name: "Hint" }).click();
         await expect(page.getByRole("heading", { name: title })).toBeVisible();
+        if (listed !== null) await expect(page.locator(".hint .first")).toContainText(listed);
         expect([title, await fitsTheWindow(page)]).toEqual([title, true]);
         expect([title, await board(page).boundingBox()]).toEqual([title, before]);
       }
@@ -192,12 +212,12 @@ test.describe("phone 390×664, zoomed board", () => {
       ],
     );
     await expect.poll(async () => (await boardView(page)).y).toBeGreaterThan(100);
-    // medium-10's first hint is the 0 in the top row, out of view now.
+    // medium-10's first hint is the 3 at the 0 in the top row (four crosses, two lines), out of view now.
     await page.getByRole("button", { name: "Hint" }).click();
-    await expect(page.locator("[role=application] .ghost-cross")).toHaveCount(4);
+    await expect(ghosts(page)).toHaveCount(6);
     const frame = await board(page).boundingBox();
     if (frame === null) throw new Error("board not visible");
-    for (const g of await page.locator("[role=application] .ghost-cross").all()) {
+    for (const g of await ghosts(page).all()) {
       const b = await g.boundingBox();
       if (b === null) throw new Error("ghost not drawn");
       expect(b.x).toBeGreaterThanOrEqual(frame.x);
@@ -228,7 +248,7 @@ test.describe("phone 390×664, zoomed board", () => {
     await panToCorner();
     await expect.poll(async () => (await boardView(page)).y).toBeGreaterThan(100);
     await page.getByRole("button", { name: "Hint" }).click();
-    await expect(page.locator("[role=application] .ghost-cross")).toHaveCount(4);
+    await expect(ghosts(page)).toHaveCount(6);
     // Pan away from the hint, then pause and resume: the board remounts and must stay where it is.
     await panToCorner();
     await expect.poll(async () => (await boardView(page)).y).toBeGreaterThan(100);
@@ -249,7 +269,7 @@ test.describe("desktop", () => {
     page,
   }) => {
     await openWith(page, empty);
-    const step = expectedStep(empty);
+    const changes = hintChanges(empty);
     await board(page).focus();
     await page.keyboard.press("h");
     await expect(page.getByRole("button", { name: "Apply move" })).toBeFocused();
@@ -258,7 +278,7 @@ test.describe("desktop", () => {
     await expect(page.getByRole("button", { name: "Apply move" })).toHaveCount(0);
     await expect(board(page)).toBeFocused();
     // The move stays drawn as a ghost until it is made.
-    await expect(ghosts(page)).toHaveCount(step.changes.length);
+    await expect(ghosts(page)).toHaveCount(changes.length);
     await expect(page.locator(".timecard").getByText("Hint used")).toBeVisible();
     await page.keyboard.press("h");
     await page.keyboard.press("Enter");

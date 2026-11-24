@@ -2753,7 +2753,7 @@ export interface components {
                 [key: string]: string;
             };
         };
-        /** @description The next hint: a wrong mark, the next deduction (rule, edges it decides, cells and dots it rests on), a line from the solution when no rule applies, or solved. */
+        /** @description The next hint: a wrong mark, the next line the rules reach (the deduction that draws it, and the crosses before it that it rests on), a line from the solution when no rule applies, or solved. */
         Hint: {
             /** @enum {string} */
             kind: "solved";
@@ -2776,11 +2776,25 @@ export interface components {
             }[];
             cells: number[];
             dots: number[];
+            /** @description The steps the line rests on, in order: each only crosses edges. Crosses the line doesn't need are left out. */
+            before: components["schemas"]["HintStep"][];
         } | {
             /** @enum {string} */
             kind: "reveal";
             /** @description An open edge that is a line in the solution. */
             edge: number;
+        };
+        /** @description One deduction: its rule, the edges it decides, and the cells and dots it rests on. */
+        HintStep: {
+            /** @enum {string} */
+            rule: "clue-zero" | "clue-satisfied" | "clue-needs-all" | "dot-full" | "dot-continue" | "dot-dead-end" | "corner-1" | "corner-3" | "adjacent-3s" | "diagonal-3s" | "premature-loop" | "loop-complete" | "line-into-1" | "line-into-3" | "two-passes-on" | "two-in-corner" | "ones-side-by-side" | "three-diagonal-one" | "corner-chain" | "parity" | "colour-1" | "colour-2" | "colour-3" | "colour-chain" | "unreachable" | "cut-off" | "two-exits" | "lookahead";
+            changes: {
+                edge: number;
+                /** @enum {string} */
+                state: "line" | "cross";
+            }[];
+            cells: number[];
+            dots: number[];
         };
         HintRequest: {
             /** @description The player's board: one character per edge, 0 empty, 1 line, 2 cross (docs/FORMAT.md). */

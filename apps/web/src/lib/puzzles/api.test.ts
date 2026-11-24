@@ -113,7 +113,7 @@ describe("apiSource", () => {
     await expect(apiSource(client).get("p1")).rejects.toThrow("HTTP 500");
   });
 
-  test("hint posts the board and maps a step to core's shape", async () => {
+  test("hint posts the board and maps a step and the steps before it to core's shape", async () => {
     const step = {
       kind: "step",
       rule: "clue-zero",
@@ -123,6 +123,9 @@ describe("apiSource", () => {
       ],
       cells: [0],
       dots: [],
+      before: [
+        { rule: "dot-dead-end", changes: [{ edge: 1, state: "cross" }], cells: [], dots: [1] },
+      ],
     };
     const { client, bodies } = clientFor({ "/api/puzzles/p1/hint": [200, step] });
     const puzzle = createPuzzle(2, 2);
@@ -139,6 +142,14 @@ describe("apiSource", () => {
         cells: [0],
         dots: [],
       },
+      before: [
+        {
+          rule: "dot-dead-end",
+          changes: [{ edge: 1, state: EdgeState.Cross }],
+          cells: [],
+          dots: [1],
+        },
+      ],
     });
     expect(bodies).toEqual([{ edges: "000100000000" }]);
   });

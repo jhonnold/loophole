@@ -1,5 +1,5 @@
 import type { Schemas } from "@loophole/api-client";
-import { decodeEdges, EdgeState, findHint, parsePuzzle } from "@loophole/core";
+import { decodeEdges, EdgeState, findHint, parsePuzzle, type Step } from "@loophole/core";
 import type { Page, Route } from "@playwright/test";
 import { FIXTURES } from "../src/lib/puzzles/fixtures.ts";
 import { FIXTURE_SOLUTIONS } from "../src/lib/test-support/solutions.ts";
@@ -152,16 +152,16 @@ export async function mockDailyApi(page: Page, options: MockOptions = {}) {
     const { edges } = route.request().postDataJSON() as { edges: string };
     const hint = findHint(small7Puzzle, small7Solution, decodeEdges(small7Puzzle.grid, edges));
     if (hint.kind !== "step") throw new Error(`expected a step, got ${hint.kind}`);
-    return json(route, {
-      kind: "step",
-      rule: hint.step.rule,
-      cells: hint.step.cells,
-      dots: hint.step.dots,
-      changes: hint.step.changes.map((c) => ({
+    const wireStep = (s: Step): Schemas["HintStep"] => ({
+      rule: s.rule,
+      cells: [...s.cells],
+      dots: [...s.dots],
+      changes: s.changes.map((c) => ({
         edge: c.edge,
         state: c.state === EdgeState.Line ? "line" : "cross",
       })),
     });
+    return json(route, { kind: "step", ...wireStep(hint.step), before: hint.before.map(wireStep) });
   });
   await page.route(`**/api/users/u1/attempts/${DAILY_ID}/finish`, (route) => {
     current = options.finished ?? attempt({ status: "finished", ranked: true, rank: 1 });

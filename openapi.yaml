@@ -251,12 +251,19 @@ components:
               items:
                 type: integer
                 minimum: 0
+            before:
+              type: array
+              items:
+                $ref: "#/components/schemas/HintStep"
+              description: "The steps the line rests on, in order: each only crosses edges.
+                Crosses the line doesn't need are left out."
           required:
             - kind
             - rule
             - changes
             - cells
             - dots
+            - before
         - type: object
           properties:
             kind:
@@ -270,9 +277,76 @@ components:
           required:
             - kind
             - edge
-      description: "The next hint: a wrong mark, the next deduction (rule, edges it
-        decides, cells and dots it rests on), a line from the solution when no
-        rule applies, or solved."
+      description: "The next hint: a wrong mark, the next line the rules reach (the
+        deduction that draws it, and the crosses before it that it rests on), a
+        line from the solution when no rule applies, or solved."
+    HintStep:
+      type: object
+      properties:
+        rule:
+          type: string
+          enum:
+            - clue-zero
+            - clue-satisfied
+            - clue-needs-all
+            - dot-full
+            - dot-continue
+            - dot-dead-end
+            - corner-1
+            - corner-3
+            - adjacent-3s
+            - diagonal-3s
+            - premature-loop
+            - loop-complete
+            - line-into-1
+            - line-into-3
+            - two-passes-on
+            - two-in-corner
+            - ones-side-by-side
+            - three-diagonal-one
+            - corner-chain
+            - parity
+            - colour-1
+            - colour-2
+            - colour-3
+            - colour-chain
+            - unreachable
+            - cut-off
+            - two-exits
+            - lookahead
+        changes:
+          type: array
+          items:
+            type: object
+            properties:
+              edge:
+                type: integer
+                minimum: 0
+              state:
+                type: string
+                enum:
+                  - line
+                  - cross
+            required:
+              - edge
+              - state
+        cells:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+        dots:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+      required:
+        - rule
+        - changes
+        - cells
+        - dots
+      description: "One deduction: its rule, the edges it decides, and the cells and
+        dots it rests on."
     HintRequest:
       type: object
       properties:
