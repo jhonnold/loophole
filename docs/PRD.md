@@ -87,6 +87,7 @@ Priority: **P0** = required for launch, **P1** = soon after.
 - FR-19 (P0). Sign-up is protected by a CAPTCHA.
 - FR-20 (P0). Email verification and password reset.
 - FR-30 (P2). Optional single sign-on through one OpenID Connect provider (such as a self-hosted Authelia), set up by the operator (added 2026-11-24). Its first login makes a confirmed account with no password and no CAPTCHA, or logs in to the account that already has the email when the provider has verified it. Password login stays.
+- FR-31 (P2). A techniques page explains every rule the solver uses, grouped by the level that first needs it and ordered from easiest to hardest, each with a small picture the player steps through: the position, the reason, the forced move and the move drawn in (added 2026-11-25). A hint links to the rule it uses there.
 - FR-21 (P0). Auto-saved in-progress state per puzzle, synced across devices; guests use local storage and can migrate to an account.
 
 ### 7.6 Daily puzzle and leaderboards
