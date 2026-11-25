@@ -43,6 +43,9 @@
     </span>
     <h2 id="hint-title">{view.title}</h2>
     <p class="text" id="hint-text">{view.text}</p>
+    {#if view.steps.length > 0}
+      <p class="first" id="hint-first">First: {view.steps.join(" · ")}</p>
+    {/if}
     <p class="visually-hidden" id="hint-move">Move: {where}.</p>
   </div>
   <div class="actions">
@@ -50,7 +53,9 @@
       type="button"
       class="apply"
       bind:this={applyButton}
-      aria-describedby="hint-title hint-text hint-move"
+      aria-describedby={view.steps.length > 0
+        ? "hint-title hint-text hint-first hint-move"
+        : "hint-title hint-text hint-move"}
       onclick={onapply}>{view.applyLabel}</button
     >
     <button type="button" class="later" onclick={onlater}>{view.laterLabel}</button>
@@ -97,6 +102,14 @@
     line-height: 1.45;
   }
 
+  /* The crosses the move makes before its line, by rule. */
+  .first {
+    margin: 4px 0 0;
+    font-size: 13px;
+    line-height: 1.35;
+    color: var(--ink-soft);
+  }
+
   figure {
     float: right;
     margin: 0 0 4px 12px;
@@ -137,8 +150,8 @@
     color: var(--ink);
   }
 
-  /* Phones: a 56px figure without its caption, 14px words and 44px buttons, so the longest hint
-     still fits under a 7×7 board on the Play artboard's 390×664. */
+  /* Phones: a 56px figure without its caption, 14px words (12px for the "First:" list) and 44px
+     buttons, so the longest hint still fits under a 7×7 board on the Play artboard's 390×664. */
   @media (max-width: 899px) {
     .hint {
       padding: 8px 12px;
@@ -153,6 +166,12 @@
     .text {
       font-size: 14px;
       line-height: 1.35;
+    }
+
+    .first {
+      margin-top: 0;
+      font-size: 12px;
+      line-height: 1.25;
     }
 
     figure > :global(svg) {
@@ -198,6 +217,10 @@
     .text {
       font-size: 13px;
       line-height: 1.3;
+    }
+
+    .first {
+      line-height: 1.2;
     }
   }
 </style>

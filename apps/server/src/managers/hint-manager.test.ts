@@ -126,8 +126,10 @@ describe("HintManager", () => {
       const hint = await hints.hint("e-1", encodeEdges(board));
       if (hint?.kind === "solved") return;
       if (hint?.kind !== "step") throw new Error(`expected a step, got ${hint?.kind}`);
-      expect(notEasy.has(hint.step.rule)).toBe(false);
-      for (const { edge, state } of hint.step.changes) board[edge] = state;
+      for (const step of [...hint.before, hint.step]) {
+        expect(notEasy.has(step.rule)).toBe(false);
+        for (const { edge, state } of step.changes) board[edge] = state;
+      }
     }
     throw new Error("the hints never solved the puzzle");
   });

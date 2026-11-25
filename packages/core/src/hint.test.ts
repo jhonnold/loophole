@@ -16,7 +16,10 @@ function puzzle(width: number, height: number, clues: string) {
   return parsePuzzle({ v: 1, width, height, clues });
 }
 
-/** Takes every hint from an empty board to the end: the rules the steps named, and the reveals. */
+/**
+ * Takes every hint from an empty board to the end, applying each whole: the rules its steps named,
+ * and the reveals.
+ */
 function hintWalk(p: Puzzle, solution: Uint8Array): { rules: Set<RuleId>; reveals: number } {
   const board = new Uint8Array(p.grid.edgeCount);
   const rules = new Set<RuleId>();
@@ -26,8 +29,10 @@ function hintWalk(p: Puzzle, solution: Uint8Array): { rules: Set<RuleId>; reveal
     const hint = findHint(p, solution, board);
     if (hint.kind === "solved") return { rules, reveals };
     if (hint.kind === "step") {
-      rules.add(hint.step.rule);
-      for (const { edge, state } of hint.step.changes) board[edge] = state;
+      for (const step of [...hint.before, hint.step]) {
+        rules.add(step.rule);
+        for (const { edge, state } of step.changes) board[edge] = state;
+      }
     } else if (hint.kind === "reveal") {
       reveals++;
       board[hint.edge] = EdgeState.Line;
@@ -39,24 +44,45 @@ function hintWalk(p: Puzzle, solution: Uint8Array): { rules: Set<RuleId>; reveal
 }
 
 describe("findHint", () => {
-  test("names the next rule from an empty board", () => {
-    // 2×2 with a 0 in the top-left cell: the 0's four sides are crossed first.
+  test("names the first line from an empty board and the crosses it rests on", () => {
+    // 2×2 with a 0 in the top-left cell: the 0's four sides are crossed, which leaves two dots with
+    // one open edge each, crossed too; lookahead then draws the first line.
     const p = puzzle(2, 2, "0...");
     const solution = decodeEdges(p.grid, "222121222211");
     const hint = findHint(p, solution, new Uint8Array(p.grid.edgeCount));
     expect(hint).toEqual({
       kind: "step",
       step: {
-        rule: "clue-zero",
-        changes: [
-          { edge: 0, state: EdgeState.Cross },
-          { edge: 7, state: EdgeState.Cross },
-          { edge: 2, state: EdgeState.Cross },
-          { edge: 6, state: EdgeState.Cross },
-        ],
-        cells: [0],
-        dots: [],
+        rule: "lookahead",
+        changes: [{ edge: 3, state: EdgeState.Line }],
+        cells: [],
+        dots: [4, 5],
       },
+      before: [
+        {
+          rule: "clue-zero",
+          changes: [
+            { edge: 0, state: EdgeState.Cross },
+            { edge: 7, state: EdgeState.Cross },
+            { edge: 2, state: EdgeState.Cross },
+            { edge: 6, state: EdgeState.Cross },
+          ],
+          cells: [0],
+          dots: [],
+        },
+        {
+          rule: "dot-dead-end",
+          changes: [{ edge: 1, state: EdgeState.Cross }],
+          cells: [],
+          dots: [1],
+        },
+        {
+          rule: "dot-dead-end",
+          changes: [{ edge: 8, state: EdgeState.Cross }],
+          cells: [],
+          dots: [2],
+        },
+      ],
     });
   });
 
@@ -68,11 +94,36 @@ describe("findHint", () => {
     const hint = findHint(p, solution, board);
     expect(hint.kind).toBe("step");
     if (hint.kind !== "step") return;
-    expect(hint.step.rule).not.toBe("clue-zero");
+    expect(hint.before.map((s) => s.rule)).not.toContain("clue-zero");
     for (const { edge, state } of hint.step.changes) {
       expect(board[edge]).toBe(EdgeState.Unknown);
       expect(solution[edge]).toBe(state);
     }
+  });
+
+  test("leaves out the crosses of a clue that is already complete", () => {
+    // Small-7 (a web fixture), replayed to the first board where the solver's next step only
+    // crosses the open side of a clue that already has its lines. That is no hint: it leads to the
+    // next line instead, and the clue's cross is not among the steps it rests on.
+    const p = puzzle(7, 7, ".11..0..23.2......2.21.0....1....01.1..3..0..1..1");
+    const full = solve(p);
+    const board = new Uint8Array(p.grid.edgeCount);
+    for (const step of full.steps) {
+      const next = solve(p, { initial: board, maxSteps: 1 }).steps[0];
+      if (next.rule === "clue-satisfied") {
+        const hint = findHint(p, full.edges, board);
+        expect(hint.kind).toBe("step");
+        if (hint.kind !== "step") return;
+        expect(hint.step.changes.some((c) => c.state === EdgeState.Line)).toBe(true);
+        const crossed = new Set(next.changes.map((c) => c.edge));
+        for (const s of [...hint.before, hint.step]) {
+          expect(s.changes.some((c) => crossed.has(c.edge))).toBe(false);
+        }
+        return;
+      }
+      for (const c of step.changes) board[c.edge] = c.state;
+    }
+    throw new Error("small-7 never has a complete clue with an open side");
   });
 
   test("reports the first wrong mark and how many there are", () => {
@@ -120,7 +171,9 @@ describe("findHint", () => {
       for (const c of step.changes) board[c.edge] = c.state;
     }
     const hint = findHint(p, full.edges, board);
-    expect(hint.kind === "step" && hint.step.rule).toBe("lookahead");
+    expect(
+      hint.kind === "step" && [...hint.before, hint.step].some((s) => s.rule === "lookahead"),
+    ).toBe(true);
     let t = 0;
     const late = findHint(p, full.edges, board, { timeLimitMs: 500, now: () => (t += 1000) });
     expect(late.kind).toBe("reveal");
@@ -188,10 +241,20 @@ describe("findHint", () => {
           if (hint.kind === "solved") {
             expect(analyzeBoard(p, board).solved).toBe(true);
           } else if (hint.kind === "step") {
-            for (const { edge, state } of hint.step.changes) {
-              expect(board[edge]).toBe(EdgeState.Unknown);
-              expect(solution[edge]).toBe(state);
+            // Crosses first, ending in a line; each edge open on the board and set once.
+            const seen = new Set<number>();
+            for (const step of [...hint.before, hint.step]) {
+              for (const { edge, state } of step.changes) {
+                expect(board[edge]).toBe(EdgeState.Unknown);
+                expect(solution[edge]).toBe(state);
+                expect(seen.has(edge)).toBe(false);
+                seen.add(edge);
+              }
             }
+            for (const step of hint.before) {
+              expect(step.changes.every((c) => c.state === EdgeState.Cross)).toBe(true);
+            }
+            expect(hint.step.changes.some((c) => c.state === EdgeState.Line)).toBe(true);
           } else if (hint.kind === "reveal") {
             expect(board[hint.edge]).toBe(EdgeState.Unknown);
             expect(solution[hint.edge]).toBe(EdgeState.Line);

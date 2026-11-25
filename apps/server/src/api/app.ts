@@ -1,6 +1,6 @@
 import type { Hook } from "@hono/zod-openapi";
 import { createRoute, OpenAPIHono } from "@hono/zod-openapi";
-import { EdgeState, type Hint, serializePuzzle } from "@loophole/core";
+import { EdgeState, type Hint, type Step, serializePuzzle } from "@loophole/core";
 import type { Env } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { serveStatic } from "hono/bun";
@@ -336,17 +336,20 @@ function toHintDto(hint: Hint) {
     case "reveal":
       return { kind: "reveal" as const, edge: hint.edge };
     case "step":
-      return {
-        kind: "step" as const,
-        rule: hint.step.rule,
-        changes: hint.step.changes.map((ch) => ({
-          edge: ch.edge,
-          state: ch.state === EdgeState.Line ? ("line" as const) : ("cross" as const),
-        })),
-        cells: [...hint.step.cells],
-        dots: [...hint.step.dots],
-      };
+      return { kind: "step" as const, ...toStepDto(hint.step), before: hint.before.map(toStepDto) };
   }
+}
+
+function toStepDto(step: Step) {
+  return {
+    rule: step.rule,
+    changes: step.changes.map((ch) => ({
+      edge: ch.edge,
+      state: ch.state === EdgeState.Line ? ("line" as const) : ("cross" as const),
+    })),
+    cells: [...step.cells],
+    dots: [...step.dots],
+  };
 }
 
 function toJobDto(job: Job) {

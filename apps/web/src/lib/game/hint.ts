@@ -6,6 +6,7 @@ import {
   RULE_TEXT,
   RULE_TITLE,
   type RuleId,
+  type Step,
   verify,
 } from "@loophole/core";
 import type { EdgeChange } from "./board.ts";
@@ -26,6 +27,11 @@ export interface HintView {
   readonly eyebrow: string;
   readonly title: string;
   readonly text: string;
+  /**
+   * The steps the move makes before its line, by title, a run of the same rule once with a count
+   * ("Dead end ×2"). Empty when the line comes first.
+   */
+  readonly steps: readonly string[];
   /** The rule whose pattern the card draws, or null for a mistake or a revealed line. */
   readonly rule: RuleId | null;
   readonly marks: HintMarks;
@@ -46,7 +52,22 @@ function plural(n: number, one: string, many: string): string {
   return n === 1 ? one : many;
 }
 
-/** Turns a core hint into what the card and the board show. Null when the board is solved. */
+/** The titles of `steps`, a run of the same rule once with its count. */
+function stepTitles(steps: readonly Step[]): string[] {
+  const titles: string[] = [];
+  for (let i = 0; i < steps.length; ) {
+    let n = 1;
+    while (steps[i + n]?.rule === steps[i].rule) n++;
+    titles.push(RULE_TITLE[steps[i].rule] + (n > 1 ? ` ×${n}` : ""));
+    i += n;
+  }
+  return titles;
+}
+
+/**
+ * Turns a core hint into what the card and the board show. Null when the board is solved. A step
+ * hint's move is its line and the crosses before it, made together.
+ */
 export function hintView(grid: Grid, hint: Hint, edges: Uint8Array): HintView | null {
   const view = (v: Omit<HintView, "before">): HintView => ({
     ...v,
@@ -56,14 +77,20 @@ export function hintView(grid: Grid, hint: Hint, edges: Uint8Array): HintView | 
     case "solved":
       return null;
     case "step": {
-      const { rule, changes, cells, dots } = hint.step;
-      const moves = changes.map((c): EdgeChange => [c.edge, c.state]);
+      const { rule } = hint.step;
+      const all = [...hint.before, hint.step];
+      const moves = all.flatMap((s) => s.changes.map((c): EdgeChange => [c.edge, c.state]));
       return view({
         eyebrow: "next forced move",
         title: RULE_TITLE[rule],
         text: RULE_TEXT[rule],
+        steps: stepTitles(hint.before),
         rule,
-        marks: { cells, dots, ghosts: moves },
+        marks: {
+          cells: [...new Set(all.flatMap((s) => s.cells))],
+          dots: [...new Set(all.flatMap((s) => s.dots))],
+          ghosts: moves,
+        },
         apply: moves,
         applyLabel: "Apply move",
         laterLabel: "I'll draw it",
@@ -83,6 +110,7 @@ export function hintView(grid: Grid, hint: Hint, edges: Uint8Array): HintView | 
           (line
             ? "The line between the two highlighted dots is not part of the solution."
             : "The loop needs the edge between the two highlighted dots.") + more,
+        steps: [],
         rule: null,
         marks: { cells: [], dots: edgeDots(grid, hint.edge), ghosts: [] },
         apply: [[hint.edge, EdgeState.Unknown]],
@@ -96,6 +124,7 @@ export function hintView(grid: Grid, hint: Hint, edges: Uint8Array): HintView | 
         eyebrow: "from the solution",
         title: "No rule applies here",
         text: "None of the rules decides the next move from what is on the board, so here is one line of the solution.",
+        steps: [],
         rule: null,
         marks: { cells: [], dots: edgeDots(grid, hint.edge), ghosts: [move] },
         apply: [move],
@@ -107,17 +136,19 @@ export function hintView(grid: Grid, hint: Hint, edges: Uint8Array): HintView | 
 }
 
 /**
- * Whether a hint still applies to the board: false once the player has made its whole move, or has
- * changed one of its edges to something else (say, undone a mark it asked to erase).
+ * Whether a hint still applies to the board: false once the player has made its move, or has
+ * changed one of its edges to something else (say, undone a mark it asked to erase). A move that
+ * draws lines is made once its lines are: the crosses before them are the player's to skip.
  */
 export function hintCurrent(view: HintView, edges: Uint8Array): boolean {
+  const drawsLines = view.apply.some(([, target]) => target === EdgeState.Line);
   let done = true;
   for (let i = 0; i < view.apply.length; i++) {
     const [edge, target] = view.apply[i];
     const now = edges[edge];
     if (now === target) continue;
     if (now !== view.before[i]) return false;
-    done = false;
+    if (!drawsLines || target === EdgeState.Line) done = false;
   }
   return !done;
 }

@@ -7,8 +7,10 @@ import {
   parsePuzzle,
   RULE_TEXT,
   RULE_TITLE,
+  type Step,
 } from "@loophole/core";
 import { FIXTURE_SOLUTIONS } from "../test-support/solutions.ts";
+import type { EdgeChange } from "./board.ts";
 import { hintCurrent, hintRect, hintView, puzzleSolution } from "./hint.ts";
 
 // 2×2 all 2s; its only loop runs around the outside.
@@ -29,12 +31,14 @@ describe("hintView", () => {
         cells: [0],
         dots: [],
       },
+      before: [],
     };
     const view = hintView(grid, hint, empty());
     expect(view).toEqual({
       eyebrow: "next forced move",
       title: RULE_TITLE["clue-zero"],
       text: RULE_TEXT["clue-zero"],
+      steps: [],
       rule: "clue-zero",
       marks: {
         cells: [0],
@@ -52,6 +56,41 @@ describe("hintView", () => {
       laterLabel: "I'll draw it",
       before: [EdgeState.Unknown, EdgeState.Unknown],
     });
+  });
+
+  test("a line with steps before it: the line's rule, the steps listed, every change applied", () => {
+    const cross = (edge: number, rule: Step["rule"], cells: number[], dots: number[]): Step => ({
+      rule,
+      changes: [{ edge, state: EdgeState.Cross }],
+      cells,
+      dots,
+    });
+    const hint: Hint = {
+      kind: "step",
+      step: {
+        rule: "dot-continue",
+        changes: [{ edge: 3, state: EdgeState.Line }],
+        cells: [],
+        dots: [4],
+      },
+      before: [
+        cross(0, "clue-satisfied", [0], []),
+        cross(1, "dot-dead-end", [], [1]),
+        cross(8, "dot-dead-end", [], [4]),
+      ],
+    };
+    const view = hintView(grid, hint, empty());
+    expect(view?.title).toBe(RULE_TITLE["dot-continue"]);
+    expect(view?.rule).toBe("dot-continue");
+    expect(view?.steps).toEqual([RULE_TITLE["clue-satisfied"], `${RULE_TITLE["dot-dead-end"]} ×2`]);
+    const moves: EdgeChange[] = [
+      [0, EdgeState.Cross],
+      [1, EdgeState.Cross],
+      [8, EdgeState.Cross],
+      [3, EdgeState.Line],
+    ];
+    expect(view?.apply).toEqual(moves);
+    expect(view?.marks).toEqual({ cells: [0], dots: [1, 4], ghosts: moves });
   });
 
   test("a wrong line is highlighted by its dots and erased, and the others are counted", () => {
@@ -99,6 +138,7 @@ describe("hintCurrent", () => {
       cells: [0],
       dots: [],
     },
+    before: [],
   };
 
   test("holds while part of the move is still to make", () => {
@@ -118,6 +158,59 @@ describe("hintCurrent", () => {
     if (view === null) throw new Error("no view");
     edges[0] = EdgeState.Line;
     edges[1] = EdgeState.Line;
+    expect(hintCurrent(view, edges)).toBe(false);
+  });
+
+  test("ends when its line is drawn, though the crosses before it are still open", () => {
+    const chain: Hint = {
+      kind: "step",
+      step: {
+        rule: "dot-continue",
+        changes: [{ edge: 3, state: EdgeState.Line }],
+        cells: [],
+        dots: [4],
+      },
+      before: [
+        {
+          rule: "clue-satisfied",
+          changes: [{ edge: 0, state: EdgeState.Cross }],
+          cells: [0],
+          dots: [],
+        },
+      ],
+    };
+    const edges = empty();
+    const view = hintView(grid, chain, edges);
+    if (view === null) throw new Error("no view");
+    edges[0] = EdgeState.Cross;
+    expect(hintCurrent(view, edges)).toBe(true);
+    edges[0] = EdgeState.Unknown;
+    edges[3] = EdgeState.Line;
+    expect(hintCurrent(view, edges)).toBe(false);
+  });
+
+  test("a chain ends when one of its crosses is marked as a line instead", () => {
+    const chain: Hint = {
+      kind: "step",
+      step: {
+        rule: "dot-continue",
+        changes: [{ edge: 3, state: EdgeState.Line }],
+        cells: [],
+        dots: [4],
+      },
+      before: [
+        {
+          rule: "clue-satisfied",
+          changes: [{ edge: 0, state: EdgeState.Cross }],
+          cells: [0],
+          dots: [],
+        },
+      ],
+    };
+    const edges = empty();
+    const view = hintView(grid, chain, edges);
+    if (view === null) throw new Error("no view");
+    edges[0] = EdgeState.Line;
     expect(hintCurrent(view, edges)).toBe(false);
   });
 

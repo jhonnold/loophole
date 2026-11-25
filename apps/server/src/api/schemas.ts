@@ -124,6 +124,17 @@ export const HintRequestSchema = z.strictObject({ edges: EdgesSchema }).openapi(
 
 const EdgeIndex = z.int().min(0);
 
+const StepFields = {
+  rule: z.enum(RULE_IDS),
+  changes: z.array(z.object({ edge: EdgeIndex, state: z.enum(["line", "cross"]) })),
+  cells: z.array(z.int().min(0)),
+  dots: z.array(z.int().min(0)),
+};
+
+export const HintStepSchema = z.object(StepFields).openapi("HintStep", {
+  description: "One deduction: its rule, the edges it decides, and the cells and dots it rests on.",
+});
+
 export const HintSchema = z
   .discriminatedUnion("kind", [
     z.object({ kind: z.literal("solved") }),
@@ -139,10 +150,11 @@ export const HintSchema = z
     }),
     z.object({
       kind: z.literal("step"),
-      rule: z.enum(RULE_IDS),
-      changes: z.array(z.object({ edge: EdgeIndex, state: z.enum(["line", "cross"]) })),
-      cells: z.array(z.int().min(0)),
-      dots: z.array(z.int().min(0)),
+      ...StepFields,
+      before: z.array(HintStepSchema).openapi({
+        description:
+          "The steps the line rests on, in order: each only crosses edges. Crosses the line doesn't need are left out.",
+      }),
     }),
     z.object({
       kind: z.literal("reveal"),
@@ -151,5 +163,5 @@ export const HintSchema = z
   ])
   .openapi("Hint", {
     description:
-      "The next hint: a wrong mark, the next deduction (rule, edges it decides, cells and dots it rests on), a line from the solution when no rule applies, or solved.",
+      "The next hint: a wrong mark, the next line the rules reach (the deduction that draws it, and the crosses before it that it rests on), a line from the solution when no rule applies, or solved.",
   });

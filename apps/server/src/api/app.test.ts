@@ -173,10 +173,14 @@ describe("POST /api/puzzles/{id}/hint", () => {
     const id = await savePuzzle();
     const res = await app.request(`/api/puzzles/${id}/hint`, postJson({ edges: "000000000000" }));
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { kind: string; changes: { edge: number; state: string }[] };
+    type Changes = { changes: { edge: number; state: string }[] };
+    const body = (await res.json()) as { kind: string; before: Changes[] } & Changes;
     expect(body.kind).toBe("step");
-    for (const { edge, state } of body.changes) {
-      expect(state).toBe(SOLUTION[edge] === "1" ? "line" : "cross");
+    expect(body.changes.some((c) => c.state === "line")).toBe(true);
+    for (const { changes } of [...body.before, body]) {
+      for (const { edge, state } of changes) {
+        expect(state).toBe(SOLUTION[edge] === "1" ? "line" : "cross");
+      }
     }
   });
 
