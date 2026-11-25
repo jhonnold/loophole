@@ -43,6 +43,7 @@ const SCREENS: Screen[] = [
     },
   },
   { name: "create", path: "/create" },
+  { name: "techniques", path: "/techniques" },
   { name: "log in", path: "/login" },
   { name: "sign up", path: "/signup" },
   {
