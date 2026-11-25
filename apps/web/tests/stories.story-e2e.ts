@@ -186,11 +186,21 @@ test("as a player, I can ask for a hint and understand why the move is forced", 
   await expect(board(page)).toHaveAttribute("tabindex", "0");
   const asked = page.waitForResponse((r) => r.url().endsWith(`/api/puzzles/${id}/hint`) && r.ok());
   await page.getByRole("button", { name: "Hint" }).click();
-  const hint = (await (await asked).json()) as { kind: string; rule: keyof typeof RULE_TITLE };
-  // An empty board's first hint is a deduction: its rule named and explained in words.
+  type Rule = keyof typeof RULE_TITLE;
+  const hint = (await (await asked).json()) as {
+    kind: string;
+    rule: Rule;
+    before: { rule: Rule }[];
+  };
+  // An empty board's first hint is a deduction. The card walks through its steps from the first,
+  // each rule named and explained in words, to the one that draws the line.
   expect(hint.kind).toBe("step");
-  await expect(page.getByRole("heading", { name: RULE_TITLE[hint.rule] })).toBeVisible();
-  await expect(page.getByText(RULE_TEXT[hint.rule])).toBeVisible();
+  const rules = [...hint.before.map((s) => s.rule), hint.rule];
+  for (const [i, rule] of rules.entries()) {
+    if (i > 0) await page.getByRole("button", { name: "Next step" }).click();
+    await expect(page.getByRole("heading", { name: RULE_TITLE[rule] })).toBeVisible();
+    await expect(page.getByText(RULE_TEXT[rule])).toBeVisible();
+  }
   await expect(page.getByText("Hint used").first()).toBeVisible();
   await page.getByRole("button", { name: "Apply move" }).click();
   await expect(page.getByRole("navigation", { name: "Puzzle tools" })).toBeVisible();

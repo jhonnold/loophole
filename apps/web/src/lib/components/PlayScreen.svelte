@@ -75,6 +75,8 @@
   // assisted, which is saved with the progress.
   let hint: HintView | null = $state.raw(null);
   let hintOpen = $state(false);
+  // The card's page; it stays put while the card is closed, so reopening picks up there.
+  let hintPage = $state(0);
   let hintBusy = $state(false);
   let hintFailed = $state(false);
   let assisted = $state(false);
@@ -89,6 +91,11 @@
   const messages = $derived(solved ? [] : violationMessages(analysis.violations));
   const clock = $derived(formatClock(elapsed(watch, now)));
   const locked = $derived(paused || solved || !ready);
+  // The board shows the page on show, or with the card closed the last page: the whole move.
+  const hintMarks = $derived.by(() => {
+    const pages = hint?.pages;
+    return pages ? pages[hintOpen ? hintPage : pages.length - 1].marks : null;
+  });
   const assistedLabel = $derived(ranked ? "Hint used · unranked" : "Hint used");
 
   // Board sizing. On phones the stage holds just the board, and an empty spacer under the notes
@@ -212,6 +219,7 @@
       const view = hintView(grid, result, edges);
       if (view === null) return;
       hint = view;
+      hintPage = 0;
       hintOpen = true;
       assisted = true;
       save();
@@ -410,7 +418,7 @@
               port={frame.port}
               zoom={frame.zoom}
               {locked}
-              hint={hint?.marks ?? null}
+              hint={hintMarks}
               onedit={edit}
               onview={(v) => (zoomed = v)}
             />
@@ -446,7 +454,7 @@
             {#if !ranked}<button type="button" class="primary" onclick={startOver}>Start over</button>{/if}
           </div>
         {:else if hint !== null && hintOpen && !paused}
-          <HintCard {grid} view={hint} onapply={applyHint} onlater={closeHint} />
+          <HintCard {grid} view={hint} bind:page={hintPage} onapply={applyHint} onlater={closeHint} />
         {:else if hintFailed}
           <p class="card hint-failed" role="status">Couldn't get a hint just now. Try again in a moment.</p>
         {:else if remoteNote}

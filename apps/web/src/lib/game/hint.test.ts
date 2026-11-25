@@ -19,7 +19,7 @@ const grid = puzzle.grid;
 const empty = () => new Uint8Array(grid.edgeCount);
 
 describe("hintView", () => {
-  test("a step shows its rule's title and text, ghosts its changes and applies them", () => {
+  test("a lone step is one page: its rule's title and text, its changes ghosted and applied", () => {
     const hint: Hint = {
       kind: "step",
       step: {
@@ -36,18 +36,21 @@ describe("hintView", () => {
     const view = hintView(grid, hint, empty());
     expect(view).toEqual({
       eyebrow: "next forced move",
-      title: RULE_TITLE["clue-zero"],
-      text: RULE_TEXT["clue-zero"],
-      steps: [],
-      rule: "clue-zero",
-      marks: {
-        cells: [0],
-        dots: [],
-        ghosts: [
-          [0, EdgeState.Cross],
-          [7, EdgeState.Cross],
-        ],
-      },
+      pages: [
+        {
+          title: RULE_TITLE["clue-zero"],
+          text: RULE_TEXT["clue-zero"],
+          rule: "clue-zero",
+          marks: {
+            cells: [0],
+            dots: [],
+            ghosts: [
+              [0, EdgeState.Cross],
+              [7, EdgeState.Cross],
+            ],
+          },
+        },
+      ],
       apply: [
         [0, EdgeState.Cross],
         [7, EdgeState.Cross],
@@ -58,7 +61,7 @@ describe("hintView", () => {
     });
   });
 
-  test("a line with steps before it: the line's rule, the steps listed, every change applied", () => {
+  test("a line with steps before it: a page per step, the ghosts building up to the whole move", () => {
     const cross = (edge: number, rule: Step["rule"], cells: number[], dots: number[]): Step => ({
       rule,
       changes: [{ edge, state: EdgeState.Cross }],
@@ -80,9 +83,6 @@ describe("hintView", () => {
       ],
     };
     const view = hintView(grid, hint, empty());
-    expect(view?.title).toBe(RULE_TITLE["dot-continue"]);
-    expect(view?.rule).toBe("dot-continue");
-    expect(view?.steps).toEqual([RULE_TITLE["clue-satisfied"], `${RULE_TITLE["dot-dead-end"]} ×2`]);
     const moves: EdgeChange[] = [
       [0, EdgeState.Cross],
       [1, EdgeState.Cross],
@@ -90,35 +90,51 @@ describe("hintView", () => {
       [3, EdgeState.Line],
     ];
     expect(view?.apply).toEqual(moves);
-    expect(view?.marks).toEqual({ cells: [0], dots: [1, 4], ghosts: moves });
+    // A run of the same rule keeps a page for each step.
+    expect(view?.pages.map((p) => [p.rule, p.title, p.text])).toEqual(
+      (["clue-satisfied", "dot-dead-end", "dot-dead-end", "dot-continue"] as const).map((r) => [
+        r,
+        RULE_TITLE[r],
+        RULE_TEXT[r],
+      ]),
+    );
+    // Each page washes its own step's cells and dots, and ghosts every change up to it.
+    expect(view?.pages.map((p) => p.marks)).toEqual([
+      { cells: [0], dots: [], ghosts: moves.slice(0, 1) },
+      { cells: [], dots: [1], ghosts: moves.slice(0, 2) },
+      { cells: [], dots: [4], ghosts: moves.slice(0, 3) },
+      { cells: [], dots: [4], ghosts: moves },
+    ]);
   });
 
   test("a wrong line is highlighted by its dots and erased, and the others are counted", () => {
     const edges = empty();
     edges[2] = EdgeState.Line;
     const view = hintView(grid, { kind: "mistake", edge: 2, count: 3 }, edges);
-    expect(view?.title).toBe("This line doesn't fit");
-    expect(view?.text).toEndWith("2 more marks don't fit either.");
-    expect(view?.marks).toEqual({ cells: [], dots: [3, 4], ghosts: [] });
+    expect(view?.pages).toHaveLength(1);
+    expect(view?.pages[0].title).toBe("This line doesn't fit");
+    expect(view?.pages[0].text).toEndWith("2 more marks don't fit either.");
+    expect(view?.pages[0].marks).toEqual({ cells: [], dots: [3, 4], ghosts: [] });
     expect(view?.apply).toEqual([[2, EdgeState.Unknown]]);
     expect(view?.applyLabel).toBe("Erase it");
     expect(view?.laterLabel).toBe("I'll fix it");
-    expect(view?.rule).toBeNull();
+    expect(view?.pages[0].rule).toBeNull();
   });
 
   test("a wrong cross says the loop needs that edge", () => {
     const edges = empty();
     edges[0] = EdgeState.Cross;
     const view = hintView(grid, { kind: "mistake", edge: 0, count: 1 }, edges);
-    expect(view?.title).toBe("This × doesn't fit");
-    expect(view?.text).not.toContain("more");
+    expect(view?.pages[0].title).toBe("This × doesn't fit");
+    expect(view?.pages[0].text).not.toContain("more");
   });
 
   test("a revealed line is ghosted and applied as a line", () => {
     const view = hintView(grid, { kind: "reveal", edge: 1 }, empty());
-    expect(view?.marks.ghosts).toEqual([[1, EdgeState.Line]]);
+    expect(view?.pages).toHaveLength(1);
+    expect(view?.pages[0].marks.ghosts).toEqual([[1, EdgeState.Line]]);
     expect(view?.apply).toEqual([[1, EdgeState.Line]]);
-    expect(view?.rule).toBeNull();
+    expect(view?.pages[0].rule).toBeNull();
   });
 
   test("a solved board has nothing to show", () => {
