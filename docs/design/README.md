@@ -63,7 +63,7 @@ All sizes scale with the cell size `S`.
 - **Line:** about `0.11·S` thick (5px at 46px cells), rounded ends. It overruns each dot by half its thickness so corners join cleanly.
 - **Cross:** a pencil-coloured `×` at `0.36·S`.
 - **Error:** a 2px shu ring around the offending clue (`0.68·S`) or dot (`0.52·S`). A loop that closes too early is drawn dashed in shu. Only definite rule breaks are flagged (FR-15).
-- **Hint:** an ai wash on the cells or dots involved; the forced move is a dashed ai ghost line or ×.
+- **Hint:** an ai wash on the cells or dots involved; the forced move is a dashed ai ghost line or ×. A hint with crosses before its line pages through its steps from the first: each page washes that step's cells or dots and ghosts every move up to it, so the move builds up to the line.
 - **Solved:** the inside of the loop is washed pink, then the 完 seal appears.
 - **Keyboard focus:** an ai capsule around the current edge.
 - **Touch targets:** each edge's tap area is a diamond centred on the edge. The diamonds tile the board with no gaps, so every tap selects the nearest edge. Cells are never smaller than 44px (FR-13); boards that would need smaller cells use pinch-zoom instead.

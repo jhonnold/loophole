@@ -6,7 +6,6 @@ import {
   RULE_TEXT,
   RULE_TITLE,
   type RuleId,
-  type Step,
   verify,
 } from "@loophole/core";
 import type { EdgeChange } from "./board.ts";
@@ -21,20 +20,25 @@ export interface HintMarks {
   readonly ghosts: readonly EdgeChange[];
 }
 
-/** A hint ready to show: the card's words, the board marks and the move "Apply" makes. */
-export interface HintView {
-  /** The small line above the title, e.g. "next forced move". */
-  readonly eyebrow: string;
+/** One page of a hint card: a step's words and what the board shows while it is on show. */
+export interface HintPage {
   readonly title: string;
   readonly text: string;
-  /**
-   * The steps the move makes before its line, by title, a run of the same rule once with a count
-   * ("Dead end ×2"). Empty when the line comes first.
-   */
-  readonly steps: readonly string[];
   /** The rule whose pattern the card draws, or null for a mistake or a revealed line. */
   readonly rule: RuleId | null;
   readonly marks: HintMarks;
+}
+
+/** A hint ready to show: the card's pages, the board marks and the move "Apply" makes. */
+export interface HintView {
+  /** The small line above the title, e.g. "next forced move". */
+  readonly eyebrow: string;
+  /**
+   * What the card shows, one page at a time. A step hint has a page for each step, the crosses its
+   * line rests on first and the line last; on each, the board washes that step's cells and dots and
+   * ghosts every change up to it. Other hints have one page.
+   */
+  readonly pages: readonly HintPage[];
   readonly apply: readonly EdgeChange[];
   readonly applyLabel: string;
   /** The label of the button that closes the card and leaves the move to the player. */
@@ -52,21 +56,9 @@ function plural(n: number, one: string, many: string): string {
   return n === 1 ? one : many;
 }
 
-/** The titles of `steps`, a run of the same rule once with its count. */
-function stepTitles(steps: readonly Step[]): string[] {
-  const titles: string[] = [];
-  for (let i = 0; i < steps.length; ) {
-    let n = 1;
-    while (steps[i + n]?.rule === steps[i].rule) n++;
-    titles.push(RULE_TITLE[steps[i].rule] + (n > 1 ? ` ×${n}` : ""));
-    i += n;
-  }
-  return titles;
-}
-
 /**
  * Turns a core hint into what the card and the board show. Null when the board is solved. A step
- * hint's move is its line and the crosses before it, made together.
+ * hint's move is its line and the crosses before it, made together from any page.
  */
 export function hintView(grid: Grid, hint: Hint, edges: Uint8Array): HintView | null {
   const view = (v: Omit<HintView, "before">): HintView => ({
@@ -77,20 +69,19 @@ export function hintView(grid: Grid, hint: Hint, edges: Uint8Array): HintView | 
     case "solved":
       return null;
     case "step": {
-      const { rule } = hint.step;
-      const all = [...hint.before, hint.step];
-      const moves = all.flatMap((s) => s.changes.map((c): EdgeChange => [c.edge, c.state]));
+      const moves: EdgeChange[] = [];
+      const pages = [...hint.before, hint.step].map((s): HintPage => {
+        moves.push(...s.changes.map((c): EdgeChange => [c.edge, c.state]));
+        return {
+          title: RULE_TITLE[s.rule],
+          text: RULE_TEXT[s.rule],
+          rule: s.rule,
+          marks: { cells: [...s.cells], dots: [...s.dots], ghosts: [...moves] },
+        };
+      });
       return view({
         eyebrow: "next forced move",
-        title: RULE_TITLE[rule],
-        text: RULE_TEXT[rule],
-        steps: stepTitles(hint.before),
-        rule,
-        marks: {
-          cells: [...new Set(all.flatMap((s) => s.cells))],
-          dots: [...new Set(all.flatMap((s) => s.dots))],
-          ghosts: moves,
-        },
+        pages,
         apply: moves,
         applyLabel: "Apply move",
         laterLabel: "I'll draw it",
@@ -105,14 +96,17 @@ export function hintView(grid: Grid, hint: Hint, edges: Uint8Array): HintView | 
           : "";
       return view({
         eyebrow: "check your marks",
-        title: line ? "This line doesn't fit" : "This × doesn't fit",
-        text:
-          (line
-            ? "The line between the two highlighted dots is not part of the solution."
-            : "The loop needs the edge between the two highlighted dots.") + more,
-        steps: [],
-        rule: null,
-        marks: { cells: [], dots: edgeDots(grid, hint.edge), ghosts: [] },
+        pages: [
+          {
+            title: line ? "This line doesn't fit" : "This × doesn't fit",
+            text:
+              (line
+                ? "The line between the two highlighted dots is not part of the solution."
+                : "The loop needs the edge between the two highlighted dots.") + more,
+            rule: null,
+            marks: { cells: [], dots: edgeDots(grid, hint.edge), ghosts: [] },
+          },
+        ],
         apply: [[hint.edge, EdgeState.Unknown]],
         applyLabel: "Erase it",
         laterLabel: "I'll fix it",
@@ -122,11 +116,14 @@ export function hintView(grid: Grid, hint: Hint, edges: Uint8Array): HintView | 
       const move: EdgeChange = [hint.edge, EdgeState.Line];
       return view({
         eyebrow: "from the solution",
-        title: "No rule applies here",
-        text: "None of the rules decides the next move from what is on the board, so here is one line of the solution.",
-        steps: [],
-        rule: null,
-        marks: { cells: [], dots: edgeDots(grid, hint.edge), ghosts: [move] },
+        pages: [
+          {
+            title: "No rule applies here",
+            text: "None of the rules decides the next move from what is on the board, so here is one line of the solution.",
+            rule: null,
+            marks: { cells: [], dots: edgeDots(grid, hint.edge), ghosts: [move] },
+          },
+        ],
         apply: [move],
         applyLabel: "Apply move",
         laterLabel: "I'll draw it",
