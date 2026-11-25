@@ -181,6 +181,23 @@ for (const [width, height] of [
       await expect(page.getByText(`Step 2 of ${first.length + 1}`)).toBeVisible();
     });
 
+    test("the card links to the rule on show, where there is room for it", async ({ page }) => {
+      await openWith(page, empty);
+      await page.getByRole("button", { name: "Hint" }).click();
+      const { step, before: first } = expectedHint(empty);
+      const learn = page.getByRole("link", { name: /^More about this rule/ });
+      for (const [i, s] of [...first, step].entries()) {
+        if (i > 0) await page.getByRole("button", { name: "Next step" }).click();
+        await expect(page.getByRole("heading", { name: RULE_TITLE[s.rule] })).toBeVisible();
+        // The smallest phones drop the link with the figure (Small artboard).
+        if (height < 620) await expect(learn).toBeHidden();
+        else {
+          await expect(learn).toHaveAttribute("href", `/techniques#${s.rule}`);
+          await expect(learn).toHaveAttribute("target", "_blank");
+        }
+      }
+    });
+
     test("finishing with a hint marks the solve as assisted (FR-12)", async ({ page }) => {
       await openWith(page, oneLineShort().edges);
       await page.getByRole("button", { name: "Hint" }).click();
@@ -229,6 +246,8 @@ for (const [width, height] of [
       await expect(lines(page)).toHaveCount(1);
       await page.getByRole("button", { name: "Hint" }).click();
       await expect(page.getByRole("heading", { name: "This line doesn't fit" })).toBeVisible();
+      // A mistake is no technique, so it has no rule to read about.
+      await expect(page.getByRole("link", { name: /^More about this rule/ })).toHaveCount(0);
       await page.getByRole("button", { name: "Erase it" }).click();
       await expect(lines(page)).toHaveCount(0);
     });
