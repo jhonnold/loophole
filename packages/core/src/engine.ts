@@ -32,7 +32,10 @@ import type { EdgeChange, RuleId, Step } from "./rules.ts";
 
 const { Unknown, Line, Cross } = EdgeState;
 
-/** Thrown to stop the engine early: out of time or search nodes, or `maxSteps` reached. */
+/**
+ * Thrown to stop the engine early: out of time or search nodes, `maxSteps` reached, or a line drawn
+ * with `stopAtLine`.
+ */
 export class SolverStop extends Error {
   constructor(readonly reason: "budget" | "steps") {
     super(`solver stopped: ${reason}`);
@@ -166,6 +169,8 @@ export class Engine {
   /** Recorded steps, or null when not recording. */
   steps: Step[] | null = null;
   maxSteps = Number.POSITIVE_INFINITY;
+  /** Stop after recording the first step that draws a line. */
+  stopAtLine = false;
 
   private readonly dotCells: Int32Array;
   private readonly mate: Int32Array;
@@ -2169,6 +2174,7 @@ export class Engine {
       dots: this.pendingDots,
     });
     if (steps.length >= this.maxSteps) throw new SolverStop("steps");
+    if (this.stopAtLine && changes.some((c) => c.state === Line)) throw new SolverStop("steps");
   }
 
   /** True when every clue has exactly its number of lines, counting `extra` (or NONE) as a line too. */

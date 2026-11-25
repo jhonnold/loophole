@@ -6,7 +6,7 @@ import { RULE_GROUPS, type RuleGroup, type Step } from "./rules.ts";
  * - `solved`: the rules decided every edge; the result is the puzzle's only solution.
  * - `stuck`: no rule applies any more and some edges are still open.
  * - `contradiction`: the clues (with `initial`) break a rule, so there is no solution.
- * - `incomplete`: stopped early by `maxSteps` or the time limit.
+ * - `incomplete`: stopped early by `maxSteps`, `stopAtLine` or the time limit.
  */
 export type SolveStatus = "solved" | "stuck" | "contradiction" | "incomplete";
 
@@ -36,6 +36,11 @@ export interface SolveOptions {
   readonly steps?: boolean;
   /** Stop after recording this many steps. Default no limit. */
   readonly maxSteps?: number;
+  /**
+   * Stop after recording the first step that draws a line, as hints do. Default false. Like
+   * `maxSteps`, it does nothing without `steps`.
+   */
+  readonly stopAtLine?: boolean;
   /** Stop after this many milliseconds, measured with `now`. Default no limit. */
   readonly timeLimitMs?: number;
   /** Clock in milliseconds. Default `Date.now`. */
@@ -72,6 +77,7 @@ export function solve(puzzle: Puzzle, options: SolveOptions = {}): SolveResult {
   const steps: Step[] = [];
   engine.steps = options.steps === false ? null : steps;
   engine.maxSteps = options.maxSteps ?? Number.POSITIVE_INFINITY;
+  engine.stopAtLine = options.stopAtLine ?? false;
   let status: SolveStatus;
   try {
     const ok =
