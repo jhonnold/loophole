@@ -194,6 +194,7 @@
         </li>
       {/each}
     </ul>
+    <p class="soft"><a class="learn" href="/techniques">Learn the techniques</a>, from the easiest to the hardest.</p>
   </section>
 </main>
 
@@ -262,6 +263,19 @@
   .soft {
     font-size: 13px;
     color: var(--ink-soft);
+  }
+
+  /* Where the techniques page is linked from: the header has no room for it on phones. */
+  p.soft {
+    margin: 0;
+    font-size: 14px;
+  }
+
+  .learn {
+    font-weight: 700;
+    color: var(--ai);
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
 
   .card {

@@ -50,12 +50,22 @@
         <figcaption>the pattern</figcaption>
       </figure>
     {/if}
-    <span class="eyebrow">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
-        ><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z" /></svg
-      >
-      ヒント · {view.eyebrow}
-    </span>
+    <div class="top">
+      <span class="eyebrow">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+          ><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z" /></svg
+        >
+        ヒント · {view.eyebrow}
+      </span>
+      <!-- The rule of the page on show, on the techniques page, in a new tab so the puzzle and its
+           clock stay put. -->
+      {#if current.rule !== null}
+        <a class="learn" href="/techniques#{current.rule}" target="_blank" rel="noopener"
+          >More<span class="visually-hidden"> about this rule (opens in a new tab)</span
+          ><span aria-hidden="true"> ↗</span></a
+        >
+      {/if}
+    </div>
     <!-- Paging reads out the new step. -->
     <div class="step" aria-live="polite">
       <h2 id="hint-title">{current.title}</h2>
@@ -120,11 +130,28 @@
     display: flow-root;
   }
 
+  .top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px 12px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+  }
+
+  .learn {
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ai);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
   .eyebrow {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 4px;
     color: var(--ai);
     font-size: 13px;
     font-weight: 700;
@@ -219,7 +246,7 @@
       gap: 6px;
     }
 
-    .eyebrow,
+    .top,
     h2 {
       margin-bottom: 2px;
     }
@@ -272,6 +299,15 @@
 
     figure {
       display: none;
+    }
+
+    /* The link goes too, and the row it shared with the eyebrow: the card has no line to spare. */
+    .learn {
+      display: none;
+    }
+
+    .top {
+      margin: 0;
     }
 
     .eyebrow {

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_LEVEL, isLevel, LEVEL_SETTINGS, LEVELS, puzzleLevel } from "./level.ts";
+import { DEFAULT_LEVEL, isLevel, LEVEL_SETTINGS, LEVELS, puzzleLevel, ruleLevel } from "./level.ts";
 import { createPuzzle } from "./puzzle.ts";
-import { RULE_GROUPS } from "./rules.ts";
+import { RULE_GROUPS, RULE_IDS } from "./rules.ts";
+import { levelRuleIds } from "./test-support/levels.ts";
 
 describe("levels", () => {
   test("the default level is hard: every rule group, parity, lookahead and no extra clues", () => {
@@ -49,5 +50,23 @@ describe("levels", () => {
     expect(isLevel("easy")).toBe(true);
     expect(isLevel("Easy")).toBe(false);
     expect(isLevel(undefined)).toBe(false);
+  });
+
+  test("a rule's level is the easiest level that allows it", () => {
+    for (const id of RULE_IDS) {
+      const level = ruleLevel(id);
+      const at = LEVELS.indexOf(level);
+      expect([id, levelRuleIds(level).has(id)]).toEqual([id, true]);
+      for (const easier of LEVELS.slice(0, at)) {
+        expect([id, easier, levelRuleIds(easier).has(id)]).toEqual([id, easier, false]);
+      }
+    }
+    expect(ruleLevel("clue-zero")).toBe("easy");
+    expect(ruleLevel("corner-3")).toBe("easy");
+    expect(ruleLevel("line-into-1")).toBe("medium");
+    expect(ruleLevel("parity")).toBe("medium");
+    expect(ruleLevel("colour-2")).toBe("hard");
+    expect(ruleLevel("two-exits")).toBe("hard");
+    expect(ruleLevel("lookahead")).toBe("hard");
   });
 });

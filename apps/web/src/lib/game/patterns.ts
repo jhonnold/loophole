@@ -36,7 +36,7 @@ interface At {
   readonly dot: (r: number, c: number) => number;
 }
 
-function pattern(
+export function pattern(
   width: number,
   height: number,
   clues: string,

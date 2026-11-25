@@ -1,5 +1,5 @@
 import type { Puzzle } from "./puzzle.ts";
-import { RULE_GROUPS, type RuleGroup } from "./rules.ts";
+import { GROUP_RULES, RULE_GROUPS, type RuleGroup, type RuleId } from "./rules.ts";
 
 /**
  * Difficulty levels, easiest first. A level decides which rules the generator's solver may use and
@@ -50,4 +50,21 @@ export function isLevel(value: unknown): value is Level {
 export function puzzleLevel(puzzle: Puzzle): Level {
   const level = puzzle.meta?.level;
   return isLevel(level) ? level : DEFAULT_LEVEL;
+}
+
+/**
+ * The easiest level whose settings let the solver use `rule`, so its steps can appear in that
+ * level's puzzles and hints. The techniques page groups the rules by it.
+ */
+export function ruleLevel(rule: RuleId): Level {
+  const group = RULE_GROUPS.find((g) => GROUP_RULES[g].includes(rule));
+  const level = LEVELS.find((l) => {
+    const { rules, parity, lookahead } = LEVEL_SETTINGS[l];
+    if (group !== undefined) return rules.includes(group);
+    if (rule === "parity") return parity;
+    if (rule === "lookahead") return lookahead;
+    return true;
+  });
+  // Hard allows every rule, so a level is always found.
+  return level ?? DEFAULT_LEVEL;
 }

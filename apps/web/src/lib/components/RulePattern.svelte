@@ -6,16 +6,18 @@
 
   interface Props {
     pattern: RulePattern;
+    /** The square's side in pixels; the hint card's is 72 (Hint artboard). */
+    size?: number;
   }
 
-  let { pattern }: Props = $props();
+  let { pattern, size = 72 }: Props = $props();
 
-  // The Hint artboard's figure: a 72px square, the pattern drawn by the board renderer and centred
-  // with at least 8px around it (14px for a single cell).
-  const BOX = 72;
+  // The Hint artboard's figure: a square, the pattern drawn by the board renderer and centred with
+  // at least 8px around it at 72px (14px for a single cell), and as much more as the square is.
+  const BOX = $derived(size);
   const grid = $derived(pattern.puzzle.grid);
   const longest = $derived(Math.max(grid.width, grid.height));
-  const cell = $derived((BOX - 2 * (longest === 1 ? 14 : 8)) / longest);
+  const cell = $derived((BOX - (2 * (longest === 1 ? 14 : 8) * BOX) / 72) / longest);
   const layout: Layout = $derived({ cell, margin: 0, width: grid.width * cell, height: grid.height * cell });
   const view = $derived({ cell, x: (layout.width - BOX) / 2, y: (layout.height - BOX) / 2 });
   const analysis = $derived(analyzeBoard(pattern.puzzle, pattern.edges));
