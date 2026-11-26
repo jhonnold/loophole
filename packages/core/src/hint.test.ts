@@ -7,7 +7,7 @@ import { generate } from "./generate.ts";
 import { EdgeState, type Grid, hEdgeIndex } from "./grid.ts";
 import { findHint } from "./hint.ts";
 import type { Puzzle } from "./puzzle.ts";
-import type { Probe, RuleId, Step } from "./rules.ts";
+import type { Deduction, Probe, RuleId, Step } from "./rules.ts";
 import { solve } from "./solver.ts";
 import { arbPuzzleWithSolution } from "./test-support/arbitraries.ts";
 import { levelRuleIds } from "./test-support/levels.ts";
@@ -319,9 +319,86 @@ function dotCounts(grid: Grid, board: Uint8Array, d: number): { lines: number; o
   return { lines, open };
 }
 
+/** Lines and open edges round cell `c`. */
+function cellCounts(grid: Grid, board: Uint8Array, c: number): { lines: number; open: number } {
+  let lines = 0;
+  let open = 0;
+  for (let j = 0; j < 4; j++) {
+    const s = board[grid.cellEdges[c * 4 + j]];
+    if (s === EdgeState.Line) lines++;
+    else if (s === EdgeState.Unknown) open++;
+  }
+  return { lines, open };
+}
+
+/** The dot at the far end of the line path that ends at dot `from`. */
+function pathEnd(grid: Grid, board: Uint8Array, from: number): number {
+  let d = from;
+  let prev = -1;
+  for (;;) {
+    let next = -1;
+    for (let j = 0; j < 4; j++) {
+      const e = grid.dotEdges[d * 4 + j];
+      if (e >= 0 && e !== prev && board[e] === EdgeState.Line) next = e;
+    }
+    if (next < 0) return d;
+    prev = next;
+    d = grid.edgeDots[next * 2] === d ? grid.edgeDots[next * 2 + 1] : grid.edgeDots[next * 2];
+    if (d === from) return d;
+  }
+}
+
 /**
- * Replays a probe on `board`: the assumed state, then its steps, each setting only open edges.
- * Then checks the contradiction it names is there to see on the result.
+ * Checks that a probe step's rule applies on `board`, the board the hint shows just before it, so a
+ * page the walk kept never rests on a step it left out. Probes in hints run only the worklist rules.
+ */
+function checkRuleHolds(p: Puzzle, board: Uint8Array, step: Deduction): void {
+  const { grid } = p;
+  const [c] = step.cells;
+  const [d] = step.dots;
+  switch (step.rule) {
+    case "clue-zero":
+      expect(p.clues[c]).toBe(0);
+      break;
+    case "clue-satisfied":
+      expect(cellCounts(grid, board, c).lines).toBe(p.clues[c]);
+      break;
+    case "clue-needs-all": {
+      const { lines, open } = cellCounts(grid, board, c);
+      expect(lines + open).toBe(p.clues[c]);
+      break;
+    }
+    case "dot-full":
+      expect(dotCounts(grid, board, d).lines).toBe(2);
+      break;
+    case "dot-continue":
+      expect(dotCounts(grid, board, d)).toEqual({ lines: 1, open: 1 });
+      break;
+    case "dot-dead-end":
+      expect(dotCounts(grid, board, d)).toEqual({ lines: 0, open: 1 });
+      break;
+    case "corner-1":
+    case "corner-3": {
+      expect(p.clues[c]).toBe(step.rule === "corner-1" ? 1 : 3);
+      // The dot's edges outside the cell are crossed (or off the board).
+      const own = new Set(Array.from({ length: 4 }, (_, j) => grid.cellEdges[c * 4 + j]));
+      for (let j = 0; j < 4; j++) {
+        const e = grid.dotEdges[d * 4 + j];
+        if (e >= 0 && !own.has(e)) expect(board[e]).toBe(EdgeState.Cross);
+      }
+      break;
+    }
+    case "premature-loop":
+      expect(pathEnd(grid, board, step.dots[0])).toBe(step.dots[1]);
+      break;
+    default:
+      throw new Error(`unexpected rule in a probe: ${step.rule}`);
+  }
+}
+
+/**
+ * Replays a probe on `board`: the assumed state, then its steps, each setting only open edges and
+ * each rule applying where it is. Then checks the contradiction it names is there to see.
  */
 function checkProbe(p: Puzzle, board: Uint8Array, probe: Probe): void {
   const { grid } = p;
@@ -329,7 +406,7 @@ function checkProbe(p: Puzzle, board: Uint8Array, probe: Probe): void {
   expect(what[probe.assumed.edge]).toBe(EdgeState.Unknown);
   what[probe.assumed.edge] = probe.assumed.state;
   for (const s of probe.steps) {
-    expect(s.rule).not.toBe("lookahead");
+    checkRuleHolds(p, what, s);
     for (const { edge, state } of s.changes) {
       expect(what[edge]).toBe(EdgeState.Unknown);
       what[edge] = state;

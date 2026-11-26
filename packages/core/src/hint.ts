@@ -168,30 +168,42 @@ function explainSteps(
  * The probe's steps that its contradiction rests on, by the same backward walk as
  * `supportingSteps` but counting lines as reasons too: a step is kept when it decided an edge
  * around the contradiction (its cells, dots, loop and breaking edge) or around a kept step's cells
- * and dots. A premature-loop step names only the path's two ends, so the path's edges, as they
- * stood then, count too. `read` is the edges the kept steps and the contradiction read that were
+ * and dots. Rules that read only lines (`LINES_ONLY`), and too many lines at a dot or round a
+ * number, rest on the lines there alone. A premature-loop step names only the path's two ends, so
+ * the path's edges, as they stood then, count too. `read` is the edges the kept steps and the contradiction read that were
  * already decided on `board`. A probe that ends with no lines anywhere rests on every step.
  */
 function pruneProbe(grid: Grid, board: Uint8Array, probe: Probe): { probe: Probe; read: number[] } {
   const what = board.slice();
   what[probe.assumed.edge] = probe.assumed.state;
-  const paths = probe.steps.map((s) => {
-    const path = s.rule === "premature-loop" ? linePath(grid, what, s.dots[0]) : [];
+  // Each step's reason, read off the board as it stood just before it.
+  const reasons = probe.steps.map((s) => {
+    const reason = new Set<number>();
+    addAround(grid, reason, s.cells, s.dots);
+    if (LINES_ONLY.has(s.rule)) {
+      for (const e of reason) if (what[e] !== EdgeState.Line) reason.delete(e);
+      if (s.rule === "premature-loop")
+        for (const e of linePath(grid, what, s.dots[0])) reason.add(e);
+    }
     for (const c of s.changes) what[c.edge] = c.state;
-    return path;
+    return reason;
   });
   const x = probe.contradiction;
-  const need = new Set<number>(x.edges);
-  if (x.edge !== null) need.add(x.edge);
+  const need = new Set<number>();
   addAround(grid, need, x.cells, x.dots);
+  // Too many lines at a dot or round a number rests on those lines alone.
+  if (x.kind === "dot-three" || x.kind === "clue-over") {
+    for (const e of need) if (what[e] !== EdgeState.Line) need.delete(e);
+  }
+  for (const e of x.edges) need.add(e);
+  if (x.edge !== null) need.add(x.edge);
   if (x.kind === "no-loop") for (let e = 0; e < grid.edgeCount; e++) need.add(e);
   const kept: Probe["steps"][number][] = [];
   for (let i = probe.steps.length - 1; i >= 0; i--) {
     const s = probe.steps[i];
     if (!s.changes.some((c) => need.has(c.edge))) continue;
     kept.push(s);
-    addAround(grid, need, s.cells, s.dots);
-    for (const e of paths[i]) need.add(e);
+    for (const e of reasons[i]) need.add(e);
   }
   const read = [...need].filter((e) => board[e] !== EdgeState.Unknown).sort((a, b) => a - b);
   return { probe: { ...probe, steps: kept.reverse() }, read };
