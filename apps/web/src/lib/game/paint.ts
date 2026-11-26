@@ -28,6 +28,10 @@ export interface Palette {
   readonly wash: string;
   readonly ai: string;
   readonly hintWash: string;
+  /** Where a try-and-see hint's supposed marks break the rules. */
+  readonly conflictWash: string;
+  /** A try-and-see hint's supposed marks. */
+  readonly whatIf: string;
 }
 
 /** The part of the canvas 2D context the painter uses, so tests can pass a recorder. */
@@ -72,10 +76,10 @@ export interface Scene {
 export const MIN_CLUE_CELL = 8;
 
 /**
- * Draws the board on a canvas with the SVG board's look (design kit, Board): solved wash, hint wash,
- * lines (dashed shu for a premature loop), the hint's ghost moves, crosses, dots, clues and error
- * rings. Only the cells in the viewport, plus a one-cell border, are drawn (viewport culling); a
- * hint's few marks are drawn wherever they are.
+ * Draws the board on a canvas with the SVG board's look (design kit, Board): solved wash, hint and
+ * conflict washes, lines (dashed shu for a premature loop), the hint's ghost moves and supposed
+ * marks, crosses, dots, clues and error rings. Only the cells in the viewport, plus a one-cell
+ * border, are drawn (viewport culling); a hint's few marks are drawn wherever they are.
  */
 export function paintBoard(ctx: Painter, scene: Scene): void {
   const { puzzle, edges, analysis, layout, view, port, ratio, palette, hint } = scene;
@@ -136,6 +140,32 @@ export function paintBoard(ctx: Painter, scene: Scene): void {
     ctx.fill();
   }
 
+  const conflict = hint?.conflict;
+  if (conflict !== undefined) {
+    ctx.fillStyle = palette.conflictWash;
+    for (const i of conflict.cells) {
+      const p = cellPoint(grid, layout, i);
+      ctx.fillRect(p.x - S / 2 + 2, p.y - S / 2 + 2, S - 4, S - 4);
+    }
+    ctx.beginPath();
+    for (const d of conflict.dots) {
+      const p = dotPoint(grid, layout, d);
+      ctx.moveTo(p.x + S * 0.3, p.y);
+      ctx.arc(p.x, p.y, S * 0.3, 0, 2 * Math.PI);
+    }
+    ctx.fill();
+    ctx.beginPath();
+    for (const e of conflict.edges) {
+      const s = edgeSegment(grid, layout, e);
+      ctx.moveTo(s.x1, s.y1);
+      ctx.lineTo(s.x2, s.y2);
+    }
+    ctx.lineWidth = size.line * 3;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = palette.conflictWash;
+    ctx.stroke();
+  }
+
   const strokeLines = (dashed: boolean) => {
     ctx.beginPath();
     for (const e of visible) {
@@ -181,6 +211,36 @@ export function paintBoard(ctx: Painter, scene: Scene): void {
     }
     ctx.lineWidth = size.crossWidth * 1.6;
     ctx.lineCap = "round";
+    ctx.stroke();
+  }
+
+  const whatIf = hint?.whatIf ?? [];
+  if (whatIf.length > 0) {
+    // A try-and-see hint's supposed marks on edges still empty: a dotted line, or a fainter ×.
+    ctx.beginPath();
+    for (const [e, state] of whatIf) {
+      if (state !== EdgeState.Line || edges[e] !== EdgeState.Unknown) continue;
+      const s = edgeSegment(grid, layout, e);
+      ctx.moveTo(s.x1, s.y1);
+      ctx.lineTo(s.x2, s.y2);
+    }
+    ctx.lineWidth = size.line;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = palette.whatIf;
+    ctx.setLineDash([0.1, size.line * 2.2]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    for (const [e, state] of whatIf) {
+      if (state !== EdgeState.Cross || edges[e] !== EdgeState.Unknown) continue;
+      const { x, y } = edgeMidpoint(grid, layout, e);
+      const a = size.crossArm;
+      ctx.moveTo(x - a, y - a);
+      ctx.lineTo(x + a, y + a);
+      ctx.moveTo(x + a, y - a);
+      ctx.lineTo(x - a, y + a);
+    }
+    ctx.lineWidth = size.crossWidth * 1.3;
     ctx.stroke();
   }
 

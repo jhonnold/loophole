@@ -2776,6 +2776,7 @@ export interface components {
             }[];
             cells: number[];
             dots: number[];
+            probe?: components["schemas"]["HintProbe"];
             /** @description The steps the line rests on, in order: each only crosses edges. Crosses the line doesn't need are left out. */
             before: components["schemas"]["HintStep"][];
         } | {
@@ -2784,7 +2785,40 @@ export interface components {
             /** @description An open edge that is a line in the solution. */
             edge: number;
         };
+        /** @description Only on lookahead steps. */
+        HintProbe: {
+            /** @description The other choice for the step's edge. */
+            assumed: {
+                edge: number;
+                /** @enum {string} */
+                state: "line" | "cross";
+            };
+            /** @description The deductions that follow from it that the contradiction rests on, in order. The last may stop where the rules break. */
+            steps: components["schemas"]["HintDeduction"][];
+            contradiction: {
+                /** @enum {string} */
+                kind: "small-loop" | "dot-three" | "dead-end" | "clue-over" | "clue-under" | "clue-corner" | "no-loop" | "other";
+                /** @description The edge whose mark broke the rules. */
+                edge: number | null;
+                cells: number[];
+                dots: number[];
+                /** @description The loop that closed, for small-loop. */
+                edges: number[];
+            };
+        };
         /** @description One deduction: its rule, the edges it decides, and the cells and dots it rests on. */
+        HintDeduction: {
+            /** @enum {string} */
+            rule: "clue-zero" | "clue-satisfied" | "clue-needs-all" | "dot-full" | "dot-continue" | "dot-dead-end" | "corner-1" | "corner-3" | "adjacent-3s" | "diagonal-3s" | "premature-loop" | "loop-complete" | "line-into-1" | "line-into-3" | "two-passes-on" | "two-in-corner" | "ones-side-by-side" | "three-diagonal-one" | "corner-chain" | "parity" | "colour-1" | "colour-2" | "colour-3" | "colour-chain" | "unreachable" | "cut-off" | "two-exits" | "lookahead";
+            changes: {
+                edge: number;
+                /** @enum {string} */
+                state: "line" | "cross";
+            }[];
+            cells: number[];
+            dots: number[];
+        };
+        /** @description One deduction: its rule, the edges it decides, the cells and dots it rests on, and for lookahead, its probe. */
         HintStep: {
             /** @enum {string} */
             rule: "clue-zero" | "clue-satisfied" | "clue-needs-all" | "dot-full" | "dot-continue" | "dot-dead-end" | "corner-1" | "corner-3" | "adjacent-3s" | "diagonal-3s" | "premature-loop" | "loop-complete" | "line-into-1" | "line-into-3" | "two-passes-on" | "two-in-corner" | "ones-side-by-side" | "three-diagonal-one" | "corner-chain" | "parity" | "colour-1" | "colour-2" | "colour-3" | "colour-chain" | "unreachable" | "cut-off" | "two-exits" | "lookahead";
@@ -2795,6 +2829,7 @@ export interface components {
             }[];
             cells: number[];
             dots: number[];
+            probe?: components["schemas"]["HintProbe"];
         };
         HintRequest: {
             /** @description The player's board: one character per edge, 0 empty, 1 line, 2 cross (docs/FORMAT.md). */

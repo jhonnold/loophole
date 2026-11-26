@@ -1,6 +1,13 @@
 import type { Hook } from "@hono/zod-openapi";
 import { createRoute, OpenAPIHono } from "@hono/zod-openapi";
-import { EdgeState, type Hint, type Step, serializePuzzle } from "@loophole/core";
+import {
+  type Deduction,
+  type EdgeChange,
+  EdgeState,
+  type Hint,
+  type Step,
+  serializePuzzle,
+} from "@loophole/core";
 import type { Env } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { serveStatic } from "hono/bun";
@@ -341,14 +348,39 @@ function toHintDto(hint: Hint) {
 }
 
 function toStepDto(step: Step) {
+  const dto = toDeductionDto(step);
+  const { probe } = step;
+  if (probe === undefined) return dto;
+  const x = probe.contradiction;
+  return {
+    ...dto,
+    probe: {
+      assumed: toChangeDto(probe.assumed),
+      steps: probe.steps.map(toDeductionDto),
+      contradiction: {
+        kind: x.kind,
+        edge: x.edge,
+        cells: [...x.cells],
+        dots: [...x.dots],
+        edges: [...x.edges],
+      },
+    },
+  };
+}
+
+function toDeductionDto(step: Deduction) {
   return {
     rule: step.rule,
-    changes: step.changes.map((ch) => ({
-      edge: ch.edge,
-      state: ch.state === EdgeState.Line ? ("line" as const) : ("cross" as const),
-    })),
+    changes: step.changes.map(toChangeDto),
     cells: [...step.cells],
     dots: [...step.dots],
+  };
+}
+
+function toChangeDto(ch: EdgeChange) {
+  return {
+    edge: ch.edge,
+    state: ch.state === EdgeState.Line ? ("line" as const) : ("cross" as const),
   };
 }
 

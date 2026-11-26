@@ -42,6 +42,8 @@ const palette = {
   wash: "#fee",
   ai: "#24a",
   hintWash: "#24a3",
+  conflictWash: "#c323",
+  whatIf: "#24ab",
 };
 
 function scene(
@@ -127,6 +129,29 @@ describe("paintBoard", () => {
     expect(calls.arc).toBe(plain.calls.arc + 1);
     // One dashed ghost line and one ghost × (two strokes of the × each moveTo + lineTo).
     expect(calls.lineTo).toBe((plain.calls.lineTo ?? 0) + 1 + 2);
+  });
+
+  test("draws a try-and-see hint's supposed marks and where they break the rules", () => {
+    const grid = createGrid(5, 5);
+    const hint: HintMarks = {
+      cells: [],
+      dots: [],
+      ghosts: [],
+      whatIf: [
+        [hEdgeIndex(grid, 0, 0), EdgeState.Line],
+        [hEdgeIndex(grid, 0, 1), EdgeState.Cross],
+      ],
+      conflict: { cells: [3], dots: [7], edges: [hEdgeIndex(grid, 1, 0)] },
+    };
+    const plain = recorder();
+    paintBoard(plain.ctx, scene(5, 44, 0, 0));
+    const { ctx, calls } = recorder();
+    paintBoard(ctx, scene(5, 44, 0, 0, undefined, hint));
+    // One conflict cell and dot wash.
+    expect(calls.fillRect).toBe((plain.calls.fillRect ?? 0) + 1);
+    expect(calls.arc).toBe(plain.calls.arc + 1);
+    // The conflict edge, a dotted supposed line and a supposed × (two strokes).
+    expect(calls.lineTo).toBe((plain.calls.lineTo ?? 0) + 1 + 1 + 2);
   });
 
   test("leaves out ghosts on edges the player has already marked", () => {

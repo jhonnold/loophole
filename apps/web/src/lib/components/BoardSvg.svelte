@@ -68,6 +68,9 @@
   const hintCells = $derived(new Set(hint?.cells ?? []));
   // Ghosts only on edges that are still empty, as on the Hint artboard.
   const ghosts = $derived((hint?.ghosts ?? []).filter(([e]) => edges[e] === EdgeState.Unknown));
+  // A try-and-see hint's supposed marks, and where they break the rules.
+  const whatIf = $derived((hint?.whatIf ?? []).filter(([e]) => edges[e] === EdgeState.Unknown));
+  const conflict = $derived(hint?.conflict);
 </script>
 
 <svg class="board-svg" width={port.width} height={port.height} aria-hidden="true">
@@ -89,6 +92,21 @@
       {#each hint.dots as d (d)}
         {@const p = dotPoint(grid, geo, d)}
         <circle class="hint-wash" cx={p.x} cy={p.y} r={S * 0.3} />
+      {/each}
+    {/if}
+
+    {#if conflict}
+      {#each conflict.cells as i (i)}
+        {@const p = cellPoint(grid, geo, i)}
+        <rect class="conflict-wash" x={p.x - S / 2 + 2} y={p.y - S / 2 + 2} width={S - 4} height={S - 4} rx="3" />
+      {/each}
+      {#each conflict.dots as d (d)}
+        {@const p = dotPoint(grid, geo, d)}
+        <circle class="conflict-wash" cx={p.x} cy={p.y} r={S * 0.3} />
+      {/each}
+      {#each conflict.edges as e (e)}
+        {@const s = edgeSegment(grid, geo, e)}
+        <line class="conflict-edge" x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke-width={size.line * 3} />
       {/each}
     {/if}
 
@@ -116,6 +134,29 @@
           class="ghost-cross"
           d="M{x - a} {y - a}L{x + a} {y + a}M{x + a} {y - a}L{x - a} {y + a}"
           stroke-width={size.crossWidth * 1.6}
+        />
+      {/if}
+    {/each}
+
+    {#each whatIf as [e, state] (e)}
+      {#if state === EdgeState.Line}
+        {@const s = edgeSegment(grid, geo, e)}
+        <line
+          class="what-if"
+          x1={s.x1}
+          y1={s.y1}
+          x2={s.x2}
+          y2={s.y2}
+          stroke-width={size.line}
+          stroke-dasharray="0.1 {size.line * 2.2}"
+        />
+      {:else}
+        {@const { x, y } = edgeMidpoint(grid, geo, e)}
+        {@const a = size.crossArm}
+        <path
+          class="what-if-cross"
+          d="M{x - a} {y - a}L{x + a} {y + a}M{x + a} {y - a}L{x - a} {y + a}"
+          stroke-width={size.crossWidth * 1.3}
         />
       {/if}
     {/each}
@@ -178,6 +219,27 @@
     stroke: var(--ai);
     stroke-linecap: round;
     fill: none;
+  }
+
+  /* Supposed marks: dotted and fainter than the real move's dashes. */
+  .what-if {
+    stroke: var(--what-if);
+    stroke-linecap: round;
+  }
+
+  .what-if-cross {
+    stroke: var(--what-if);
+    stroke-linecap: round;
+    fill: none;
+  }
+
+  .conflict-wash {
+    fill: var(--conflict-wash);
+  }
+
+  .conflict-edge {
+    stroke: var(--conflict-wash);
+    stroke-linecap: round;
   }
 
   .line {

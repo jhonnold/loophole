@@ -41,6 +41,12 @@ export interface SolveOptions {
    * `maxSteps`, it does nothing without `steps`.
    */
   readonly stopAtLine?: boolean;
+  /**
+   * Give each lookahead step the probe that proved it (`Step.probe`): what was assumed, the steps
+   * that followed and where they broke the rules. Default false; hints turn it on. It costs one
+   * more probe per lookahead step and does nothing without `steps`.
+   */
+  readonly explain?: boolean;
   /** Stop after this many milliseconds, measured with `now`. Default no limit. */
   readonly timeLimitMs?: number;
   /** Clock in milliseconds. Default `Date.now`. */
@@ -78,6 +84,7 @@ export function solve(puzzle: Puzzle, options: SolveOptions = {}): SolveResult {
   engine.steps = options.steps === false ? null : steps;
   engine.maxSteps = options.maxSteps ?? Number.POSITIVE_INFINITY;
   engine.stopAtLine = options.stopAtLine ?? false;
+  engine.explain = options.explain ?? false;
   let status: SolveStatus;
   try {
     const ok =
