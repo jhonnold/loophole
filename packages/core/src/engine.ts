@@ -166,6 +166,15 @@ export class Engine {
   closed = false;
   /** Lookahead probes run so far. */
   probes = 0;
+  /** Lookahead deductions made so far. */
+  lookaheads = 0;
+  /** Lookahead makes no more deductions once it has made this many. */
+  maxLookahead = Number.POSITIVE_INFINITY;
+  /**
+   * A lookahead probe proves its edge only when it breaks the rules within this many steps (rule
+   * firings after the assumption, counted as `fires` counts them).
+   */
+  maxProbeSteps = Number.POSITIVE_INFINITY;
   /** Recorded steps, or null when not recording. */
   steps: Step[] | null = null;
   maxSteps = Number.POSITIVE_INFINITY;
@@ -268,6 +277,11 @@ export class Engine {
   /** Edges `connected` treats as crossed: the group `twoExits` is checking. */
   private readonly inGroup: Uint8Array;
   private lookCursor = 0;
+  /**
+   * Rule firings while no steps are recorded, one per step the same firing would record (or more,
+   * when a firing breaks the rules before it sets an edge). A probe's count is its chain length.
+   */
+  private fires = 0;
   /**
    * Connectivity scratch, allocated on the first connectivity pass (`initConnect`). Blocks: the
    * DFS's discovery times, low points, next `dotEdges` slot and tree edge in (its stack of dots is
@@ -2106,11 +2120,12 @@ export class Engine {
    * Tries each open edge both ways, running the worklist rules and, when the corners group is on
    * and `probeCorners` (the verifier after `deepen`), the corner rules after each assumption (never
    * parity, colouring, connectivity or lookahead: those cost O(edges) each). If one way leads to a
-   * contradiction the edge takes the other state. Scans round-robin from where the last scan
-   * stopped. Returns 1 after a deduction, 0 when a full scan finds none, -1 when the deduction
-   * itself contradicts.
+   * contradiction within `maxProbeSteps` steps, the edge takes the other state. Scans round-robin
+   * from where the last scan stopped. Returns 1 after a deduction, 0 when a full scan finds none (or
+   * `maxLookahead` deductions are made), -1 when the deduction itself contradicts.
    */
   private lookahead(): number {
+    if (this.lookaheads >= this.maxLookahead) return 0;
     const E = this.grid.edgeCount;
     const recording = this.steps;
     for (let k = 0; k < E; k++) {
@@ -2122,12 +2137,15 @@ export class Engine {
         this.probes++;
         const m = this.mark();
         this.steps = null;
+        const f = this.fires;
         const ok = this.set(e, assumed) && this.probe();
+        const long = this.fires - f > this.maxProbeSteps;
         const site = this.conflict;
         this.steps = recording;
         this.undo(m);
-        if (ok) continue;
+        if (ok || long) continue;
         this.lookCursor = (e + 1) % E;
+        this.lookaheads++;
         const C = this.grid.cellCount;
         const a = this.grid.edgeDots[e * 2];
         const b = this.grid.edgeDots[e * 2 + 1];
@@ -2244,11 +2262,13 @@ export class Engine {
 
   /**
    * True while steps are recorded. Otherwise clears the pending step, so callers skip building a
-   * step's cells and dots when nobody reads them (lookahead probes, the verifier's search).
+   * step's cells and dots when nobody reads them (lookahead probes, the verifier's search), and
+   * counts the firing (`fires`).
    */
   private recording(): boolean {
     if (this.steps !== null) return true;
     this.pending = null;
+    this.fires++;
     return false;
   }
 
@@ -2264,6 +2284,7 @@ export class Engine {
   private begin(rule: RuleId, cells: readonly number[], dots: readonly number[]): void {
     if (this.steps === null) {
       this.pending = null;
+      this.fires++;
       return;
     }
     this.pending = [];

@@ -26,18 +26,53 @@ export interface LevelSettings {
   /** Whether the solver may use lookahead (`SolveOptions.lookahead`). */
   readonly lookahead: boolean;
   /**
+   * With lookahead: the longest chain a try-and-see may take from its guess to the rule it breaks
+   * (`SolveOptions.maxProbeSteps`), so a hint can walk through it.
+   */
+  readonly maxProbeSteps: number;
+  /**
+   * With lookahead: a puzzle may need one try-and-see per this many cells, and at least one
+   * (`lookaheadBudget`). Generation removes clues without lookahead first, then spends the budget.
+   */
+  readonly cellsPerLookahead: number;
+  /**
    * Share of cells, 0 to 1, that keep a clue at least: after removing every clue its rules allow,
    * `generate` puts back removed clues, chosen at random, up to this share.
    */
   readonly minClueShare: number;
 }
 
-/** What each level allows (measured in DECISIONS, WT20). Hard is every rule and no extra clues. */
+const NO_LOOKAHEAD = {
+  lookahead: false,
+  maxProbeSteps: Number.POSITIVE_INFINITY,
+  cellsPerLookahead: Number.POSITIVE_INFINITY,
+} as const;
+
+/**
+ * What each level allows (measured in DECISIONS, WT20 and WT24). Hard is every rule, no extra
+ * clues, and a few short try-and-sees.
+ */
 export const LEVEL_SETTINGS: Readonly<Record<Level, LevelSettings>> = {
-  easy: { rules: [], parity: false, lookahead: false, minClueShare: 0.55 },
-  medium: { rules: ["corners"], parity: true, lookahead: false, minClueShare: 0.45 },
-  hard: { rules: RULE_GROUPS, parity: true, lookahead: true, minClueShare: 0 },
+  easy: { rules: [], parity: false, ...NO_LOOKAHEAD, minClueShare: 0.55 },
+  medium: { rules: ["corners"], parity: true, ...NO_LOOKAHEAD, minClueShare: 0.45 },
+  hard: {
+    rules: RULE_GROUPS,
+    parity: true,
+    lookahead: true,
+    maxProbeSteps: 5,
+    cellsPerLookahead: 100,
+    minClueShare: 0,
+  },
 };
+
+/**
+ * How many lookahead deductions a puzzle of `level` with `cells` cells may need: 0 without
+ * lookahead, otherwise one per `cellsPerLookahead` cells and at least one.
+ */
+export function lookaheadBudget(level: Level, cells: number): number {
+  const { lookahead, cellsPerLookahead } = LEVEL_SETTINGS[level];
+  return lookahead ? Math.max(1, Math.floor(cells / cellsPerLookahead)) : 0;
+}
 
 export function isLevel(value: unknown): value is Level {
   return (LEVELS as readonly unknown[]).includes(value);

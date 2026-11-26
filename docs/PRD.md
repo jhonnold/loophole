@@ -68,7 +68,7 @@ Priority: **P0** = required for launch, **P1** = soon after.
 - FR-6 (P1). The solver's step record powers hints (see FR-12).
 
 ### 7.3 Generator
-- FR-7 (P0). Generation inputs: width, height, optional seed, optional level (easy, medium or hard; default hard). Output: clue grid, solution, and the solver result. A level decides which rules judge each clue removal and solve the result, and how many clues stay (at least 55% of cells at easy, 45% at medium; hard keeps only what its rules need, about 40%). The puzzle records its level (`meta.level`, `docs/FORMAT.md`).
+- FR-7 (P0). Generation inputs: width, height, optional seed, optional level (easy, medium or hard; default hard). Output: clue grid, solution, and the solver result. A level decides which rules judge each clue removal and solve the result, and how many clues stay (at least 55% of cells at easy, 45% at medium; hard keeps only what its rules need, about 40%). At hard, try-and-see (lookahead) stays rare and short: a puzzle needs at most one per 100 cells (one on smaller boards, often none), and each chain from the guess to the broken rule is at most 5 steps (#11). The puzzle records its level (`meta.level`, `docs/FORMAT.md`).
 - FR-8 (P0). The generator builds a random loop and rejects loops that are too small or thin. Defaults (tunable): the loop must enclose at least ~40% of cells, and its bounding box must span at least ~80% of both dimensions. Thresholds live in config and have tests.
 - FR-9 (P0). Clues are derived from the loop and then removed while uniqueness still holds, so the final puzzle has the same solution and is `unique`.
 - FR-10 (P0). Generation is deterministic for a given seed and version.

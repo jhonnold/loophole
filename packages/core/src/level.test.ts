@@ -1,19 +1,38 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_LEVEL, isLevel, LEVEL_SETTINGS, LEVELS, puzzleLevel, ruleLevel } from "./level.ts";
+import {
+  DEFAULT_LEVEL,
+  isLevel,
+  LEVEL_SETTINGS,
+  LEVELS,
+  lookaheadBudget,
+  puzzleLevel,
+  ruleLevel,
+} from "./level.ts";
 import { createPuzzle } from "./puzzle.ts";
 import { RULE_GROUPS, RULE_IDS } from "./rules.ts";
 import { levelRuleIds } from "./test-support/levels.ts";
 
 describe("levels", () => {
-  test("the default level is hard: every rule group, parity, lookahead and no extra clues", () => {
-    // So `generate` without a level makes the same puzzles as before levels (GENERATOR_VERSION).
+  test("the default level is hard: every rule group, parity, short lookahead, no extra clues", () => {
+    // Puzzles without `meta.level` are hard, whichever GENERATOR_VERSION made them.
     expect(DEFAULT_LEVEL).toBe("hard");
     expect(LEVEL_SETTINGS.hard).toEqual({
       rules: RULE_GROUPS,
       parity: true,
       lookahead: true,
+      maxProbeSteps: 5,
+      cellsPerLookahead: 100,
       minClueShare: 0,
     });
+  });
+
+  test("lookahead budget: none without lookahead, one per 100 cells and at least one with it", () => {
+    expect(lookaheadBudget("easy", 400)).toBe(0);
+    expect(lookaheadBudget("medium", 400)).toBe(0);
+    expect(lookaheadBudget("hard", 1)).toBe(1);
+    expect(lookaheadBudget("hard", 199)).toBe(1);
+    expect(lookaheadBudget("hard", 400)).toBe(4);
+    expect(lookaheadBudget("hard", 10_000)).toBe(100);
   });
 
   test("each level allows no more rules and keeps no fewer clues than the next", () => {

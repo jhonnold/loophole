@@ -14,7 +14,7 @@ import { LOOP_THRESHOLDS, type LoopThresholds, thresholdCount } from "./loop.ts"
 import { deriveClues, NO_CLUE } from "./puzzle.ts";
 import { hashSeed } from "./rng.ts";
 import { solve } from "./solver.ts";
-import { levelRuleIds } from "./test-support/levels.ts";
+import { levelRuleIds, levelSolveOptions } from "./test-support/levels.ts";
 import { loopCoverage } from "./test-support/loops.ts";
 import { verify } from "./verify.ts";
 
@@ -53,13 +53,21 @@ function checkResult(
   const allowed = levelRuleIds(level);
   expect(r.solve.steps.map((s) => s.rule).filter((rule) => !allowed.has(rule))).toEqual([]);
   expect(encodeEdges(r.solve.edges)).toBe(encodeEdges(solution));
+  // Try-and-see is rare and short: within the level's budget, each chain at most its limit.
+  const options = levelSolveOptions(level, grid.cellCount);
+  expect(r.solve.lookaheads).toBeLessThanOrEqual(options.maxLookahead ?? 0);
+  const explained = solve(puzzle, { ...options, explain: true });
+  expect(explained.status).toBe("solved");
+  for (const s of explained.steps) {
+    if (s.probe) expect(s.probe.steps.length).toBeLessThanOrEqual(options.maxProbeSteps ?? 0);
+  }
   const v = verify(puzzle, { timeLimitMs: Number.POSITIVE_INFINITY });
   expect(v.status).toBe("unique");
   expect(encodeEdges(v.solutions[0])).toBe(encodeEdges(solution));
 }
 
 describe("generate: golden values (FR-10)", () => {
-  // Frozen output for GENERATOR_VERSION "6". If one changes, the generator's output changed: bump
+  // Frozen output for GENERATOR_VERSION "7". If one changes, the generator's output changed: bump
   // GENERATOR_VERSION and update these (docs/DECISIONS.md, WT3).
   const cases: [number, number, string, string][] = [
     [1, 1, ".", "1111"],
@@ -68,25 +76,25 @@ describe("generate: golden values (FR-10)", () => {
     [
       5,
       5,
-      "..1.3.....3.3....3..1.21.",
+      "..1.3.....3.3.2..3..1.213",
       "222212111212112121222212221221222211212221121211212111211211",
     ],
     [
       6,
       4,
-      "...13..22..12.......0.1.",
+      "2..13..22..12.......0.1.",
       "1111122112122222112221111222221222212112112211212211122222",
     ],
     [
       7,
       7,
-      "00..3.....3..3.......122..32001..3...1....3......",
+      "00..3.....3..3.......122..32001..31..1....3......",
       "2222122221222111212121122112221121222222121111112111111122221122221111111222222122121211222221212222221112222221",
     ],
     [
       10,
       10,
-      ".......1.12......3..2.233.....1.1....2............3121.11.23.122.11.2.11...11....2...02.11.3.......1",
+      ".......1.12......3..2.233.....1.1.1..2............3121.11.23.122211.2111...11....2...0211113.......1",
       "1111111222221111221112121221222221221212221122222212222222221212222221222222221222121222222222221222212222111212222221222121222111212121111222121222121111211211211111212112111121211121122212111212122112222121221122212212",
     ],
   ];
@@ -112,7 +120,7 @@ describe("generate: golden values (FR-10)", () => {
   test('20x20 seed "golden" (digest)', () => {
     const r = generate({ width: 20, height: 20, seed: "golden" });
     expect(hashSeed(serializePuzzleJson(r.puzzle) + encodeEdges(r.solution))).toEqual([
-      3351530125, 3105610422, 2737780750, 2198067262,
+      3154052734, 3892870291, 1949161258, 3582486805,
     ]);
   });
 });
@@ -171,13 +179,14 @@ describe("generate: properties", () => {
       const { puzzle, stats } = generate({ width: 4 + n, height: 13 - n, seed: `needed-${n}` });
       // Removal tests reach what solving from scratch does, so the safeguard has nothing to restore.
       expect(stats.restored).toBe(0);
+      const options = levelSolveOptions(DEFAULT_LEVEL, puzzle.grid.cellCount);
       const clues = puzzle.clues.slice();
       const without = { grid: puzzle.grid, clues };
       for (let i = 0; i < clues.length; i++) {
         const k = clues[i];
         if (k === NO_CLUE) continue;
         clues[i] = NO_CLUE;
-        expect(solve(without).status).not.toBe("solved");
+        expect(solve(without, options).status).not.toBe("solved");
         clues[i] = k;
       }
     }
@@ -197,15 +206,16 @@ describe("generate: properties", () => {
 });
 
 describe("generate: levels", () => {
-  // Frozen output for GENERATOR_VERSION "6" below the default level, as digests of the serialized
-  // puzzle and its solution (the default level's goldens are above).
+  // Frozen output for GENERATOR_VERSION "7" below the default level, as digests of the serialized
+  // puzzle and its solution (the default level's goldens are above). Version 7 changed only the
+  // hard level, so these digests changed only through `meta.generator`.
   test('10x10 seed "golden" at easy and medium (digests)', () => {
     const digest = (level: Level) => {
       const r = generate({ width: 10, height: 10, seed: "golden", level });
       return hashSeed(serializePuzzleJson(r.puzzle) + encodeEdges(r.solution));
     };
-    expect(digest("easy")).toEqual([886490681, 133261979, 733940933, 3331014347]);
-    expect(digest("medium")).toEqual([3032055185, 730214522, 3796690882, 2962293742]);
+    expect(digest("easy")).toEqual([1215440606, 2065499871, 2330482170, 1610957761]);
+    expect(digest("medium")).toEqual([3925879954, 2832400735, 3645531627, 1090992343]);
   });
 
   test("small boards at every level: unique, solved by the level's rules, deterministic", () => {
@@ -315,7 +325,13 @@ describe("generate: options", () => {
     const seen: GenerateProgress[] = [];
     const r = generate({ width: 8, height: 6, seed: "progress", onProgress: (p) => seen.push(p) });
     expect(seen.length).toBe(r.stats.checks);
-    expect(seen).toEqual(seen.map((_, n) => ({ done: n + 1, total: r.stats.checks })));
+    expect(seen.map((p) => p.done)).toEqual(seen.map((_, n) => n + 1));
+    // The total holds, apart from one drop when step 6 finds fewer clues to test than it allows for.
+    expect(seen.at(-1)?.total).toBe(r.stats.checks);
+    expect(new Set(seen.map((p) => p.total)).size).toBeLessThanOrEqual(2);
+    for (let n = 1; n < seen.length; n++) {
+      expect(seen[n].total).toBeLessThanOrEqual(seen[n - 1].total);
+    }
     const plain = generate({ width: 8, height: 6, seed: "progress" });
     expect(serializePuzzleJson(plain.puzzle)).toBe(serializePuzzleJson(r.puzzle));
   });
