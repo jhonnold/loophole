@@ -6,7 +6,8 @@ import { decodeEdges, parsePuzzle } from "./format.ts";
 import { generate } from "./generate.ts";
 import { EdgeState, type Grid, hEdgeIndex } from "./grid.ts";
 import { findHint } from "./hint.ts";
-import type { Puzzle } from "./puzzle.ts";
+import { LEVEL_SETTINGS, lookaheadBudget } from "./level.ts";
+import { NO_CLUE, type Puzzle } from "./puzzle.ts";
 import type { Deduction, Probe, RuleId, Step } from "./rules.ts";
 import { solve } from "./solver.ts";
 import { arbPuzzleWithSolution } from "./test-support/arbitraries.ts";
@@ -218,9 +219,9 @@ describe("findHint", () => {
   });
 
   test("uses only the rules of the puzzle's level", () => {
-    // The default level's 10×10 "golden" puzzle needs corner rules and lookahead. Labelled easy, its
-    // hints may use only the rules every level has, and reveal lines where those get stuck.
-    const { puzzle: hard, solution } = generate({ width: 10, height: 10, seed: "golden" });
+    // The default level's 10×10 "level-1" puzzle needs corner rules and lookahead. Labelled easy,
+    // its hints may use only the rules every level has, and reveal lines where those get stuck.
+    const { puzzle: hard, solution } = generate({ width: 10, height: 10, seed: "level-1" });
     const easy = levelRuleIds("easy");
     const fromHard = hintWalk(hard, solution);
     expect(fromHard.reveals).toBe(0);
@@ -536,9 +537,12 @@ describe("try-and-see hints", () => {
 
   test("every probe replays to the contradiction it names (property)", () => {
     let probes = 0;
+    let long = 0;
     fc.assert(
       fc.property(fc.integer({ min: 0, max: 1e6 }), fc.constantFrom(5, 6, 7), (n, size) => {
-        const { puzzle: p, solution } = generate({ width: size, height: size, seed: `la-${n}` });
+        const found = longLookahead(size, `la-${n}`);
+        if (found === null) return;
+        const { puzzle: p, solution } = found;
         for (const { board, steps } of hintBoards(p, solution)) {
           const now = board.slice();
           for (const step of steps) {
@@ -547,6 +551,7 @@ describe("try-and-see hints", () => {
               if (step.probe === undefined) throw new Error("lookahead step without a probe");
               checkProbe(p, now, step.probe);
               probes++;
+              if (step.probe.steps.length > LEVEL_SETTINGS.hard.maxProbeSteps) long++;
             }
             for (const { edge, state } of step.changes) now[edge] = state;
           }
@@ -554,7 +559,51 @@ describe("try-and-see hints", () => {
       }),
       { numRuns: 40 },
     );
-    // The property means nothing if the generator's hard puzzles never need lookahead.
+    // The property means nothing without lookahead steps, long ones (the fallback) included.
     expect(probes).toBeGreaterThan(10);
+    expect(long).toBeGreaterThan(0);
+  });
+
+  test("on generated hard puzzles, chains are short and try-and-see is rare", () => {
+    const { maxProbeSteps } = LEVEL_SETTINGS.hard;
+    let looks = 0;
+    for (let n = 0; n < 12; n++) {
+      const size = 5 + (n % 6);
+      const { puzzle: p, solution } = generate({ width: size, height: size, seed: `short-${n}` });
+      let here = 0;
+      for (const { steps } of hintBoards(p, solution)) {
+        for (const step of steps) {
+          if (step.rule !== "lookahead") continue;
+          here++;
+          expect(step.probe?.steps.length ?? 0).toBeLessThanOrEqual(maxProbeSteps);
+        }
+      }
+      expect(here).toBeLessThanOrEqual(lookaheadBudget("hard", size * size));
+      looks += here;
+    }
+    expect(looks).toBeGreaterThan(0);
   });
 });
+
+/**
+ * A hard puzzle that needs more try-and-see than generation now allows, like puzzles generated
+ * before it was kept short: the puzzle generated with `seed`, without the first clue (in cell
+ * order) that the rules with unbounded lookahead can do without. Null when there is none.
+ */
+function longLookahead(
+  size: number,
+  seed: string,
+): { puzzle: Puzzle; solution: Uint8Array } | null {
+  const { puzzle: p } = generate({ width: size, height: size, seed });
+  const clues = p.clues.slice();
+  for (let i = 0; i < clues.length; i++) {
+    if (clues[i] === NO_CLUE) continue;
+    const k = clues[i];
+    clues[i] = NO_CLUE;
+    const without = { ...p, clues: clues.slice() };
+    const r = solve(without);
+    if (r.status === "solved" && r.lookaheads > 0) return { puzzle: without, solution: r.edges };
+    clues[i] = k;
+  }
+  return null;
+}

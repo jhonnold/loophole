@@ -1,16 +1,23 @@
 import { EdgeState, type Grid } from "./grid.ts";
-import { DEFAULT_LEVEL, isLevel, LEVEL_SETTINGS, LEVELS, type Level } from "./level.ts";
+import {
+  DEFAULT_LEVEL,
+  isLevel,
+  LEVEL_SETTINGS,
+  LEVELS,
+  type Level,
+  lookaheadBudget,
+} from "./level.ts";
 import { generateLoop, LOOP_THRESHOLDS, type LoopThresholds, thresholdCount } from "./loop.ts";
 import { createPuzzle, deriveClues, NO_CLUE, type Puzzle } from "./puzzle.ts";
 import { createRng, type Rng } from "./rng.ts";
-import { type SolveResult, solve } from "./solver.ts";
+import { type SolveOptions, type SolveResult, solve } from "./solver.ts";
 
 /**
  * Version of the generator's output. The same seed, size and options give the same puzzle for the
  * same version (PRD FR-10). Bump it whenever any output changes, including through a change to the
  * solver's rules, which decide which clues can go.
  */
-export const GENERATOR_VERSION = "6";
+export const GENERATOR_VERSION = "7";
 
 /**
  * Clue removal tests run block by block; a block is at most this many cells on a side. Each block's
@@ -21,6 +28,8 @@ const BLOCK_SIZE = 2;
 const RESTORE_SPACING = 2;
 /** Loops tried before giving up. Only 2×2 and rare small boards need a second; this bounds the loop. */
 const MAX_ATTEMPTS = 100;
+/** Clue removal tests step 6 makes, per lookahead deduction a puzzle may need (`lookaheadBudget`). */
+const LOOKAHEAD_TRIES = 25;
 
 /**
  * Solves `puzzle` from `initial` (every edge unknown when left out). Generation judges every clue
@@ -32,7 +41,10 @@ type RuleSolver = (puzzle: Puzzle, initial?: Uint8Array) => SolveResult;
 export interface GenerateProgress {
   /** Clue removal tests done so far. */
   readonly done: number;
-  /** Clue removal tests this attempt makes in all. */
+  /**
+   * Clue removal tests this attempt makes in all. At a level with lookahead it can drop once, when
+   * step 6 starts and finds fewer clues left to test than it allows for (small boards).
+   */
   readonly total: number;
 }
 
@@ -97,9 +109,14 @@ export interface GenerateResult {
  * 5. Solve the whole puzzle from scratch. While it gets stuck, put back removed clues next to the
  *    open edges, spread out, and solve again. A safeguard: step 3's tests reach the same end as
  *    solving from scratch, so this has not been needed in the benchmarks.
+ * 6. At a level with lookahead, steps 3 to 5 use its rules without lookahead (unless those cannot
+ *    solve the full clue set, as on a 1×1 board), so the puzzle needs no try-and-see yet. Then a
+ *    few more clues, chosen at random, go where a short try-and-see makes up for them, until the
+ *    puzzle needs `lookaheadBudget` of them (`spendLookahead`).
  *
- * "The rules" are the level's (`LEVEL_SETTINGS`). The result is solved by them alone, which proves
- * it has one solution (PRD §9). Uses only the seeded generator and no clock, so it is
+ * "The rules" are the level's (`LEVEL_SETTINGS`), lookahead with its probes' chains at most
+ * `maxProbeSteps` long and at most `lookaheadBudget` deductions. The result is solved by them
+ * alone, which proves it has one solution (PRD §9). Uses only the seeded generator and no clock, so it is
  * deterministic. Throws `RangeError` for a bad size, seed, thresholds or level.
  */
 export function generate(options: GenerateOptions): GenerateResult {
@@ -137,9 +154,13 @@ function generateAt(
   onProgress: GenerateOptions["onProgress"],
 ): GenerateResult | null {
   // The rest is the level's rule set, as `solve` takes it.
-  const { minClueShare, ...ruleSet } = LEVEL_SETTINGS[level];
+  const { minClueShare, cellsPerLookahead, ...ruleSet } = LEVEL_SETTINGS[level];
+  const budget = lookaheadBudget(level, grid.cellCount);
+  const ruleOptions: SolveOptions = { ...ruleSet, maxLookahead: budget };
   const rules: RuleSolver = (puzzle, initial) =>
-    solve(puzzle, { ...ruleSet, initial, steps: false });
+    solve(puzzle, { ...ruleOptions, initial, steps: false });
+  const plain: RuleSolver = (puzzle, initial) =>
+    solve(puzzle, { ...ruleSet, lookahead: false, initial, steps: false });
   // The default level leaves `meta.level` out, so its puzzles are the ones made before levels.
   const meta: Record<string, string> = { generator: GENERATOR_VERSION };
   if (level !== DEFAULT_LEVEL) meta.level = level;
@@ -150,16 +171,30 @@ function generateAt(
     const clues = full.slice();
     const work: Puzzle = { grid, clues };
     if (rules(work).status !== "solved") continue;
-    const checks = removeClues(work, rng, rules, onProgress);
+    // Steps 3 to 5 without lookahead when that can work, and then step 6.
+    const spend = budget > 0 && plain(work).status === "solved";
+    const removal = spend ? plain : rules;
+    let total = 0;
+    for (const k of clues) if (k !== NO_CLUE) total++;
+    const progress = { done: 0, total: total + (spend ? LOOKAHEAD_TRIES * budget : 0) };
+    const report = onProgress === undefined ? undefined : () => onProgress({ ...progress });
+    removeClues(work, rng, removal, report, progress);
     addClues(work, full, rng, minClueShare);
-    const restored = restoreClues(work, full, rng, rules);
+    const restored = restoreClues(work, full, rng, removal);
+    const extra = spend ? spendLookahead(work, rng, plain, rules, budget, report, progress) : [];
+    let result = solve(work, ruleOptions);
+    if (result.status !== "solved") {
+      // A safeguard, like step 5: step 6's tests and this solve should agree.
+      for (const i of extra) clues[i] = full[i];
+      result = solve(work, ruleOptions);
+    }
     let clueCount = 0;
     for (const k of clues) if (k !== NO_CLUE) clueCount++;
     return {
       puzzle: createPuzzle(grid.width, grid.height, clues, { seed, meta }),
       solution,
-      solve: solve(work, ruleSet),
-      stats: { attempts, clueCount, checks, restored },
+      solve: result,
+      stats: { attempts, clueCount, checks: progress.done, restored },
     };
   }
   return null;
@@ -167,7 +202,8 @@ function generateAt(
 
 /**
  * Step 3. Removes each clue whose removal leaves the puzzle solved by `rules`, in a seeded order,
- * block by block. Changes `puzzle.clues`; returns the tests made, one per clue of the full set.
+ * block by block (`forEachBlock`). Changes `puzzle.clues`; counts one test per clue of the full
+ * set in `progress`.
  *
  * Solving the whole board from scratch for every test costs too much on large boards, so a test
  * starts from its block's base: the edges `rules` decide with every clue of the block hidden. Every
@@ -191,23 +227,88 @@ function removeClues(
   puzzle: Puzzle,
   rng: Rng,
   rules: RuleSolver,
-  onProgress: GenerateOptions["onProgress"],
-): number {
+  report: (() => void) | undefined,
+  progress: { done: number },
+): void {
+  const { clues } = puzzle;
+  forEachBlock(puzzle, rng, rules, undefined, (cells, base) => {
+    const order = cells.filter((i) => clues[i] !== NO_CLUE);
+    shuffle(order, rng);
+    for (const i of order) {
+      const k = clues[i];
+      clues[i] = NO_CLUE;
+      if (rules(puzzle, base).status !== "solved") clues[i] = k;
+      progress.done++;
+      report?.();
+    }
+  });
+}
+
+/**
+ * Step 6: tests removing each of a few clues, chosen at random (`LOOKAHEAD_TRIES` per deduction
+ * of `budget`), with `rules` (the level's, lookahead within the budget); keeps a removal when they
+ * still solve the puzzle. Changes `puzzle.clues`; returns the clues it removed.
+ *
+ * The tests go block by block as in step 3, from bases that `plain` (the rules without lookahead)
+ * decides. Each base is what those rules decide from a subset of the clues, so a test still works
+ * out, and counts, every try-and-see the clues removed before it need: the budget holds for the
+ * whole puzzle, not per test.
+ */
+function spendLookahead(
+  puzzle: Puzzle,
+  rng: Rng,
+  plain: RuleSolver,
+  rules: RuleSolver,
+  budget: number,
+  report: (() => void) | undefined,
+  progress: { done: number; total: number },
+): number[] {
   const { grid, clues } = puzzle;
-  let total = 0;
-  for (const k of clues) if (k !== NO_CLUE) total++;
-  let done = 0;
-  const visit = (top: number, left: number, bottom: number, right: number, base: Uint8Array) => {
-    if (bottom - top <= BLOCK_SIZE && right - left <= BLOCK_SIZE) {
-      const order = cellsIn(grid, top, left, bottom, right).filter((i) => clues[i] !== NO_CLUE);
-      shuffle(order, rng);
-      for (const i of order) {
+  const candidates: number[] = [];
+  for (let i = 0; i < clues.length; i++) if (clues[i] !== NO_CLUE) candidates.push(i);
+  shuffle(candidates, rng);
+  candidates.length = Math.min(candidates.length, LOOKAHEAD_TRIES * budget);
+  progress.total = progress.done + candidates.length;
+  const wanted = new Uint8Array(grid.cellCount);
+  for (const i of candidates) wanted[i] = 1;
+  const removed: number[] = [];
+  forEachBlock(
+    puzzle,
+    rng,
+    plain,
+    (i) => wanted[i] === 1,
+    (cells, base) => {
+      for (const i of cells) {
+        if (!wanted[i]) continue;
         const k = clues[i];
         clues[i] = NO_CLUE;
-        if (rules(puzzle, base).status !== "solved") clues[i] = k;
-        done++;
-        onProgress?.({ done, total });
+        if (rules(puzzle, base).status === "solved") removed.push(i);
+        else clues[i] = k;
+        progress.done++;
+        report?.();
       }
+    },
+  );
+  return removed;
+}
+
+/**
+ * Calls `leaf` with the cells of each block (at most `BLOCK_SIZE` on a side) and the block's
+ * base: the edges `rules` decide with every clue of the block hidden. The board is halved, the
+ * longer side first, in a seeded order, and each half's base is solved from its parent's once the
+ * halves before it are done. With `wanted`, parts with no wanted cell are skipped.
+ */
+function forEachBlock(
+  puzzle: Puzzle,
+  rng: Rng,
+  rules: RuleSolver,
+  wanted: ((cell: number) => boolean) | undefined,
+  leaf: (cells: number[], base: Uint8Array) => void,
+): void {
+  const { grid } = puzzle;
+  const visit = (top: number, left: number, bottom: number, right: number, base: Uint8Array) => {
+    if (bottom - top <= BLOCK_SIZE && right - left <= BLOCK_SIZE) {
+      leaf(cellsIn(grid, top, left, bottom, right), base);
       return;
     }
     const parts: [number, number, number, number][] = [];
@@ -220,11 +321,12 @@ function removeClues(
     }
     if (rng.int(2) === 1) parts.reverse();
     for (const [t, l, b, r] of parts) {
-      visit(t, l, b, r, hiddenBase(puzzle, rules, cellsIn(grid, t, l, b, r), base));
+      const cells = cellsIn(grid, t, l, b, r);
+      if (wanted !== undefined && !cells.some(wanted)) continue;
+      visit(t, l, b, r, hiddenBase(puzzle, rules, cells, base));
     }
   };
   visit(0, 0, grid.height, grid.width, new Uint8Array(grid.edgeCount));
-  return done;
 }
 
 /** The edges `rules` decide from `initial` with the clues of `cells` hidden. */

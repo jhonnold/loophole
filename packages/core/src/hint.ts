@@ -17,6 +17,9 @@ import { solve } from "./solver.ts";
  *   solver made them. Crosses the line does not need are left out, so a hint never asks for crosses
  *   alone (DECISIONS, "Hints end in a line"). A lookahead step (in either place) carries its probe:
  *   the assumed state, the steps from it that the contradiction rests on, and the contradiction.
+ *   Its chain is at most the level's `maxProbeSteps` long, unless only a longer one helps (puzzles
+ *   generated before chains were kept short; on newer ones it was not seen on 1 000 random
+ *   partial boards).
  * - `reveal`: no rule applies, so `edge` is one line of the solution, preferably one that extends a
  *   line already on the board.
  */
@@ -66,14 +69,20 @@ export function findHint(
 
   // Every mark agrees with the solution, so the solver's deductions from the board are sound. A
   // solve that gets stuck or runs out of time before it draws a line falls through to a revealed one.
-  const { minClueShare, ...ruleSet } = LEVEL_SETTINGS[puzzleLevel(puzzle)];
-  const solved = solve(puzzle, {
-    ...options,
-    ...ruleSet,
-    initial: board,
-    stopAtLine: true,
-    explain: true,
-  });
+  const { minClueShare, cellsPerLookahead, ...ruleSet } = LEVEL_SETTINGS[puzzleLevel(puzzle)];
+  const hintSolve = (maxProbeSteps: number) =>
+    solve(puzzle, {
+      ...options,
+      ...ruleSet,
+      maxProbeSteps,
+      initial: board,
+      stopAtLine: true,
+      explain: true,
+    });
+  let solved = hintSolve(ruleSet.maxProbeSteps);
+  // Puzzles generated before try-and-see was kept short (GENERATOR_VERSION 7) can need longer
+  // chains: a long one beats a revealed line.
+  if (solved.status === "stuck" && ruleSet.lookahead) solved = hintSolve(Number.POSITIVE_INFINITY);
   const { steps, reads } = explainSteps(grid, board, solved.steps);
   const step = steps.at(-1);
   if (step?.changes.some((c) => c.state === EdgeState.Line)) {

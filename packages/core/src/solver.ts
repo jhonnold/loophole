@@ -19,6 +19,13 @@ export interface SolveOptions {
    */
   readonly lookahead?: boolean;
   /**
+   * A lookahead probe proves its edge only when the rules break within this many steps after the
+   * assumption (the steps `explain` would give it, or fewer). Default no limit.
+   */
+  readonly maxProbeSteps?: number;
+  /** Make at most this many lookahead deductions; then lookahead finds nothing. Default no limit. */
+  readonly maxLookahead?: number;
+  /**
    * Rule groups to use on top of the rules that always run (`RULE_GROUPS`). Default all of them.
    * A difficulty level can leave groups out; deductions are sound either way.
    */
@@ -59,6 +66,8 @@ export interface SolveResult {
   readonly steps: Step[];
   /** Edge states when the solver stopped. */
   readonly edges: Uint8Array;
+  /** Lookahead deductions made (recorded as steps or not). */
+  readonly lookaheads: number;
 }
 
 /**
@@ -85,6 +94,8 @@ export function solve(puzzle: Puzzle, options: SolveOptions = {}): SolveResult {
   engine.maxSteps = options.maxSteps ?? Number.POSITIVE_INFINITY;
   engine.stopAtLine = options.stopAtLine ?? false;
   engine.explain = options.explain ?? false;
+  engine.maxProbeSteps = options.maxProbeSteps ?? Number.POSITIVE_INFINITY;
+  engine.maxLookahead = options.maxLookahead ?? Number.POSITIVE_INFINITY;
   let status: SolveStatus;
   try {
     const ok =
@@ -95,5 +106,5 @@ export function solve(puzzle: Puzzle, options: SolveOptions = {}): SolveResult {
     if (!(err instanceof SolverStop)) throw err;
     status = "incomplete";
   }
-  return { status, steps, edges: engine.edges.slice() };
+  return { status, steps, edges: engine.edges.slice(), lookaheads: engine.lookaheads };
 }

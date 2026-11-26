@@ -1,5 +1,6 @@
-import { LEVEL_SETTINGS, type Level } from "../level.ts";
+import { LEVEL_SETTINGS, type Level, lookaheadBudget } from "../level.ts";
 import { GROUP_RULES, RULE_GROUPS, RULE_IDS, type RuleId } from "../rules.ts";
+import type { SolveOptions } from "../solver.ts";
 
 /** The rule ids a solve with `level`'s settings can record. */
 export function levelRuleIds(level: Level): Set<RuleId> {
@@ -11,4 +12,10 @@ export function levelRuleIds(level: Level): Set<RuleId> {
   if (!parity) ids.delete("parity");
   if (!lookahead) ids.delete("lookahead");
   return ids;
+}
+
+/** The `solve` options generation judges a `level` puzzle with `cells` cells by. */
+export function levelSolveOptions(level: Level, cells: number): SolveOptions {
+  const { minClueShare, cellsPerLookahead, ...ruleSet } = LEVEL_SETTINGS[level];
+  return { ...ruleSet, maxLookahead: lookaheadBudget(level, cells) };
 }

@@ -7,19 +7,23 @@
  * 2. Generation time per size (NFR-1: p95 under 10 s up to 30×30 and under 30 s at 40×40),
  *    first-attempt rate (loops whose full clue set the rules solve), clue density, clues put back
  *    by the safeguard, the share of the hint steps (the result's solve) from each rule group, from
- *    parity, lookahead and the rules that always run (`other`), and `verify` on every result.
- *    100×100 takes 4 to 18 minutes a puzzle at the hard level (WT18: 374 to 1 047 s for seeds
- *    `bench-0` to `bench-2`, next to other jobs; WT20: `bench-0` 233 s), about 25 s at easy and
- *    70 s at medium.
+ *    parity, lookahead and the rules that always run (`other`), `verify` on every result, and
+ *    try-and-see: the share of puzzles that need any, the most one needs against its budget
+ *    (`lookaheadBudget`) and the longest chain a probe takes (`explain`).
+ *    100×100 takes about 4 minutes a puzzle at the hard level (WT18: 374 to 1 047 s for seeds
+ *    `bench-0` to `bench-2`, next to other jobs; WT20: `bench-0` 233 s; WT24: 237 to 244 s),
+ *    about 25 s at easy and 70 s at medium.
  * Pass `--quick` to skip 100×100, and `--level=<easy|medium|hard>` to generate at that level
  * (default `DEFAULT_LEVEL`, hard).
  */
 import { generate } from "../src/generate.ts";
 import { createGrid } from "../src/grid.ts";
-import { DEFAULT_LEVEL, isLevel, LEVELS } from "../src/level.ts";
+import { DEFAULT_LEVEL, isLevel, LEVELS, lookaheadBudget } from "../src/level.ts";
 import { generateLoop, LOOP_THRESHOLDS, loopShape, thresholdCount } from "../src/loop.ts";
 import { createRng } from "../src/rng.ts";
 import { GROUP_RULES, RULE_GROUPS, type RuleId } from "../src/rules.ts";
+import { solve } from "../src/solver.ts";
+import { levelSolveOptions } from "../src/test-support/levels.ts";
 import { loopCoverage } from "../src/test-support/loops.ts";
 import { verify } from "../src/verify.ts";
 
@@ -99,6 +103,9 @@ for (const [size, count] of GEN_SIZES) {
   let restored = 0;
   const steps: Record<string, number> = {};
   let stepCount = 0;
+  let withLookahead = 0;
+  let mostLookahead = 0;
+  let longestChain = 0;
   for (let n = 0; n < count; n++) {
     const t0 = performance.now();
     const r = generate({ width: size, height: size, seed: `bench-${n}`, level });
@@ -111,6 +118,14 @@ for (const [size, count] of GEN_SIZES) {
       steps[kind] = (steps[kind] ?? 0) + 1;
       stepCount++;
     }
+    if (r.solve.lookaheads > 0) withLookahead++;
+    mostLookahead = Math.max(mostLookahead, r.solve.lookaheads);
+    if (r.solve.lookaheads > 0) {
+      const options = levelSolveOptions(level, size * size);
+      for (const s of solve(r.puzzle, { ...options, explain: true }).steps) {
+        if (s.probe) longestChain = Math.max(longestChain, s.probe.steps.length);
+      }
+    }
     const status = verify(r.puzzle).status;
     statuses[status] = (statuses[status] ?? 0) + 1;
   }
@@ -122,6 +137,8 @@ for (const [size, count] of GEN_SIZES) {
       `p95=${percentile(times, 0.95).toFixed(0)}ms max=${times[times.length - 1].toFixed(0)}ms ` +
       `first-attempt=${((100 * firstAttempt) / count).toFixed(0)}% clues=${((100 * clues) / cells).toFixed(1)}% ` +
       `restored=${((100 * restored) / cells).toFixed(1)}% steps: ${mix.join(" ")} ` +
+      `try-and-see: ${((100 * withLookahead) / count).toFixed(0)}% of puzzles, ` +
+      `most=${mostLookahead}/${lookaheadBudget(level, size * size)} chain≤${longestChain} ` +
       `verify=${JSON.stringify(statuses)}`,
   );
 }

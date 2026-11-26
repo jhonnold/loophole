@@ -10,6 +10,7 @@ import { createRng } from "./rng.ts";
 import { GROUP_RULES, RULE_GROUPS, RULE_IDS, type RuleId, type Step } from "./rules.ts";
 import { solve } from "./solver.ts";
 import { arbPuzzleWithSolution } from "./test-support/arbitraries.ts";
+import { clueGapCorpus } from "./test-support/clue-gaps.ts";
 import { FIXTURES } from "./test-support/fixtures.ts";
 
 function puzzle(width: number, height: number, clues: string) {
@@ -240,6 +241,58 @@ describe("solve", () => {
     const p = puzzle(2, 2, "0...");
     expect(solve(p, { lookahead: false }).status).toBe("stuck");
     expect(solve(p).status).toBe("solved");
+  });
+
+  test("counts its lookahead deductions and stops making them at maxLookahead", () => {
+    let checked = 0;
+    for (const { puzzle: p } of clueGapCorpus()) {
+      const full = solve(p);
+      const looks = full.steps.filter((s) => s.rule === "lookahead").length;
+      expect(full.lookaheads).toBe(looks);
+      expect(solve(p, { steps: false }).lookaheads).toBe(looks);
+      if (full.status !== "solved" || looks < 2) continue;
+      const capped = solve(p, { maxLookahead: looks - 1 });
+      expect(capped.status).toBe("stuck");
+      expect(capped.lookaheads).toBe(looks - 1);
+      expect(solve(p, { maxLookahead: looks }).status).toBe("solved");
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(5);
+  });
+
+  test("with maxProbeSteps, every probe reaches its contradiction within that many steps", () => {
+    for (const { puzzle: p } of clueGapCorpus().slice(0, 12)) {
+      for (const k of [0, 1, 3, 5]) {
+        for (const s of solve(p, { maxProbeSteps: k, explain: true }).steps) {
+          if (s.probe) expect(s.probe.steps.length).toBeLessThanOrEqual(k);
+        }
+      }
+    }
+  });
+
+  test("maxProbeSteps counts a probe's steps as explain records them", () => {
+    // From the board before each lookahead step, the same probe is found with the cap at its
+    // chain's length but not one below (when the scan, which starts afresh, finds it at all).
+    let checked = 0;
+    for (const { puzzle: p } of clueGapCorpus()) {
+      const board = new Uint8Array(p.grid.edgeCount);
+      for (const step of solve(p, { explain: true }).steps) {
+        const probe = step.probe;
+        if (probe !== undefined) {
+          const first = (maxProbeSteps: number) =>
+            solve(p, { initial: board, maxSteps: 1, maxProbeSteps, explain: true }).steps[0]?.probe;
+          const same = (q: typeof probe | undefined) =>
+            q?.assumed.edge === probe.assumed.edge && q.assumed.state === probe.assumed.state;
+          const n = probe.steps.length;
+          if (same(first(n))) {
+            expect(same(first(n - 1))).toBe(false);
+            checked++;
+          }
+        }
+        for (const c of step.changes) board[c.edge] = c.state;
+      }
+    }
+    expect(checked).toBeGreaterThan(20);
   });
 
   test("checks for an early loop at both ends of a path that a line joined", () => {
