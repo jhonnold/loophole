@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  CONTRADICTION_TEXT,
   decodeEdges,
   EdgeState,
   findHint,
@@ -105,6 +106,62 @@ describe("hintView", () => {
       { cells: [], dots: [4], ghosts: moves.slice(0, 3) },
       { cells: [], dots: [4], ghosts: moves },
     ]);
+  });
+
+  test("a try-and-see step pages through its supposition, what it forces and where it breaks", () => {
+    // The techniques page's lookahead position: supposing the top of the 4×4's first 2 were a line,
+    // four moves follow and the last closes a small loop. So it is crossed, and a line goes on.
+    const p = parsePuzzle({ v: 1, width: 4, height: 4, clues: ".2..12.33..2.1.." });
+    const board = decodeEdges(p.grid, "1020200021001200221010000120001100022100");
+    const hint = findHint(p, puzzleSolution(p), board);
+    if (hint.kind !== "step") throw new Error(hint.kind);
+    const probe = hint.before[0].probe;
+    if (probe === undefined) throw new Error("no probe");
+    const view = hintView(p.grid, hint, board);
+    if (view === null) throw new Error("no view");
+    expect(view.pages.map((pg) => pg.title)).toEqual([
+      "Suppose it's a line",
+      `Then: ${RULE_TITLE["dot-full"]}`,
+      `Then: ${RULE_TITLE["dot-continue"]}`,
+      `Then: ${RULE_TITLE["dot-dead-end"]}`,
+      `Then: ${RULE_TITLE["clue-needs-all"]}`,
+      "That can't be",
+      RULE_TITLE.lookahead,
+      RULE_TITLE["dot-continue"],
+    ]);
+    // The supposed marks build up from the assumed edge, and the last page of the probe washes the
+    // loop that closed.
+    const whatIf = view.pages.map((pg) => pg.marks.whatIf?.length ?? 0);
+    expect(whatIf).toEqual([1, 2, 3, 4, 5, 5, 0, 0]);
+    expect(view.pages[0].marks.whatIf).toEqual([[1, EdgeState.Line]]);
+    expect(view.pages[5].text).toBe(CONTRADICTION_TEXT["small-loop"]);
+    expect(view.pages[5].marks.conflict?.edges).toEqual([...probe.contradiction.edges]);
+    expect(view.pages[6].text).toBe("Drawing this edge breaks the rules, so it must be crossed.");
+    // Nothing supposed is ever part of the move, and no page after the probe shows it.
+    expect(view.apply).toEqual([
+      [1, EdgeState.Cross],
+      [21, EdgeState.Line],
+    ]);
+    for (const pg of view.pages.slice(6)) {
+      expect(pg.marks.whatIf).toBeUndefined();
+      expect(pg.marks.conflict).toBeUndefined();
+    }
+    expect(view.pages[6].marks.ghosts).toEqual([[1, EdgeState.Cross]]);
+  });
+
+  test("a try-and-see step without its probe keeps the one page", () => {
+    const hint: Hint = {
+      kind: "step",
+      step: {
+        rule: "lookahead",
+        changes: [{ edge: 3, state: EdgeState.Line }],
+        cells: [],
+        dots: [4, 5],
+      },
+      before: [],
+    };
+    const view = hintView(grid, hint, empty());
+    expect(view?.pages.map((pg) => pg.text)).toEqual([RULE_TEXT.lookahead]);
   });
 
   test("a wrong line is highlighted by its dots and erased, and the others are counted", () => {
@@ -257,6 +314,18 @@ describe("hintRect", () => {
       width: 40,
       height: 40,
     });
+  });
+
+  test("covers supposed marks and where they break the rules too", () => {
+    const marks = {
+      cells: [],
+      dots: [],
+      ghosts: [],
+      whatIf: [[0, EdgeState.Line]] as EdgeChange[],
+      conflict: { cells: [], dots: [8], edges: [] },
+    };
+    // Edge 0's middle at (30, 10), dot 8 at (90, 90).
+    expect(hintRect(grid, layout, marks)).toEqual({ x: 10, y: -10, width: 100, height: 120 });
   });
 
   test("is null without marks", () => {

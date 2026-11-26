@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createPuzzle, serializePuzzle } from "@loophole/core";
+import { createPuzzle, parsePuzzle, serializePuzzle } from "@loophole/core";
 import { MemoryBlobStore } from "../adapters/blob/memory-blob-store.ts";
 import { openDatabase } from "../adapters/db/database.ts";
 import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
@@ -182,6 +182,30 @@ describe("POST /api/puzzles/{id}/hint", () => {
         expect(state).toBe(SOLUTION[edge] === "1" ? "line" : "cross");
       }
     }
+  });
+
+  test("sends a lookahead step's probe, in wire shape", async () => {
+    // A 0 in the top-left corner of a 2×2: lookahead draws the first line. Crossed instead, the
+    // edge leaves dead ends all round and no line anywhere.
+    const { app, puzzles } = setup();
+    const p = parsePuzzle({ v: 1, width: 2, height: 2, clues: "0...", meta: { generator: "1" } });
+    await puzzles.saveGenerated("p0", {
+      puzzle: serializePuzzle(p),
+      solution: "222121222211",
+      steps: [],
+    });
+    const res = await app.request("/api/puzzles/p0/hint", postJson({ edges: "000000000000" }));
+    const body = (await res.json()) as { rule: string; probe: unknown };
+    expect(body.rule).toBe("lookahead");
+    expect(body.probe).toEqual({
+      assumed: { edge: 3, state: "cross" },
+      steps: [
+        { rule: "dot-dead-end", changes: [{ edge: 10, state: "cross" }], cells: [], dots: [4] },
+        { rule: "dot-dead-end", changes: [{ edge: 11, state: "cross" }], cells: [], dots: [5] },
+        { rule: "dot-dead-end", changes: [{ edge: 5, state: "cross" }], cells: [], dots: [7] },
+      ],
+      contradiction: { kind: "no-loop", edge: null, cells: [], dots: [], edges: [] },
+    });
   });
 
   test("points out a wrong mark and never sends the solution", async () => {

@@ -28,7 +28,7 @@
  */
 import { EdgeState, type Grid, NONE } from "./grid.ts";
 import { NO_CLUE, type Puzzle } from "./puzzle.ts";
-import type { EdgeChange, RuleId, Step } from "./rules.ts";
+import type { Contradiction, ContradictionKind, EdgeChange, Probe, RuleId, Step } from "./rules.ts";
 
 const { Unknown, Line, Cross } = EdgeState;
 
@@ -171,6 +171,11 @@ export class Engine {
   maxSteps = Number.POSITIVE_INFINITY;
   /** Stop after recording the first step that draws a line. */
   stopAtLine = false;
+  /**
+   * While steps are recorded, give each lookahead step its probe (`Step.probe`): the failed probe is
+   * run once more with recording on. Only hints ask for it.
+   */
+  explain = false;
 
   private readonly dotCells: Int32Array;
   private readonly mate: Int32Array;
@@ -188,6 +193,10 @@ export class Engine {
   private pendingRule: RuleId = "clue-zero";
   private pendingCells: readonly number[] = [];
   private pendingDots: readonly number[] = [];
+  /** True while `explainProbe` replays a probe: rules then say how they fail (`fail`). */
+  private probing = false;
+  /** The first failure the replayed probe met, or null. */
+  private failure: Contradiction | null = null;
   private readonly patterns: Pattern[];
   private readonly ufParent: Int32Array;
   private readonly ufParity: Uint8Array;
@@ -502,10 +511,19 @@ export class Engine {
     this.lineCount++;
     const da = this.degree(a) - 1;
     const db = this.degree(b) - 1;
-    if (da >= 2 || db >= 2 || this.closed) return false;
+    if (da >= 2 || db >= 2 || this.closed) {
+      if (this.probing) {
+        if (this.closed) this.fail("other", e, [], [a, b]);
+        else this.fail("dot-three", e, [], [da >= 2 ? a : b]);
+      }
+      return false;
+    }
     if (da === 1 && db === 1 && mate[a] === b) {
       // This line closes a path into a loop: fine only if the loop is everything.
-      if (plen[a] + 1 !== this.lineCount || !this.cluesSatisfied(NONE)) return false;
+      if (plen[a] + 1 !== this.lineCount || !this.cluesSatisfied(NONE)) {
+        if (this.probing) this.fail("small-loop", e, [], [], this.loopEdges(e));
+        return false;
+      }
       this.closed = true;
       return true;
     }
@@ -572,6 +590,7 @@ export class Engine {
       // Every edge decided and no loop: the board has no lines at all.
       if (this.edgeTrail.length === this.grid.edgeCount) {
         this.conflict = NONE;
+        if (this.probing) this.fail("no-loop", null, [], []);
         return false;
       }
       return true;
@@ -589,7 +608,10 @@ export class Engine {
       if (s === Line) lines++;
       else if (s === Unknown) unknown++;
     }
-    if (lines > k || lines + unknown < k) return false;
+    if (lines > k || lines + unknown < k) {
+      if (this.probing) this.fail(lines > k ? "clue-over" : "clue-under", null, [i], []);
+      return false;
+    }
     if (unknown === 0) return true;
     if (lines === k) return this.fillCell(i, Cross, k === 0 ? "clue-zero" : "clue-satisfied");
     if (lines + unknown === k) return this.fillCell(i, Line, "clue-needs-all");
@@ -641,7 +663,10 @@ export class Engine {
     if ((x !== NONE && edges[x] !== Cross) || (y !== NONE && edges[y] !== Cross)) return true;
     const state = k === 3 ? Line : Cross;
     if (this.recording()) this.begin(k === 3 ? "corner-3" : "corner-1", [i], [d]);
-    if (!this.assign(e1, state) || !this.assign(e2, state)) return false;
+    if (!this.assign(e1, state) || !this.assign(e2, state)) {
+      if (this.probing) this.fail("clue-corner", edges[e1] === state ? e2 : e1, [i], [d]);
+      return false;
+    }
     this.commit();
     return true;
   }
@@ -656,8 +681,11 @@ export class Engine {
       if (edges[e] === Line) lines++;
       else if (edges[e] === Unknown) unknown++;
     }
-    if (lines > 2) return false;
-    if (unknown === 0) return lines !== 1;
+    if (lines > 2 || (unknown === 0 && lines === 1)) {
+      if (this.probing) this.fail(lines > 2 ? "dot-three" : "dead-end", null, [], [d]);
+      return false;
+    }
+    if (unknown === 0) return true;
     if (lines === 2) return this.fillDot(d, Cross, "dot-full");
     if (lines === 0) return unknown === 1 ? this.fillDot(d, Cross, "dot-dead-end") : true;
     if (unknown === 1) return this.fillDot(d, Line, "dot-continue");
@@ -2105,13 +2133,95 @@ export class Engine {
         const b = this.grid.edgeDots[e * 2 + 1];
         const cells = site !== NONE && site < C ? [site] : [];
         const dots = site !== NONE && site >= C ? [a, b, site - C] : [a, b];
+        const probe =
+          this.explain && this.steps !== null ? this.explainProbe(e, assumed, site) : undefined;
         this.begin("lookahead", cells, dots);
         if (!this.assign(e, assumed === Line ? Cross : Line)) return -1;
-        this.commit();
+        this.commit(probe);
         return 1;
       }
     }
     return 0;
+  }
+
+  /**
+   * Runs the probe that assumed `assumed` on edge `e` and failed at `site` once more, recording its
+   * steps (the last one cut short where the rules broke, if it set any edges) and how it failed,
+   * then undoes it. Recording changes no deduction, so the replay fails at the same site; if it
+   * somehow does not, there is no probe to show and the step keeps only its cells and dots.
+   */
+  private explainProbe(e: number, assumed: EdgeState, site: number): Probe | undefined {
+    const recording = this.steps;
+    const chain: Step[] = [];
+    const m = this.mark();
+    this.steps = chain;
+    this.probing = true;
+    this.failure = null;
+    const ok = this.set(e, assumed) && this.probe();
+    const again = this.conflict;
+    const partial = this.pending;
+    if (!ok && partial !== null && partial.length > 0) {
+      chain.push({
+        rule: this.pendingRule,
+        changes: partial,
+        cells: this.pendingCells,
+        dots: this.pendingDots,
+      });
+    }
+    const C = this.grid.cellCount;
+    const failure: Contradiction = this.failure ?? {
+      kind: "other",
+      edge: null,
+      cells: site !== NONE && site < C ? [site] : [],
+      dots: site !== NONE && site >= C ? [site - C] : [],
+      edges: [],
+    };
+    this.pending = null;
+    this.probing = false;
+    this.failure = null;
+    this.steps = recording;
+    this.undo(m);
+    if (ok || again !== site) return undefined;
+    return {
+      assumed: { edge: e, state: assumed as EdgeChange["state"] },
+      steps: chain,
+      contradiction: failure,
+    };
+  }
+
+  /** Notes how the replayed probe failed; only the first failure counts. */
+  private fail(
+    kind: ContradictionKind,
+    edge: number | null,
+    cells: readonly number[],
+    dots: readonly number[],
+    edges: readonly number[] = [],
+  ): void {
+    if (this.failure === null) this.failure = { kind, edge, cells, dots, edges };
+  }
+
+  /** The edges of the loop that line `e` has just closed, from `e` round. */
+  private loopEdges(e: number): number[] {
+    const { grid, edges } = this;
+    const start = grid.edgeDots[e * 2];
+    const out = [e];
+    let prev = e;
+    let d = grid.edgeDots[e * 2 + 1];
+    while (d !== start) {
+      let next = NONE;
+      for (let j = 0; j < 4; j++) {
+        const f = grid.dotEdges[d * 4 + j];
+        if (f !== NONE && f !== prev && edges[f] === Line) {
+          next = f;
+          break;
+        }
+      }
+      if (next === NONE) break;
+      out.push(next);
+      prev = next;
+      d = otherDot(grid, next, d);
+    }
+    return out;
   }
 
   /**
@@ -2162,17 +2272,20 @@ export class Engine {
     this.pendingDots = dots;
   }
 
-  private commit(): void {
+  private commit(probe?: Probe): void {
     const steps = this.steps;
     const changes = this.pending;
     this.pending = null;
     if (steps === null || changes === null || changes.length === 0) return;
-    steps.push({
+    const step: Step = {
       rule: this.pendingRule,
       changes,
       cells: this.pendingCells,
       dots: this.pendingDots,
-    });
+    };
+    steps.push(probe === undefined ? step : { ...step, probe });
+    // A replayed probe's steps are not the solve's: they never stop it.
+    if (this.probing) return;
     if (steps.length >= this.maxSteps) throw new SolverStop("steps");
     if (this.stopAtLine && changes.some((c) => c.state === Line)) throw new SolverStop("steps");
   }

@@ -251,6 +251,8 @@ components:
               items:
                 type: integer
                 minimum: 0
+            probe:
+              $ref: "#/components/schemas/HintProbe"
             before:
               type: array
               items:
@@ -280,7 +282,78 @@ components:
       description: "The next hint: a wrong mark, the next line the rules reach (the
         deduction that draws it, and the crosses before it that it rests on), a
         line from the solution when no rule applies, or solved."
-    HintStep:
+    HintProbe:
+      type: object
+      properties:
+        assumed:
+          type: object
+          properties:
+            edge:
+              type: integer
+              minimum: 0
+            state:
+              type: string
+              enum:
+                - line
+                - cross
+          required:
+            - edge
+            - state
+          description: The other choice for the step's edge.
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/HintDeduction"
+          description: The deductions that follow from it that the contradiction rests on,
+            in order. The last may stop where the rules break.
+        contradiction:
+          type: object
+          properties:
+            kind:
+              type: string
+              enum:
+                - small-loop
+                - dot-three
+                - dead-end
+                - clue-over
+                - clue-under
+                - clue-corner
+                - no-loop
+                - other
+            edge:
+              type:
+                - integer
+                - "null"
+              minimum: 0
+              description: The edge whose mark broke the rules.
+            cells:
+              type: array
+              items:
+                type: integer
+                minimum: 0
+            dots:
+              type: array
+              items:
+                type: integer
+                minimum: 0
+            edges:
+              type: array
+              items:
+                type: integer
+                minimum: 0
+              description: The loop that closed, for small-loop.
+          required:
+            - kind
+            - edge
+            - cells
+            - dots
+            - edges
+      required:
+        - assumed
+        - steps
+        - contradiction
+      description: Only on lookahead steps.
+    HintDeduction:
       type: object
       properties:
         rule:
@@ -347,6 +420,75 @@ components:
         - dots
       description: "One deduction: its rule, the edges it decides, and the cells and
         dots it rests on."
+    HintStep:
+      type: object
+      properties:
+        rule:
+          type: string
+          enum:
+            - clue-zero
+            - clue-satisfied
+            - clue-needs-all
+            - dot-full
+            - dot-continue
+            - dot-dead-end
+            - corner-1
+            - corner-3
+            - adjacent-3s
+            - diagonal-3s
+            - premature-loop
+            - loop-complete
+            - line-into-1
+            - line-into-3
+            - two-passes-on
+            - two-in-corner
+            - ones-side-by-side
+            - three-diagonal-one
+            - corner-chain
+            - parity
+            - colour-1
+            - colour-2
+            - colour-3
+            - colour-chain
+            - unreachable
+            - cut-off
+            - two-exits
+            - lookahead
+        changes:
+          type: array
+          items:
+            type: object
+            properties:
+              edge:
+                type: integer
+                minimum: 0
+              state:
+                type: string
+                enum:
+                  - line
+                  - cross
+            required:
+              - edge
+              - state
+        cells:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+        dots:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+        probe:
+          $ref: "#/components/schemas/HintProbe"
+      required:
+        - rule
+        - changes
+        - cells
+        - dots
+      description: "One deduction: its rule, the edges it decides, the cells and dots
+        it rests on, and for lookahead, its probe."
     HintRequest:
       type: object
       properties:

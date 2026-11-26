@@ -10,6 +10,7 @@ import {
   solve,
 } from "@loophole/core";
 import { expect, type Page, test } from "@playwright/test";
+import { hintView } from "../src/lib/game/hint.ts";
 import { FIXTURES } from "../src/lib/puzzles/fixtures.ts";
 import { FIXTURE_SOLUTIONS } from "../src/lib/test-support/solutions.ts";
 import { board, boardView, crosses, edgePoint, lines, savedLines, twoFingers } from "./board.ts";
@@ -226,7 +227,7 @@ for (const [width, height] of [
         const hint = findHint(puzzle, solution, edges);
         const titles =
           hint.kind === "step"
-            ? [...hint.before, hint.step].map((s) => RULE_TITLE[s.rule])
+            ? (hintView(grid, hint, edges)?.pages.map((pg) => pg.title) ?? [])
             : [title];
         expect(titles).toContain(title);
         for (const [i, t] of titles.entries()) {
@@ -236,6 +237,53 @@ for (const [width, height] of [
           expect([title, i, await board(page).boundingBox()]).toEqual([title, i, before]);
         }
       }
+    });
+
+    test("a try-and-see hint walks through what its supposition forces, and applies only the move (FR-12)", async ({
+      page,
+    }) => {
+      const edges = boardBefore("lookahead");
+      const hint = findHint(puzzle, solution, edges);
+      if (hint.kind !== "step") throw new Error(hint.kind);
+      const view = hintView(grid, hint, edges);
+      if (view === null) throw new Error("no view");
+      const look = [...hint.before, hint.step].find((s) => s.rule === "lookahead");
+      const probe = look?.probe;
+      if (probe === undefined) throw new Error("no probe");
+      await openWith(page, edges);
+      const before = await board(page).boundingBox();
+      await page.getByRole("button", { name: "Hint" }).click();
+      const whatIf = page.locator("[role=application] .what-if, [role=application] .what-if-cross");
+      const conflict = page.locator(
+        "[role=application] .conflict-wash, [role=application] .conflict-edge",
+      );
+      const next = page.getByRole("button", { name: "Next step" });
+      const suppose = view.pages.findIndex((pg) => pg.title.startsWith("Suppose"));
+      for (let i = 0; i < suppose; i++) await next.click();
+      // The supposed mark first, then one more page per forced step, each adding its marks.
+      await expect(page.getByRole("heading", { name: view.pages[suppose].title })).toBeVisible();
+      await expect(whatIf).toHaveCount(1);
+      for (const s of probe.steps) {
+        await next.click();
+        await expect(
+          page.getByRole("heading", { name: `Then: ${RULE_TITLE[s.rule]}` }),
+        ).toBeVisible();
+      }
+      await next.click();
+      await expect(page.getByRole("heading", { name: "That can't be" })).toBeVisible();
+      await expect(conflict).not.toHaveCount(0);
+      // The step's own page: nothing supposed is left on the board.
+      await next.click();
+      await expect(page.getByRole("heading", { name: RULE_TITLE.lookahead })).toBeVisible();
+      await expect(whatIf).toHaveCount(0);
+      await expect(conflict).toHaveCount(0);
+      expect(await board(page).boundingBox()).toEqual(before);
+      await page.getByRole("button", { name: "Apply move" }).click();
+      const changes = hintChanges(edges);
+      const crossed = changes.filter((c) => c.state === EdgeState.Cross).length;
+      const already = [...edges].filter((e) => e === EdgeState.Cross).length;
+      await expect(crosses(page)).toHaveCount(already + crossed);
+      await expect(whatIf).toHaveCount(0);
     });
 
     test("a wrong mark is pointed out first and can be erased", async ({ page }) => {

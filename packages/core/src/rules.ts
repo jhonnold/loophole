@@ -159,9 +159,75 @@ export interface EdgeChange {
  * One applied deduction. `changes` are the edges it set, in order. `cells` and `dots` are the
  * reason: the clue cells and dots a hint highlights.
  */
-export interface Step {
+export interface Deduction {
   readonly rule: RuleId;
   readonly changes: readonly EdgeChange[];
   readonly cells: readonly number[];
   readonly dots: readonly number[];
 }
+
+/**
+ * A solver step: a deduction and, on a lookahead step when the solve was asked to explain them
+ * (`SolveOptions.explain`), the probe that proved it.
+ */
+export interface Step extends Deduction {
+  readonly probe?: Probe;
+}
+
+/**
+ * How a lookahead probe broke the rules:
+ * - `small-loop`: a line closed a loop that is not the whole solution.
+ * - `dot-three`: three lines meet at a dot.
+ * - `dead-end`: a line ends at a dot with no way on.
+ * - `clue-over` / `clue-under`: a number has more lines than it says, or can no longer get enough.
+ * - `clue-corner`: a 1 or a 3 can't be met at a corner the loop can't enter from outside.
+ * - `no-loop`: every edge is decided and there are no lines at all.
+ * - `other`: anything else (only the verifier's deeper probes find these).
+ */
+export const CONTRADICTION_KINDS = [
+  "small-loop",
+  "dot-three",
+  "dead-end",
+  "clue-over",
+  "clue-under",
+  "clue-corner",
+  "no-loop",
+  "other",
+] as const;
+
+export type ContradictionKind = (typeof CONTRADICTION_KINDS)[number];
+
+/**
+ * Where a probe broke the rules. `edge` is the edge whose mark broke them, when one did; `cells`,
+ * `dots` and `edges` are what a hint highlights: the number, the dot, or the loop that closed.
+ */
+export interface Contradiction {
+  readonly kind: ContradictionKind;
+  readonly edge: number | null;
+  readonly cells: readonly number[];
+  readonly dots: readonly number[];
+  readonly edges: readonly number[];
+}
+
+/**
+ * Why a lookahead step holds: `assumed` is the other choice for its edge, `steps` the deductions
+ * that follow from it (the last may be cut short by the contradiction), and `contradiction` where
+ * they break the rules.
+ */
+export interface Probe {
+  readonly assumed: EdgeChange;
+  readonly steps: readonly Deduction[];
+  readonly contradiction: Contradiction;
+}
+
+/** The end of a try-and-see hint: how the assumption broke the rules, in one sentence. */
+export const CONTRADICTION_TEXT: Readonly<Record<ContradictionKind, string>> = {
+  "small-loop": "…and a loop closes here that leaves the rest out, which can't be.",
+  "dot-three": "…and three lines meet at this dot, which can't be.",
+  "dead-end": "…and a line ends at this dot with no way on, which can't be.",
+  "clue-over": "…and this number ends up with too many lines, which can't be.",
+  "clue-under": "…and this number can no longer get enough lines, which can't be.",
+  "clue-corner": "…and this number can't be met at this corner, which can't be.",
+  "no-loop": "…and no line is left anywhere on the board, which can't be.",
+  other: "…and the rules break here, which can't be.",
+};

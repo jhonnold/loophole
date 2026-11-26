@@ -1,5 +1,13 @@
 import type { ApiClient, Schemas } from "@loophole/api-client";
-import { EdgeState, encodeEdges, type Hint, parsePuzzle, type Step } from "@loophole/core";
+import {
+  type EdgeChange as CoreEdgeChange,
+  type Deduction,
+  EdgeState,
+  encodeEdges,
+  type Hint,
+  parsePuzzle,
+  type Step,
+} from "@loophole/core";
 import type { PuzzleSource, PuzzleSummary } from "./source.ts";
 
 /** How many recent server puzzles the list shows. */
@@ -30,15 +38,21 @@ function toHint(h: Schemas["Hint"]): Hint {
 }
 
 function toStep(s: Schemas["HintStep"]): Step {
+  const step = toDeduction(s);
+  if (s.probe === undefined) return step;
+  const { assumed, steps, contradiction } = s.probe;
   return {
-    rule: s.rule,
-    changes: s.changes.map((c) => ({
-      edge: c.edge,
-      state: c.state === "line" ? EdgeState.Line : EdgeState.Cross,
-    })),
-    cells: s.cells,
-    dots: s.dots,
+    ...step,
+    probe: { assumed: toChange(assumed), steps: steps.map(toDeduction), contradiction },
   };
+}
+
+function toDeduction(s: Schemas["HintDeduction"]): Deduction {
+  return { rule: s.rule, changes: s.changes.map(toChange), cells: s.cells, dots: s.dots };
+}
+
+function toChange(c: { edge: number; state: "line" | "cross" }): CoreEdgeChange {
+  return { edge: c.edge, state: c.state === "line" ? EdgeState.Line : EdgeState.Cross };
 }
 
 /** Puzzles from the server's API: recent published puzzles, clues only, and hints. */

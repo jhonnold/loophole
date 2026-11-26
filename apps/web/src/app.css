@@ -12,6 +12,8 @@
   --ai: #2e4c8a;
   --ai-wash: rgb(46 76 138 / 0.12);
   --hint-wash: rgb(46 76 138 / 0.16);
+  --conflict-wash: rgb(194 59 34 / 0.3);
+  --what-if: rgb(46 76 138 / 0.7);
   --solved-wash: #f8e1e6;
   --disabled: #a69e90;
   --on-ink: #fffdf8;
@@ -32,6 +34,8 @@
   --ai: #8fb1f0;
   --ai-wash: rgb(143 177 240 / 0.16);
   --hint-wash: rgb(143 177 240 / 0.2);
+  --conflict-wash: rgb(242 120 94 / 0.34);
+  --what-if: rgb(143 177 240 / 0.7);
   --solved-wash: rgb(242 120 94 / 0.16);
   --disabled: #5e6880;
   --on-ink: #111827;
@@ -51,6 +55,8 @@
     --ai: #8fb1f0;
     --ai-wash: rgb(143 177 240 / 0.16);
     --hint-wash: rgb(143 177 240 / 0.2);
+    --conflict-wash: rgb(242 120 94 / 0.34);
+    --what-if: rgb(143 177 240 / 0.7);
     --solved-wash: rgb(242 120 94 / 0.16);
     --disabled: #5e6880;
     --on-ink: #111827;

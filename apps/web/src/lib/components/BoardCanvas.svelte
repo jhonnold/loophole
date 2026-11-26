@@ -36,6 +36,8 @@
       wash: get("--solved-wash"),
       ai: get("--ai"),
       hintWash: get("--hint-wash"),
+      conflictWash: get("--conflict-wash"),
+      whatIf: get("--what-if"),
     };
   }
 

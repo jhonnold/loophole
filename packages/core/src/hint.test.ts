@@ -4,10 +4,10 @@ import { analyzeBoard } from "./analyze.ts";
 import { countSolutions } from "./bruteforce.ts";
 import { decodeEdges, parsePuzzle } from "./format.ts";
 import { generate } from "./generate.ts";
-import { EdgeState, hEdgeIndex } from "./grid.ts";
+import { EdgeState, type Grid, hEdgeIndex } from "./grid.ts";
 import { findHint } from "./hint.ts";
 import type { Puzzle } from "./puzzle.ts";
-import type { RuleId } from "./rules.ts";
+import type { Deduction, Probe, RuleId, Step } from "./rules.ts";
 import { solve } from "./solver.ts";
 import { arbPuzzleWithSolution } from "./test-support/arbitraries.ts";
 import { levelRuleIds } from "./test-support/levels.ts";
@@ -46,7 +46,7 @@ function hintWalk(p: Puzzle, solution: Uint8Array): { rules: Set<RuleId>; reveal
 describe("findHint", () => {
   test("names the first line from an empty board and the crosses it rests on", () => {
     // 2×2 with a 0 in the top-left cell: the 0's four sides are crossed, which leaves two dots with
-    // one open edge each, crossed too; lookahead then draws the first line.
+    // one open edge each, crossed too (and so are two more); lookahead then draws the first line.
     const p = puzzle(2, 2, "0...");
     const solution = decodeEdges(p.grid, "222121222211");
     const hint = findHint(p, solution, new Uint8Array(p.grid.edgeCount));
@@ -57,6 +57,31 @@ describe("findHint", () => {
         changes: [{ edge: 3, state: EdgeState.Line }],
         cells: [],
         dots: [4, 5],
+        // Crossed, the edge leaves the dots around it dead ends, and no line is left anywhere.
+        probe: {
+          assumed: { edge: 3, state: EdgeState.Cross },
+          steps: [
+            {
+              rule: "dot-dead-end",
+              changes: [{ edge: 10, state: EdgeState.Cross }],
+              cells: [],
+              dots: [4],
+            },
+            {
+              rule: "dot-dead-end",
+              changes: [{ edge: 11, state: EdgeState.Cross }],
+              cells: [],
+              dots: [5],
+            },
+            {
+              rule: "dot-dead-end",
+              changes: [{ edge: 5, state: EdgeState.Cross }],
+              cells: [],
+              dots: [7],
+            },
+          ],
+          contradiction: { kind: "no-loop", edge: null, cells: [], dots: [], edges: [] },
+        },
       },
       before: [
         {
@@ -81,6 +106,19 @@ describe("findHint", () => {
           changes: [{ edge: 8, state: EdgeState.Cross }],
           cells: [],
           dots: [2],
+        },
+        // The probe ends with no line anywhere, which rests on every cross, these two included.
+        {
+          rule: "dot-dead-end",
+          changes: [{ edge: 9, state: EdgeState.Cross }],
+          cells: [],
+          dots: [3],
+        },
+        {
+          rule: "dot-dead-end",
+          changes: [{ edge: 4, state: EdgeState.Cross }],
+          cells: [],
+          dots: [6],
         },
       ],
     });
@@ -265,5 +303,258 @@ describe("findHint", () => {
       ),
       { numRuns: 300 },
     );
+  });
+});
+
+/** Lines and open edges at dot `d`. */
+function dotCounts(grid: Grid, board: Uint8Array, d: number): { lines: number; open: number } {
+  let lines = 0;
+  let open = 0;
+  for (let j = 0; j < 4; j++) {
+    const e = grid.dotEdges[d * 4 + j];
+    if (e < 0) continue;
+    if (board[e] === EdgeState.Line) lines++;
+    else if (board[e] === EdgeState.Unknown) open++;
+  }
+  return { lines, open };
+}
+
+/** Lines and open edges round cell `c`. */
+function cellCounts(grid: Grid, board: Uint8Array, c: number): { lines: number; open: number } {
+  let lines = 0;
+  let open = 0;
+  for (let j = 0; j < 4; j++) {
+    const s = board[grid.cellEdges[c * 4 + j]];
+    if (s === EdgeState.Line) lines++;
+    else if (s === EdgeState.Unknown) open++;
+  }
+  return { lines, open };
+}
+
+/** The dot at the far end of the line path that ends at dot `from`. */
+function pathEnd(grid: Grid, board: Uint8Array, from: number): number {
+  let d = from;
+  let prev = -1;
+  for (;;) {
+    let next = -1;
+    for (let j = 0; j < 4; j++) {
+      const e = grid.dotEdges[d * 4 + j];
+      if (e >= 0 && e !== prev && board[e] === EdgeState.Line) next = e;
+    }
+    if (next < 0) return d;
+    prev = next;
+    d = grid.edgeDots[next * 2] === d ? grid.edgeDots[next * 2 + 1] : grid.edgeDots[next * 2];
+    if (d === from) return d;
+  }
+}
+
+/**
+ * Checks that a probe step's rule applies on `board`, the board the hint shows just before it, so a
+ * page the walk kept never rests on a step it left out. Probes in hints run only the worklist rules.
+ */
+function checkRuleHolds(p: Puzzle, board: Uint8Array, step: Deduction): void {
+  const { grid } = p;
+  const [c] = step.cells;
+  const [d] = step.dots;
+  switch (step.rule) {
+    case "clue-zero":
+      expect(p.clues[c]).toBe(0);
+      break;
+    case "clue-satisfied":
+      expect(cellCounts(grid, board, c).lines).toBe(p.clues[c]);
+      break;
+    case "clue-needs-all": {
+      const { lines, open } = cellCounts(grid, board, c);
+      expect(lines + open).toBe(p.clues[c]);
+      break;
+    }
+    case "dot-full":
+      expect(dotCounts(grid, board, d).lines).toBe(2);
+      break;
+    case "dot-continue":
+      expect(dotCounts(grid, board, d)).toEqual({ lines: 1, open: 1 });
+      break;
+    case "dot-dead-end":
+      expect(dotCounts(grid, board, d)).toEqual({ lines: 0, open: 1 });
+      break;
+    case "corner-1":
+    case "corner-3": {
+      expect(p.clues[c]).toBe(step.rule === "corner-1" ? 1 : 3);
+      // The dot's edges outside the cell are crossed (or off the board).
+      const own = new Set(Array.from({ length: 4 }, (_, j) => grid.cellEdges[c * 4 + j]));
+      for (let j = 0; j < 4; j++) {
+        const e = grid.dotEdges[d * 4 + j];
+        if (e >= 0 && !own.has(e)) expect(board[e]).toBe(EdgeState.Cross);
+      }
+      break;
+    }
+    case "premature-loop":
+      expect(pathEnd(grid, board, step.dots[0])).toBe(step.dots[1]);
+      break;
+    default:
+      throw new Error(`unexpected rule in a probe: ${step.rule}`);
+  }
+}
+
+/**
+ * Replays a probe on `board`: the assumed state, then its steps, each setting only open edges and
+ * each rule applying where it is. Then checks the contradiction it names is there to see.
+ */
+function checkProbe(p: Puzzle, board: Uint8Array, probe: Probe): void {
+  const { grid } = p;
+  const what = board.slice();
+  expect(what[probe.assumed.edge]).toBe(EdgeState.Unknown);
+  what[probe.assumed.edge] = probe.assumed.state;
+  for (const s of probe.steps) {
+    checkRuleHolds(p, what, s);
+    for (const { edge, state } of s.changes) {
+      expect(what[edge]).toBe(EdgeState.Unknown);
+      what[edge] = state;
+    }
+  }
+  const x = probe.contradiction;
+  switch (x.kind) {
+    case "small-loop": {
+      // A closed loop of lines: every dot on it meets exactly two of its edges.
+      expect(x.edges.length).toBeGreaterThan(0);
+      const degree = new Map<number, number>();
+      for (const e of x.edges) {
+        expect(what[e]).toBe(EdgeState.Line);
+        for (const d of [grid.edgeDots[e * 2], grid.edgeDots[e * 2 + 1]]) {
+          degree.set(d, (degree.get(d) ?? 0) + 1);
+        }
+      }
+      for (const n of degree.values()) expect(n).toBe(2);
+      break;
+    }
+    case "dot-three":
+      expect(dotCounts(grid, what, x.dots[0]).lines).toBeGreaterThanOrEqual(3);
+      break;
+    case "dead-end":
+      expect(dotCounts(grid, what, x.dots[0])).toEqual({ lines: 1, open: 0 });
+      break;
+    case "clue-over":
+    case "clue-under": {
+      const c = x.cells[0];
+      let lines = 0;
+      let open = 0;
+      for (let j = 0; j < 4; j++) {
+        const s = what[grid.cellEdges[c * 4 + j]];
+        if (s === EdgeState.Line) lines++;
+        else if (s === EdgeState.Unknown) open++;
+      }
+      if (x.kind === "clue-over") expect(lines).toBeGreaterThan(p.clues[c]);
+      else expect(lines + open).toBeLessThan(p.clues[c]);
+      break;
+    }
+    case "no-loop":
+      expect(what.every((s) => s === EdgeState.Cross)).toBe(true);
+      break;
+    case "clue-corner":
+      expect([1, 3]).toContain(p.clues[x.cells[0]]);
+      expect(x.dots.length).toBe(1);
+      break;
+    default:
+      throw new Error(`unexpected contradiction ${x.kind}`);
+  }
+}
+
+/** Every hint from an empty board to the end, with the board each was given on. */
+function hintBoards(p: Puzzle, solution: Uint8Array): { board: Uint8Array; steps: Step[] }[] {
+  const board = new Uint8Array(p.grid.edgeCount);
+  const out: { board: Uint8Array; steps: Step[] }[] = [];
+  for (let n = 0; n <= p.grid.edgeCount; n++) {
+    const hint = findHint(p, solution, board);
+    if (hint.kind === "solved") return out;
+    if (hint.kind === "reveal") {
+      board[hint.edge] = EdgeState.Line;
+      continue;
+    }
+    if (hint.kind !== "step") throw new Error(`unexpected ${hint.kind}`);
+    const steps = [...hint.before, hint.step];
+    out.push({ board: board.slice(), steps });
+    for (const step of steps) for (const { edge, state } of step.changes) board[edge] = state;
+  }
+  throw new Error("the hints did not finish the puzzle");
+}
+
+describe("try-and-see hints", () => {
+  // The techniques page's lookahead lesson: the 4×4 puzzle generated with seed "la-44-150".
+  const lesson = puzzle(4, 4, ".2..12.33..2.1..");
+  const lessonBoard = decodeEdges(lesson.grid, "1020200021001200221010000120001100022100");
+
+  test("carry the assumption, the moves it forces and the loop it closes", () => {
+    const solution = solve(lesson).edges;
+    const hint = findHint(lesson, solution, lessonBoard);
+    if (hint.kind !== "step") throw new Error(hint.kind);
+    const [look] = hint.before;
+    expect(look.rule).toBe("lookahead");
+    expect(look.changes).toEqual([{ edge: 1, state: EdgeState.Cross }]);
+    const probe = look.probe;
+    if (probe === undefined) throw new Error("no probe");
+    // Supposing the top of the 2 were a line, the dot rules run on until the middle 2 closes a loop.
+    expect(probe.assumed).toEqual({ edge: 1, state: EdgeState.Line });
+    expect(probe.steps.map((s) => s.rule)).toEqual([
+      "dot-full",
+      "dot-continue",
+      "dot-dead-end",
+      "clue-needs-all",
+    ]);
+    expect(probe.contradiction.kind).toBe("small-loop");
+    expect(probe.contradiction.edge).toBe(27);
+    checkProbe(lesson, lessonBoard, probe);
+  });
+
+  test("solve gives probes only when asked, and the same steps either way", () => {
+    const plain = solve(lesson, { initial: lessonBoard });
+    const explained = solve(lesson, { initial: lessonBoard, explain: true });
+    const strip = (steps: readonly Step[]) =>
+      steps.map(({ rule, changes, cells, dots }) => ({ rule, changes, cells, dots }));
+    expect(strip(explained.steps)).toEqual(strip(plain.steps));
+    expect(plain.steps.every((s) => s.probe === undefined)).toBe(true);
+    const looks = explained.steps.filter((s) => s.rule === "lookahead");
+    expect(looks.length).toBeGreaterThan(0);
+    expect(looks.every((s) => s.probe !== undefined)).toBe(true);
+    expect(explained.edges).toEqual(plain.edges);
+  });
+
+  test("keep only the moves the contradiction rests on", () => {
+    // From the solve's full probe to the hint's: fewer or the same steps, in the same order.
+    const full = solve(lesson, { initial: lessonBoard, explain: true, stopAtLine: true });
+    const hint = findHint(lesson, solve(lesson).edges, lessonBoard);
+    if (hint.kind !== "step") throw new Error(hint.kind);
+    const all = full.steps[0].probe?.steps ?? [];
+    const kept = hint.before[0].probe?.steps ?? [];
+    const key = (s: unknown) => JSON.stringify(s);
+    let i = 0;
+    for (const s of kept) {
+      while (i < all.length && key(all[i]) !== key(s)) i++;
+      expect(i).toBeLessThan(all.length);
+      i++;
+    }
+  });
+
+  test("every probe replays to the contradiction it names (property)", () => {
+    let probes = 0;
+    fc.assert(
+      fc.property(fc.integer({ min: 0, max: 1e6 }), fc.constantFrom(5, 6, 7), (n, size) => {
+        const { puzzle: p, solution } = generate({ width: size, height: size, seed: `la-${n}` });
+        for (const { board, steps } of hintBoards(p, solution)) {
+          const now = board.slice();
+          for (const step of steps) {
+            if (step.rule === "lookahead") {
+              // The replay always matches the silent probe, so every lookahead step has one.
+              if (step.probe === undefined) throw new Error("lookahead step without a probe");
+              checkProbe(p, now, step.probe);
+              probes++;
+            }
+            for (const { edge, state } of step.changes) now[edge] = state;
+          }
+        }
+      }),
+      { numRuns: 40 },
+    );
+    // The property means nothing if the generator's hard puzzles never need lookahead.
+    expect(probes).toBeGreaterThan(10);
   });
 });

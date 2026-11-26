@@ -1,5 +1,5 @@
 import { z } from "@hono/zod-openapi";
-import { LEVELS, RULE_IDS } from "@loophole/core";
+import { CONTRADICTION_KINDS, LEVELS, RULE_IDS } from "@loophole/core";
 
 // Request and response bodies of the HTTP API. These are the wire shapes the OpenAPI document and
 // the generated client are built from; routes translate them to and from domain types.
@@ -131,8 +131,39 @@ const StepFields = {
   dots: z.array(z.int().min(0)),
 };
 
-export const HintStepSchema = z.object(StepFields).openapi("HintStep", {
+export const HintDeductionSchema = z.object(StepFields).openapi("HintDeduction", {
   description: "One deduction: its rule, the edges it decides, and the cells and dots it rests on.",
+});
+
+const EdgeChangeSchema = z.object({ edge: EdgeIndex, state: z.enum(["line", "cross"]) });
+
+export const HintProbeSchema = z
+  .object({
+    assumed: EdgeChangeSchema.openapi({ description: "The other choice for the step's edge." }),
+    steps: z.array(HintDeductionSchema).openapi({
+      description:
+        "The deductions that follow from it that the contradiction rests on, in order. The last may stop where the rules break.",
+    }),
+    contradiction: z.object({
+      kind: z.enum(CONTRADICTION_KINDS),
+      edge: EdgeIndex.nullable().openapi({ description: "The edge whose mark broke the rules." }),
+      cells: z.array(z.int().min(0)),
+      dots: z.array(z.int().min(0)),
+      edges: z.array(EdgeIndex).openapi({ description: "The loop that closed, for small-loop." }),
+    }),
+  })
+  .openapi("HintProbe", {
+    description:
+      "Why a lookahead step holds: assuming the other choice for its edge leads to a contradiction.",
+  });
+
+const ProbeField = {
+  probe: HintProbeSchema.optional().openapi({ description: "Only on lookahead steps." }),
+};
+
+export const HintStepSchema = z.object({ ...StepFields, ...ProbeField }).openapi("HintStep", {
+  description:
+    "One deduction: its rule, the edges it decides, the cells and dots it rests on, and for lookahead, its probe.",
 });
 
 export const HintSchema = z
@@ -151,6 +182,7 @@ export const HintSchema = z
     z.object({
       kind: z.literal("step"),
       ...StepFields,
+      ...ProbeField,
       before: z.array(HintStepSchema).openapi({
         description:
           "The steps the line rests on, in order: each only crosses edges. Crosses the line doesn't need are left out.",
