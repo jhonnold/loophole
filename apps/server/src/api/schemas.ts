@@ -157,13 +157,52 @@ export const HintProbeSchema = z
       "Why a lookahead step holds: assuming the other choice for its edge leads to a contradiction.",
   });
 
+const SideNode = EdgeIndex.nullable().openapi({
+  description: "A cell, or null for off the board.",
+});
+
+const SideFactSchema = z.object({
+  a: SideNode,
+  b: SideNode,
+  same: z.boolean().openapi({ description: "Whether the two are on the same side of the loop." }),
+  clue: EdgeIndex.nullable().openapi({
+    description: "The clue cell that forced it, or null for a fact read off the marks.",
+  }),
+});
+
+export const HintSidesSchema = z
+  .object({
+    cells: z
+      .array(z.object({ cell: EdgeIndex, group: z.int().min(0), flip: z.boolean() }))
+      .openapi({
+        description:
+          "Each cell the proof places. Group 0 is linked to off the board (outside), so flip means inside; in another group, flip means on the other side from the group's first cell.",
+      }),
+    edges: z.array(EdgeIndex).openapi({
+      description:
+        "The marked edges the chains run along: a cross keeps the side, a line switches it.",
+    }),
+    known: z.array(SideFactSchema).openapi({
+      description:
+        "What the clues' neighbours were known to be, which the forced relations rest on.",
+    }),
+    forced: z.array(SideFactSchema).openapi({
+      description: "What the clues worked out from them. Empty for parity.",
+    }),
+  })
+  .openapi("HintSides", {
+    description:
+      "Why a parity or colouring step's cells are on the sides of the loop they are, from the marks alone.",
+  });
+
 const ProbeField = {
   probe: HintProbeSchema.optional().openapi({ description: "Only on lookahead steps." }),
+  sides: HintSidesSchema.optional().openapi({ description: "Only on parity and colouring steps." }),
 };
 
 export const HintStepSchema = z.object({ ...StepFields, ...ProbeField }).openapi("HintStep", {
   description:
-    "One deduction: its rule, the edges it decides, the cells and dots it rests on, and for lookahead, its probe.",
+    "One deduction: its rule, the edges it decides, the cells and dots it rests on, for lookahead its probe, and for parity and colouring which side of the loop its cells are on.",
 });
 
 export const HintSchema = z

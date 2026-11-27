@@ -253,6 +253,8 @@ components:
                 minimum: 0
             probe:
               $ref: "#/components/schemas/HintProbe"
+            sides:
+              $ref: "#/components/schemas/HintSides"
             before:
               type: array
               items:
@@ -420,6 +422,109 @@ components:
         - dots
       description: "One deduction: its rule, the edges it decides, and the cells and
         dots it rests on."
+    HintSides:
+      type: object
+      properties:
+        cells:
+          type: array
+          items:
+            type: object
+            properties:
+              cell:
+                type: integer
+                minimum: 0
+              group:
+                type: integer
+                minimum: 0
+              flip:
+                type: boolean
+            required:
+              - cell
+              - group
+              - flip
+          description: Each cell the proof places. Group 0 is linked to off the board
+            (outside), so flip means inside; in another group, flip means on the
+            other side from the group's first cell.
+        edges:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+          description: "The marked edges the chains run along: a cross keeps the side, a
+            line switches it."
+        known:
+          type: array
+          items:
+            type: object
+            properties:
+              a:
+                type:
+                  - integer
+                  - "null"
+                minimum: 0
+                description: A cell, or null for off the board.
+              b:
+                type:
+                  - integer
+                  - "null"
+                minimum: 0
+                description: A cell, or null for off the board.
+              same:
+                type: boolean
+                description: Whether the two are on the same side of the loop.
+              clue:
+                type:
+                  - integer
+                  - "null"
+                minimum: 0
+                description: The clue cell that forced it, or null for a fact read off the
+                  marks.
+            required:
+              - a
+              - b
+              - same
+              - clue
+          description: What the clues' neighbours were known to be, which the forced
+            relations rest on.
+        forced:
+          type: array
+          items:
+            type: object
+            properties:
+              a:
+                type:
+                  - integer
+                  - "null"
+                minimum: 0
+                description: A cell, or null for off the board.
+              b:
+                type:
+                  - integer
+                  - "null"
+                minimum: 0
+                description: A cell, or null for off the board.
+              same:
+                type: boolean
+                description: Whether the two are on the same side of the loop.
+              clue:
+                type:
+                  - integer
+                  - "null"
+                minimum: 0
+                description: The clue cell that forced it, or null for a fact read off the
+                  marks.
+            required:
+              - a
+              - b
+              - same
+              - clue
+          description: What the clues worked out from them. Empty for parity.
+      required:
+        - cells
+        - edges
+        - known
+        - forced
+      description: Only on parity and colouring steps.
     HintStep:
       type: object
       properties:
@@ -482,13 +587,16 @@ components:
             minimum: 0
         probe:
           $ref: "#/components/schemas/HintProbe"
+        sides:
+          $ref: "#/components/schemas/HintSides"
       required:
         - rule
         - changes
         - cells
         - dots
       description: "One deduction: its rule, the edges it decides, the cells and dots
-        it rests on, and for lookahead, its probe."
+        it rests on, for lookahead its probe, and for parity and colouring which
+        side of the loop its cells are on."
     HintRequest:
       type: object
       properties:

@@ -28,7 +28,17 @@
  */
 import { EdgeState, type Grid, NONE } from "./grid.ts";
 import { NO_CLUE, type Puzzle } from "./puzzle.ts";
-import type { Contradiction, ContradictionKind, EdgeChange, Probe, RuleId, Step } from "./rules.ts";
+import type {
+  Contradiction,
+  ContradictionKind,
+  EdgeChange,
+  Probe,
+  RuleId,
+  SideCell,
+  SideFact,
+  SideProof,
+  Step,
+} from "./rules.ts";
 
 const { Unknown, Line, Cross } = EdgeState;
 
@@ -182,7 +192,8 @@ export class Engine {
   stopAtLine = false;
   /**
    * While steps are recorded, give each lookahead step its probe (`Step.probe`): the failed probe is
-   * run once more with recording on. Only hints ask for it.
+   * run once more with recording on; and each parity and colouring step its side proof
+   * (`sideProof`). Only hints ask for it.
    */
   explain = false;
 
@@ -202,6 +213,8 @@ export class Engine {
   private pendingRule: RuleId = "clue-zero";
   private pendingCells: readonly number[] = [];
   private pendingDots: readonly number[] = [];
+  /** The pending step's side proof, for an explained parity or colouring step. */
+  private pendingSides: SideProof | undefined = undefined;
   /** True while `explainProbe` replays a probe: rules then say how they fail (`fail`). */
   private probing = false;
   /** The first failure the replayed probe met, or null. */
@@ -1083,6 +1096,7 @@ export class Engine {
           [na, nb].filter((n) => n !== C),
           [],
         );
+        if (this.explaining()) this.pendingSides = this.sideProof(na, nb, []);
       }
       if (!this.assign(e, pa !== pb ? Line : Cross)) return -1;
       this.commit();
@@ -1455,7 +1469,7 @@ export class Engine {
     ufParity[small] = pa ^ pb ^ x;
     if (this.steps !== null) {
       const deps = this.colourDeps(this.clues[i], known, a, b, x);
-      this.colourRecs.push({ u: cNode[a], v: cNode[b], cell: i, deps });
+      this.colourRecs.push({ u: cNode[a], v: cNode[b], x, cell: i, deps });
     }
     let n = small;
     do {
@@ -1492,14 +1506,15 @@ export class Engine {
         // The pass's only edge while steps are recorded, so the forest is built once a pass.
         const why = colourReason(this.colourForest(), this.colourRecs, n, other);
         // The edge's cells too, unless they hold a clue the reason does not use.
-        const cells = new Set(why);
+        const cells = new Set(why.cells);
         if (n !== C && this.clues[n] === NO_CLUE) cells.add(n);
         if (other !== C && this.clues[other] === NO_CLUE) cells.add(other);
         this.begin(
-          why.length === 1 ? COLOUR_RULE[this.clues[why[0]]] : "colour-chain",
+          why.cells.length === 1 ? COLOUR_RULE[this.clues[why.cells[0]]] : "colour-chain",
           [...cells].sort((p, q) => p - q),
           [],
         );
+        if (this.explaining()) this.pendingSides = this.sideProof(n, other, why.recs);
       }
       if (!this.assign(e, state)) return false;
       this.commit();
@@ -1593,6 +1608,178 @@ export class Engine {
       link(this.colourRecs[x].u, this.colourRecs[x].v, x);
     }
     return forest;
+  }
+
+  /** True while an explained solve records its own steps (not a replayed probe's). */
+  private explaining(): boolean {
+    return this.explain && this.steps !== null && !this.probing;
+  }
+
+  /**
+   * The side proof (`Deduction.sides`) of a parity or colouring step that decides the edge between
+   * nodes `p` and `q`, from the known edges and the colouring relations `recs` of its reason. Each
+   * pair it needs linked (p and q, then the pairs each relation it uses rested on) is joined by a
+   * shortest chain of links: known edges and those relations, and for a relation's own pairs only
+   * the relations added before it, so the proof never leans on what it proves. A pair whose chains
+   * reach off the board gets one chain from each node to it instead, so its sides are known for
+   * sure. The cells' sides are read off the links used. Undefined if a pair can't be linked, which
+   * the union-find rules out.
+   */
+  private sideProof(p: number, q: number, recs: readonly number[]): SideProof | undefined {
+    const { grid, edges, colourRecs } = this;
+    const C = grid.cellCount;
+    const n = C + 1;
+    // A parity step can come before the first colouring pass, which sets these up.
+    if (this.ufNext.length === 0) this.initColour();
+    // Links are encoded as an edge index, or -2 - r for colouring relation r.
+    const relAt = new Map<number, number[]>();
+    for (const r of recs) {
+      for (const v of [colourRecs[r].u, colourRecs[r].v]) {
+        const at = relAt.get(v);
+        if (at === undefined) relAt.set(v, [r]);
+        else at.push(r);
+      }
+    }
+    const linksOf = (v: number, limit: number, out: number[]): void => {
+      out.length = 0;
+      const list = v === C ? this.borderEdges : grid.cellEdges;
+      const from = v === C ? 0 : v * 4;
+      const to = v === C ? list.length : from + 4;
+      for (let x = from; x < to; x++) if (edges[list[x]] !== Unknown) out.push(list[x]);
+      for (const r of relAt.get(v) ?? []) if (r < limit) out.push(-2 - r);
+    };
+    const otherEnd = (v: number, link: number): number => {
+      if (link >= 0) {
+        const s = sideNode(grid, link, 0);
+        return s === v ? sideNode(grid, link, 1) : s;
+      }
+      const rec = colourRecs[-2 - link];
+      return rec.u === v ? rec.v : rec.u;
+    };
+    const flips = (link: number): number =>
+      link >= 0 ? (edges[link] === Line ? 1 : 0) : colourRecs[-2 - link].x;
+
+    // Breadth-first search from one node, keeping the link each node was reached by.
+    const via = new Int32Array(n);
+    const prev = new Int32Array(n);
+    const stamp = new Int32Array(n);
+    let round = 0;
+    const links: number[] = [];
+    const search = (from: number, limit: number): void => {
+      round++;
+      stamp[from] = round;
+      prev[from] = NONE;
+      const queue = [from];
+      for (let h = 0; h < queue.length; h++) {
+        const v = queue[h];
+        linksOf(v, limit, links);
+        for (const l of links) {
+          const w = otherEnd(v, l);
+          if (stamp[w] === round) continue;
+          stamp[w] = round;
+          via[w] = l;
+          prev[w] = v;
+          queue.push(w);
+        }
+      }
+    };
+    const usedEdges = new Set<number>();
+    const usedRecs = new Set<number>();
+    const work: number[] = [p, q, Number.POSITIVE_INFINITY];
+    // Marks the chain the last search found to `to` as used, and queues the pairs its relations rest on.
+    const take = (to: number): void => {
+      for (let v = to; prev[v] !== NONE; v = prev[v]) {
+        const l = via[v];
+        if (l >= 0) {
+          usedEdges.add(l);
+          continue;
+        }
+        const r = -2 - l;
+        if (usedRecs.has(r)) continue;
+        usedRecs.add(r);
+        const { deps } = colourRecs[r];
+        for (let x = 0; x < deps.length; x += 2) work.push(deps[x], deps[x + 1], r);
+      }
+    };
+    for (let w = 0; w < work.length; w += 3) {
+      const a = work[w];
+      const b = work[w + 1];
+      const limit = work[w + 2];
+      search(a, limit);
+      if (stamp[b] !== round) return undefined;
+      if (stamp[C] !== round) {
+        take(b);
+        continue;
+      }
+      take(C);
+      search(b, limit);
+      take(C);
+    }
+
+    // Sides: off the board first (group 0, outside), then each pair's nodes in turn.
+    const adj = new Map<number, number[]>();
+    const addAdj = (v: number, l: number) => {
+      const at = adj.get(v);
+      if (at === undefined) adj.set(v, [l]);
+      else at.push(l);
+    };
+    for (const e of usedEdges) {
+      addAdj(sideNode(grid, e, 0), e);
+      addAdj(sideNode(grid, e, 1), e);
+    }
+    for (const r of usedRecs) {
+      addAdj(colourRecs[r].u, -2 - r);
+      addAdj(colourRecs[r].v, -2 - r);
+    }
+    const group = new Map<number, number>();
+    const flip = new Map<number, number>();
+    const place = (start: number, g: number): void => {
+      group.set(start, g);
+      flip.set(start, 0);
+      const queue = [start];
+      for (let h = 0; h < queue.length; h++) {
+        const v = queue[h];
+        for (const l of adj.get(v) ?? []) {
+          const w = otherEnd(v, l);
+          if (group.has(w)) continue;
+          group.set(w, g);
+          flip.set(w, (flip.get(v) as number) ^ flips(l));
+          queue.push(w);
+        }
+      }
+    };
+    let groups = 1;
+    if (adj.has(C) || p === C || q === C) place(C, 0);
+    for (let w = 0; w < work.length; w += 3) {
+      for (const v of [work[w], work[w + 1]]) if (!group.has(v)) place(v, groups++);
+    }
+    const out = (v: number) => (v === C ? NONE : v);
+    const cells: SideCell[] = [];
+    for (const [cell, g] of group) {
+      if (cell !== C) cells.push({ cell, group: g, flip: flip.get(cell) === 1 });
+    }
+    cells.sort((s, t) => s.cell - t.cell);
+    const forced: SideFact[] = [];
+    const known: SideFact[] = [];
+    const knownSeen = new Set<number>();
+    for (const r of [...usedRecs].sort((s, t) => s - t)) {
+      const rec = colourRecs[r];
+      forced.push({ a: out(rec.u), b: out(rec.v), same: rec.x === 0, clue: rec.cell });
+      for (let x = 0; x < rec.deps.length; x += 2) {
+        const a = rec.deps[x];
+        const b = rec.deps[x + 1];
+        const key = Math.min(a, b) * n + Math.max(a, b);
+        if (knownSeen.has(key)) continue;
+        knownSeen.add(key);
+        known.push({ a: out(a), b: out(b), same: flip.get(a) === flip.get(b), clue: NONE });
+      }
+    }
+    return {
+      cells,
+      edges: [...usedEdges].sort((s, t) => s - t),
+      known,
+      forced,
+    };
   }
 
   /** Queues the clue cells 1–3 at or beside node `n` (the border cells for the outside node). */
@@ -2282,6 +2469,7 @@ export class Engine {
   }
 
   private begin(rule: RuleId, cells: readonly number[], dots: readonly number[]): void {
+    this.pendingSides = undefined;
     if (this.steps === null) {
       this.pending = null;
       this.fires++;
@@ -2298,11 +2486,14 @@ export class Engine {
     const changes = this.pending;
     this.pending = null;
     if (steps === null || changes === null || changes.length === 0) return;
+    const sides = this.pendingSides;
+    this.pendingSides = undefined;
     const step: Step = {
       rule: this.pendingRule,
       changes,
       cells: this.pendingCells,
       dots: this.pendingDots,
+      ...(sides === undefined ? {} : { sides }),
     };
     steps.push(probe === undefined ? step : { ...step, probe });
     // A replayed probe's steps are not the solve's: they never stop it.
@@ -2383,10 +2574,14 @@ function across(grid: Grid, i: number, j: number): number {
 /** The rule a colouring step resting on one clue is named by, indexed by that clue. */
 const COLOUR_RULE: readonly RuleId[] = ["colour-chain", "colour-1", "colour-2", "colour-3"];
 
-/** A relation the colouring rule added: its two nodes, its clue cell, the node pairs it used. */
+/**
+ * A relation the colouring rule added: its two nodes, on different sides exactly when `x` is 1, its
+ * clue cell, and the node pairs it used (flat).
+ */
 interface ColourRec {
   readonly u: number;
   readonly v: number;
+  readonly x: number;
   readonly cell: number;
   readonly deps: readonly number[];
 }
@@ -2437,10 +2632,16 @@ function forestPath(f: Forest, a: number, b: number): number[] {
 }
 
 /**
- * The clue cells a colouring step that links nodes `a` and `b` rests on: the cells of the colouring
- * relations on the path between them and, in turn, of the relations each of those used. Sorted.
+ * What a colouring step that links nodes `a` and `b` rests on: the colouring relations on the path
+ * between them and, in turn, those on the paths between the pairs each of those used (`recs`), and
+ * their clue cells (`cells`). Both sorted.
  */
-function colourReason(f: Forest, recs: readonly ColourRec[], a: number, b: number): number[] {
+function colourReason(
+  f: Forest,
+  recs: readonly ColourRec[],
+  a: number,
+  b: number,
+): { cells: number[]; recs: number[] } {
   const cells = new Set<number>();
   const seen = new Set<number>();
   const pairs = [a, b];
@@ -2454,7 +2655,7 @@ function colourReason(f: Forest, recs: readonly ColourRec[], a: number, b: numbe
       pairs.push(...recs[r].deps);
     }
   }
-  return [...cells].sort((p, q) => p - q);
+  return { cells: [...cells].sort((p, q) => p - q), recs: [...seen].sort((p, q) => p - q) };
 }
 
 /** Edges row by row: horizontal edges of row r left to right, then the vertical edges below them. */

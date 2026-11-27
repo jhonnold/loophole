@@ -106,10 +106,11 @@ const LINES_ONLY: ReadonlySet<RuleId> = new Set([
 /**
  * The steps before the last one (which draws a line) that it rests on: walking back, a step is kept
  * when it decided an edge around the cells or dots of the last step or of a step already kept. A
- * step's cells and dots are its reason, so this follows local rules exactly; for rules that reason
- * over the whole board (parity, colouring, connectivity, chains) a far cross may be missed, which
- * leaves the hint's explanation short but its move sound. A lookahead step's reason also takes the
- * board's edges its probe read (`reads`).
+ * step's cells and dots are its reason, so this follows local rules exactly. A parity or colouring
+ * step's reason also takes the marks its side proof runs along (`Deduction.sides`), and a lookahead
+ * step's the board's edges its probe read (`reads`). For the other rules that reason over the whole
+ * board (connectivity, the corner chains) a far cross may be missed, which leaves the hint's
+ * explanation short but its move sound.
  */
 function supportingSteps(
   grid: Grid,
@@ -120,6 +121,7 @@ function supportingSteps(
   const addReason = (step: Step) => {
     if (LINES_ONLY.has(step.rule)) return;
     addAround(grid, need, step.cells, step.dots);
+    for (const e of step.sides?.edges ?? []) need.add(e);
     for (const e of reads.get(step) ?? []) need.add(e);
   };
   addReason(steps[steps.length - 1]);

@@ -157,13 +157,53 @@ export interface EdgeChange {
 
 /**
  * One applied deduction. `changes` are the edges it set, in order. `cells` and `dots` are the
- * reason: the clue cells and dots a hint highlights.
+ * reason: the clue cells and dots a hint highlights. A parity or colouring step in a solve that
+ * explains (`SolveOptions.explain`) also says which side of the loop the cells it uses are on, and
+ * why (`sides`).
  */
 export interface Deduction {
   readonly rule: RuleId;
   readonly changes: readonly EdgeChange[];
   readonly cells: readonly number[];
   readonly dots: readonly number[];
+  readonly sides?: SideProof;
+}
+
+/**
+ * A cell a side proof places. Group 0 is linked to off the board, which is outside, so `flip` means
+ * inside the loop. In any other group only the sides relative to each other are known: `flip` means
+ * on the other side from the group's first cell.
+ */
+export interface SideCell {
+  readonly cell: number;
+  readonly group: number;
+  readonly flip: boolean;
+}
+
+/**
+ * Two nodes (cells, or `NONE` for off the board) and whether they are on the same side of the loop.
+ * `clue` is the clue cell that forced it, for a relation the colouring rule worked out; `NONE` for
+ * one read off the marks.
+ */
+export interface SideFact {
+  readonly a: number;
+  readonly b: number;
+  readonly same: boolean;
+  readonly clue: number;
+}
+
+/**
+ * Why a parity or colouring step's cells are on the sides they are. Off the board is outside, a ×
+ * keeps the side and a line switches it, so the marks along `edges` and the `forced` relations
+ * place every cell in `cells`, and decide the step's edge. `known` are what the clues' neighbours
+ * were known to be (the pairs the `forced` relations rest on), `forced` what the clues worked out
+ * from them; a parity step has neither.
+ */
+export interface SideProof {
+  readonly cells: readonly SideCell[];
+  readonly edges: readonly number[];
+  readonly known: readonly SideFact[];
+  readonly forced: readonly SideFact[];
 }
 
 /**

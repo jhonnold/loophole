@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createPuzzle, parsePuzzle, serializePuzzle } from "@loophole/core";
+import { createPuzzle, encodeEdges, parsePuzzle, serializePuzzle, solve } from "@loophole/core";
 import { MemoryBlobStore } from "../adapters/blob/memory-blob-store.ts";
 import { openDatabase } from "../adapters/db/database.ts";
 import { SqliteJobQueue } from "../adapters/db/job-queue.ts";
@@ -205,6 +205,42 @@ describe("POST /api/puzzles/{id}/hint", () => {
         { rule: "dot-dead-end", changes: [{ edge: 5, state: "cross" }], cells: [], dots: [7] },
       ],
       contradiction: { kind: "no-loop", edge: null, cells: [], dots: [], edges: [] },
+    });
+  });
+
+  test("sends a colouring step's sides, in wire shape", async () => {
+    // core's hint tests: the 10×10 hard puzzle from seed "side-188", just before a "Sides around a 3".
+    const { app, puzzles } = setup();
+    const p = parsePuzzle({
+      v: 1,
+      width: 10,
+      height: 10,
+      clues:
+        "222..223.03.3..2.21..2...13..1.....2.12233..23.3.2..........3..10.......111.2.10..222...3.3......1..",
+      meta: { generator: "7" },
+    });
+    await puzzles.saveGenerated("p10", {
+      puzzle: serializePuzzle(p),
+      solution: encodeEdges(solve(p).edges),
+      steps: [],
+    });
+    const edges =
+      "0110112122000012222210101222220000121211000121211200021101220002200021000220002200200000120000000000100000000000200211122100021111220000021112202002122221101012112110200200011100012200020002020002220001000001010000000000";
+    const res = await app.request("/api/puzzles/p10/hint", postJson({ edges }));
+    const body = (await res.json()) as { rule: string; sides: unknown };
+    expect(body.rule).toBe("colour-3");
+    expect(body.sides).toEqual({
+      cells: [
+        { cell: 2, group: 0, flip: true },
+        { cell: 4, group: 0, flip: true },
+        { cell: 11, group: 1, flip: false },
+        { cell: 12, group: 1, flip: true },
+        { cell: 13, group: 0, flip: false },
+        { cell: 14, group: 0, flip: false },
+      ],
+      edges: [2, 4, 14, 125],
+      known: [{ a: 2, b: 13, same: false, clue: null }],
+      forced: [{ a: 12, b: 11, same: false, clue: 12 }],
     });
   });
 

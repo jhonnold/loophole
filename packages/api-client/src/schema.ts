@@ -2777,6 +2777,7 @@ export interface components {
             cells: number[];
             dots: number[];
             probe?: components["schemas"]["HintProbe"];
+            sides?: components["schemas"]["HintSides"];
             /** @description The steps the line rests on, in order: each only crosses edges. Crosses the line doesn't need are left out. */
             before: components["schemas"]["HintStep"][];
         } | {
@@ -2818,7 +2819,40 @@ export interface components {
             cells: number[];
             dots: number[];
         };
-        /** @description One deduction: its rule, the edges it decides, the cells and dots it rests on, and for lookahead, its probe. */
+        /** @description Only on parity and colouring steps. */
+        HintSides: {
+            /** @description Each cell the proof places. Group 0 is linked to off the board (outside), so flip means inside; in another group, flip means on the other side from the group's first cell. */
+            cells: {
+                cell: number;
+                group: number;
+                flip: boolean;
+            }[];
+            /** @description The marked edges the chains run along: a cross keeps the side, a line switches it. */
+            edges: number[];
+            /** @description What the clues' neighbours were known to be, which the forced relations rest on. */
+            known: {
+                /** @description A cell, or null for off the board. */
+                a: number | null;
+                /** @description A cell, or null for off the board. */
+                b: number | null;
+                /** @description Whether the two are on the same side of the loop. */
+                same: boolean;
+                /** @description The clue cell that forced it, or null for a fact read off the marks. */
+                clue: number | null;
+            }[];
+            /** @description What the clues worked out from them. Empty for parity. */
+            forced: {
+                /** @description A cell, or null for off the board. */
+                a: number | null;
+                /** @description A cell, or null for off the board. */
+                b: number | null;
+                /** @description Whether the two are on the same side of the loop. */
+                same: boolean;
+                /** @description The clue cell that forced it, or null for a fact read off the marks. */
+                clue: number | null;
+            }[];
+        };
+        /** @description One deduction: its rule, the edges it decides, the cells and dots it rests on, for lookahead its probe, and for parity and colouring which side of the loop its cells are on. */
         HintStep: {
             /** @enum {string} */
             rule: "clue-zero" | "clue-satisfied" | "clue-needs-all" | "dot-full" | "dot-continue" | "dot-dead-end" | "corner-1" | "corner-3" | "adjacent-3s" | "diagonal-3s" | "premature-loop" | "loop-complete" | "line-into-1" | "line-into-3" | "two-passes-on" | "two-in-corner" | "ones-side-by-side" | "three-diagonal-one" | "corner-chain" | "parity" | "colour-1" | "colour-2" | "colour-3" | "colour-chain" | "unreachable" | "cut-off" | "two-exits" | "lookahead";
@@ -2830,6 +2864,7 @@ export interface components {
             cells: number[];
             dots: number[];
             probe?: components["schemas"]["HintProbe"];
+            sides?: components["schemas"]["HintSides"];
         };
         HintRequest: {
             /** @description The player's board: one character per edge, 0 empty, 1 line, 2 cross (docs/FORMAT.md). */

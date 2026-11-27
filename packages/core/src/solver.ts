@@ -50,8 +50,9 @@ export interface SolveOptions {
   readonly stopAtLine?: boolean;
   /**
    * Give each lookahead step the probe that proved it (`Step.probe`): what was assumed, the steps
-   * that followed and where they broke the rules. Default false; hints turn it on. It costs one
-   * more probe per lookahead step and does nothing without `steps`.
+   * that followed and where they broke the rules; and each parity and colouring step its side proof
+   * (`Deduction.sides`). Default false; hints turn it on. It costs one more probe per lookahead
+   * step and a few searches over the board per side proof, and does nothing without `steps`.
    */
   readonly explain?: boolean;
   /** Stop after this many milliseconds, measured with `now`. Default no limit. */
