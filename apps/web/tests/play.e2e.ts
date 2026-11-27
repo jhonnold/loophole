@@ -143,7 +143,13 @@ test.describe("desktop keyboard (NFR-5)", () => {
     const surface = board(page);
     await surface.focus();
     await page.keyboard.press("ArrowRight");
-    await expect(page.getByText("Row 1 · between columns 2 and 3 · empty").first()).toBeVisible();
+    const tip = page.getByText("Row 1 · between columns 2 and 3 · empty").first();
+    await expect(tip).toBeVisible();
+    // The label sits under the board, never over it.
+    const tipBox = await tip.boundingBox();
+    const boardBox = await surface.boundingBox();
+    if (tipBox === null || boardBox === null) throw new Error("no label or board");
+    expect(tipBox.y).toBeGreaterThanOrEqual(boardBox.y + boardBox.height);
     await page.keyboard.press("Space");
     await expect(lines(page)).toHaveCount(1);
     await page.keyboard.press("x");

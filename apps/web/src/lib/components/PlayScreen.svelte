@@ -888,6 +888,8 @@
       --screen-top: 20px;
       --screen-bottom: 32px;
       --screen-gap: 14px;
+      /* Room under a zoomable board for the keyboard cursor's label (BoardView's .tip). */
+      --cursor-tip: 44px;
       padding: var(--screen-top) 24px var(--screen-bottom);
     }
 
@@ -917,10 +919,11 @@
     }
 
     /* The left column's height comes from the window, not from the side column: everything
-       below the header and above the bottom padding. */
+       below the header and above the bottom padding, less a line for the cursor label. */
     .zoom .stage {
       height: calc(
-        100dvh - var(--screen-top) - var(--bar-height) - var(--screen-gap) - var(--screen-bottom)
+        100dvh - var(--screen-top) - var(--bar-height) - var(--screen-gap) - var(--screen-bottom) -
+          var(--cursor-tip)
       );
       align-self: start;
     }
