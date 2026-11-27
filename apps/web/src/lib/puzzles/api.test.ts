@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createApiClient, type Schemas } from "@loophole/api-client";
-import { createPuzzle, EdgeState, serializePuzzle } from "@loophole/core";
+import { createPuzzle, EdgeState, NONE, serializePuzzle } from "@loophole/core";
 import { apiSource } from "./api.ts";
 
 const PUZZLE: Schemas["Puzzle"] = {
@@ -152,6 +152,34 @@ describe("apiSource", () => {
       ],
     });
     expect(bodies).toEqual([{ edges: "000100000000" }]);
+  });
+
+  test("hint maps a step's sides, null back to off the board", async () => {
+    const sides = {
+      cells: [{ cell: 0, group: 0, flip: true }],
+      edges: [3],
+      known: [{ a: 0, b: null, same: false, clue: null }],
+      forced: [{ a: 1, b: 0, same: true, clue: 1 }],
+    };
+    const step = {
+      kind: "step",
+      rule: "parity",
+      changes: [{ edge: 7, state: "line" }],
+      cells: [0, 1],
+      dots: [],
+      sides,
+      before: [],
+    };
+    const { client } = clientFor({ "/api/puzzles/p1/hint": [200, step] });
+    const puzzle = createPuzzle(2, 2);
+    const hint = await apiSource(client).hint("p1", puzzle, new Uint8Array(puzzle.grid.edgeCount));
+    if (hint.kind !== "step") throw new Error(hint.kind);
+    expect(hint.step.sides).toEqual({
+      cells: [{ cell: 0, group: 0, flip: true }],
+      edges: [3],
+      known: [{ a: 0, b: NONE, same: false, clue: NONE }],
+      forced: [{ a: 1, b: 0, same: true, clue: 1 }],
+    });
   });
 
   test("hint passes other kinds through and throws on failure", async () => {

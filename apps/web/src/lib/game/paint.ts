@@ -18,6 +18,7 @@ import {
 } from "./geometry.ts";
 import type { HintMarks } from "./hint.ts";
 import { insideCells } from "./inside.ts";
+import { hatched, hatchSegments, mirrored, tintSquare } from "./sides.ts";
 import { type Size, type View, visibleCells } from "./viewport.ts";
 
 /** Theme colours for the canvas, read from the app stylesheet's custom properties. */
@@ -32,6 +33,12 @@ export interface Palette {
   readonly conflictWash: string;
   /** A try-and-see hint's supposed marks. */
   readonly whatIf: string;
+  /** A hint's side tints: inside, outside, relative only; their hatching; the chains' marks. */
+  readonly sideIn: string;
+  readonly sideOut: string;
+  readonly sideRel: string;
+  readonly sideHatch: string;
+  readonly sideChain: string;
 }
 
 /** The part of the canvas 2D context the painter uses, so tests can pass a recorder. */
@@ -124,9 +131,51 @@ export function paintBoard(ctx: Painter, scene: Scene): void {
   }
 
   const hinted = new Uint8Array(hint === null ? 0 : grid.cellCount);
+  const sides = hint?.sides;
+  if (sides !== undefined) {
+    // A parity or colouring step's cells by side (hatched: outside, or the second relative side),
+    // then a soft band under the marks its chains run along.
+    const tone = {
+      in: palette.sideIn,
+      out: palette.sideOut,
+      a: palette.sideRel,
+      b: palette.sideRel,
+    };
+    ctx.beginPath();
+    for (const t of sides.cells) {
+      const p = cellPoint(grid, layout, t.cell);
+      const q = tintSquare(p.x, p.y, S, t.strong);
+      ctx.fillStyle = tone[t.tone];
+      ctx.fillRect(q.x, q.y, q.size, q.size);
+      if (!hatched(t.tone)) continue;
+      for (const [x1, y1, x2, y2] of hatchSegments(q.x, q.y, q.size, S / 5, mirrored(t.tone))) {
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+      }
+    }
+    ctx.lineWidth = Math.max(1, S / 24);
+    ctx.lineCap = "butt";
+    ctx.strokeStyle = palette.sideHatch;
+    ctx.stroke();
+    ctx.beginPath();
+    for (const e of sides.edges) {
+      const s = edgeSegment(grid, layout, e);
+      ctx.moveTo(s.x1, s.y1);
+      ctx.lineTo(s.x2, s.y2);
+    }
+    ctx.lineWidth = size.line * 3.5;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = palette.sideChain;
+    ctx.stroke();
+    for (const t of sides.cells) hinted[t.cell] = 2;
+  }
   if (hint !== null) {
     ctx.fillStyle = palette.hintWash;
     for (const i of hint.cells) {
+      if (hinted[i] === 2) {
+        hinted[i] = 1;
+        continue;
+      }
       hinted[i] = 1;
       const p = cellPoint(grid, layout, i);
       ctx.fillRect(p.x - S / 2 + 2, p.y - S / 2 + 2, S - 4, S - 4);

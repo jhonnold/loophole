@@ -15,6 +15,11 @@
   --conflict-wash: rgb(194 59 34 / 0.3);
   --what-if: rgb(46 76 138 / 0.7);
   --solved-wash: #f8e1e6;
+  --side-in: rgb(201 138 30 / 0.3);
+  --side-out: rgb(92 104 122 / 0.2);
+  --side-rel: rgb(46 76 138 / 0.16);
+  --side-hatch: rgb(30 28 25 / 0.35);
+  --side-chain: rgb(46 76 138 / 0.3);
   --disabled: #a69e90;
   --on-ink: #fffdf8;
   --frame-shadow: var(--ink);
@@ -37,6 +42,11 @@
   --conflict-wash: rgb(242 120 94 / 0.34);
   --what-if: rgb(143 177 240 / 0.7);
   --solved-wash: rgb(242 120 94 / 0.16);
+  --side-in: rgb(232 176 82 / 0.26);
+  --side-out: rgb(167 175 191 / 0.16);
+  --side-rel: rgb(143 177 240 / 0.2);
+  --side-hatch: rgb(236 228 211 / 0.35);
+  --side-chain: rgb(143 177 240 / 0.34);
   --disabled: #5e6880;
   --on-ink: #111827;
   --frame-shadow: transparent;
@@ -58,6 +68,11 @@
     --conflict-wash: rgb(242 120 94 / 0.34);
     --what-if: rgb(143 177 240 / 0.7);
     --solved-wash: rgb(242 120 94 / 0.16);
+    --side-in: rgb(232 176 82 / 0.26);
+    --side-out: rgb(167 175 191 / 0.16);
+    --side-rel: rgb(143 177 240 / 0.2);
+    --side-hatch: rgb(236 228 211 / 0.35);
+    --side-chain: rgb(143 177 240 / 0.34);
     --disabled: #5e6880;
     --on-ink: #111827;
     --frame-shadow: transparent;

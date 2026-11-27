@@ -38,6 +38,11 @@
       hintWash: get("--hint-wash"),
       conflictWash: get("--conflict-wash"),
       whatIf: get("--what-if"),
+      sideIn: get("--side-in"),
+      sideOut: get("--side-out"),
+      sideRel: get("--side-rel"),
+      sideHatch: get("--side-hatch"),
+      sideChain: get("--side-chain"),
     };
   }
 

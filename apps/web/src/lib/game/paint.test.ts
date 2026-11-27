@@ -44,6 +44,11 @@ const palette = {
   hintWash: "#24a3",
   conflictWash: "#c323",
   whatIf: "#24ab",
+  sideIn: "#c813",
+  sideOut: "#6783",
+  sideRel: "#24a3",
+  sideHatch: "#0005",
+  sideChain: "#24a5",
 };
 
 function scene(
@@ -129,6 +134,30 @@ describe("paintBoard", () => {
     expect(calls.arc).toBe(plain.calls.arc + 1);
     // One dashed ghost line and one ghost × (two strokes of the × each moveTo + lineTo).
     expect(calls.lineTo).toBe((plain.calls.lineTo ?? 0) + 1 + 2);
+  });
+
+  test("draws a hint's side tints, hatching the outside, and a band under its chain's marks", () => {
+    const grid = createGrid(5, 5);
+    const hint: HintMarks = {
+      cells: [0],
+      dots: [],
+      ghosts: [],
+      sides: {
+        cells: [
+          { cell: 0, tone: "in", strong: true },
+          { cell: 1, tone: "out", strong: false },
+        ],
+        edges: [hEdgeIndex(grid, 0, 0)],
+      },
+    };
+    const plain = recorder();
+    paintBoard(plain.ctx, scene(5, 44, 0, 0));
+    const { ctx, calls } = recorder();
+    paintBoard(ctx, scene(5, 44, 0, 0, undefined, hint));
+    // Two tints, and no ai wash on top of the tinted hint cell.
+    expect(calls.fillRect).toBe((plain.calls.fillRect ?? 0) + 2);
+    // The outside cell's hatching, and one chain band.
+    expect(calls.lineTo).toBeGreaterThan((plain.calls.lineTo ?? 0) + 1);
   });
 
   test("draws a try-and-see hint's supposed marks and where they break the rules", () => {

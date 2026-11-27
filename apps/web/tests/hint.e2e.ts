@@ -227,7 +227,7 @@ for (const [width, height] of [
         const hint = findHint(puzzle, solution, edges);
         const titles =
           hint.kind === "step"
-            ? (hintView(grid, hint, edges)?.pages.map((pg) => pg.title) ?? [])
+            ? (hintView(grid, hint, edges, puzzle.clues)?.pages.map((pg) => pg.title) ?? [])
             : [title];
         expect(titles).toContain(title);
         for (const [i, t] of titles.entries()) {
@@ -284,6 +284,30 @@ for (const [width, height] of [
       const already = [...edges].filter((e) => e === EdgeState.Cross).length;
       await expect(crosses(page)).toHaveCount(already + crossed);
       await expect(whatIf).toHaveCount(0);
+    });
+
+    test("a colouring hint tints its cells by side, marks its chain and says why (issue #12)", async ({
+      page,
+    }) => {
+      const edges = boardBefore("colour-2");
+      const hint = findHint(puzzle, solution, edges);
+      if (hint.kind !== "step") throw new Error(hint.kind);
+      const view = hintView(grid, hint, edges, puzzle.clues);
+      const at = view?.pages.findIndex((pg) => pg.rule === "colour-2") ?? -1;
+      const shown = view?.pages[at];
+      const sides = shown?.marks.sides;
+      if (shown === undefined || sides === undefined) throw new Error("no sides");
+      await openWith(page, edges);
+      await page.getByRole("button", { name: "Hint" }).click();
+      for (let i = 0; i < at; i++) await page.getByRole("button", { name: "Next step" }).click();
+      await expect(page.getByRole("heading", { name: RULE_TITLE["colour-2"] })).toBeVisible();
+      await expect(page.getByText(shown.text)).toBeVisible();
+      const tints = page.locator("[role=application] .side");
+      await expect(tints).toHaveCount(sides.cells.length);
+      // Inside and outside differ by more than colour: the outside is hatched.
+      const outs = sides.cells.filter((t) => t.tone === "out" || t.tone === "b").length;
+      await expect(page.locator("[role=application] .side-hatch")).toHaveCount(outs);
+      await expect(page.locator("[role=application] .side-chain")).toHaveCount(sides.edges.length);
     });
 
     test("a wrong mark is pointed out first and can be erased", async ({ page }) => {

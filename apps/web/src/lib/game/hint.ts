@@ -13,6 +13,7 @@ import {
 } from "@loophole/core";
 import type { EdgeChange } from "./board.ts";
 import { cellPoint, dotPoint, edgeMidpoint, type Layout, type Point } from "./geometry.ts";
+import { type SideMarks, sideMarks, sideTexts } from "./sides.ts";
 import type { Rect } from "./viewport.ts";
 
 /** What a hint draws on the board (design kit, Board): an ai wash and dashed ai ghost moves. */
@@ -28,6 +29,8 @@ export interface HintMarks {
   readonly whatIf?: readonly EdgeChange[];
   /** Where the supposed marks break the rules: a shu wash on these cells, dots and edges. */
   readonly conflict?: ConflictMarks;
+  /** A parity or colouring step's cells, tinted by side, and the marks its chains run along. */
+  readonly sides?: SideMarks;
 }
 
 export interface ConflictMarks {
@@ -78,7 +81,12 @@ function plural(n: number, one: string, many: string): string {
  * Turns a core hint into what the card and the board show. Null when the board is solved. A step
  * hint's move is its line and the crosses before it, made together from any page.
  */
-export function hintView(grid: Grid, hint: Hint, edges: Uint8Array): HintView | null {
+export function hintView(
+  grid: Grid,
+  hint: Hint,
+  edges: Uint8Array,
+  clues: ArrayLike<number> = [],
+): HintView | null {
   const view = (v: Omit<HintView, "before">): HintView => ({
     ...v,
     before: v.apply.map(([e]) => edges[e] as EdgeState),
@@ -92,12 +100,26 @@ export function hintView(grid: Grid, hint: Hint, edges: Uint8Array): HintView | 
       for (const s of [...hint.before, hint.step]) {
         if (s.probe !== undefined) pages.push(...probePages(grid, s.probe, moves));
         moves.push(...s.changes.map((c): EdgeChange => [c.edge, c.state]));
-        pages.push({
-          title: RULE_TITLE[s.rule],
-          text: s.probe === undefined ? RULE_TEXT[s.rule] : concludeText(s),
-          rule: s.rule,
-          marks: { cells: [...s.cells], dots: [...s.dots], ghosts: [...moves] },
-        });
+        // A parity or colouring step's words can take two pages: what the marks show, then the
+        // deduction. Both show its tints and its move.
+        const sides = sideMarks(grid, s);
+        const texts =
+          s.probe !== undefined
+            ? [concludeText(s)]
+            : ((sides && sideTexts(grid, clues, s)) ?? [RULE_TEXT[s.rule]]);
+        for (const text of texts) {
+          pages.push({
+            title: RULE_TITLE[s.rule],
+            text,
+            rule: s.rule,
+            marks: {
+              cells: [...s.cells],
+              dots: [...s.dots],
+              ghosts: [...moves],
+              ...(sides === undefined ? {} : { sides }),
+            },
+          });
+        }
       }
       return view({
         eyebrow: "next forced move",
@@ -238,6 +260,10 @@ export function hintRect(grid: Grid, layout: Layout, marks: HintMarks): Rect | n
     ...(conflict?.cells ?? []).map((c) => cellPoint(grid, layout, c)),
     ...(conflict?.dots ?? []).map((d) => dotPoint(grid, layout, d)),
     ...(conflict?.edges ?? []).map((e) => edgeMidpoint(grid, layout, e)),
+    // The cells the step is about; a chain to the board's edge can be longer than the screen.
+    ...(marks.sides?.cells ?? [])
+      .filter((t) => t.strong)
+      .map((t) => cellPoint(grid, layout, t.cell)),
   ];
   if (points.length === 0) return null;
   const xs = points.map((p) => p.x);

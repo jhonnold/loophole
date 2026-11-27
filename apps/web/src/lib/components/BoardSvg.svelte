@@ -3,6 +3,7 @@
   import { cellPoint, dotPoint, edgeMidpoint, edgeSegment, type Layout, markSizes } from "../game/geometry.ts";
   import type { HintMarks } from "../game/hint.ts";
   import { insideCells } from "../game/inside.ts";
+  import { hatched, hatchSegments, mirrored, tintSquare } from "../game/sides.ts";
   import type { Size, View } from "../game/viewport.ts";
 
   interface Props {
@@ -71,6 +72,14 @@
   // A try-and-see hint's supposed marks, and where they break the rules.
   const whatIf = $derived((hint?.whatIf ?? []).filter(([e]) => edges[e] === EdgeState.Unknown));
   const conflict = $derived(hint?.conflict);
+  // A parity or colouring step's cells by side, and the marks its chains run along.
+  const sideCells = $derived(hint?.sides?.cells ?? []);
+  const sideEdges = $derived(hint?.sides?.edges ?? []);
+  const tinted = $derived(new Set(sideCells.map((t) => t.cell)));
+  const hatch = (x: number, y: number, s: number, mirror = false) =>
+    hatchSegments(x, y, s, S / 5, mirror)
+      .map(([a, b, c, d]) => `M${a} ${b}L${c} ${d}`)
+      .join("");
 </script>
 
 <svg class="board-svg" width={port.width} height={port.height} aria-hidden="true">
@@ -84,8 +93,21 @@
       {/each}
     {/if}
 
+    {#each sideCells as t (t.cell)}
+      {@const p = cellPoint(grid, geo, t.cell)}
+      {@const q = tintSquare(p.x, p.y, S, t.strong)}
+      <rect class="side side-{t.tone}" x={q.x} y={q.y} width={q.size} height={q.size} rx="3" />
+      {#if hatched(t.tone)}
+        <path class="side-hatch" d={hatch(q.x, q.y, q.size, mirrored(t.tone))} stroke-width={Math.max(1, S / 24)} />
+      {/if}
+    {/each}
+    {#each sideEdges as e (e)}
+      {@const s = edgeSegment(grid, geo, e)}
+      <line class="side-chain" x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke-width={size.line * 3.5} />
+    {/each}
+
     {#if hint}
-      {#each hint.cells as i (i)}
+      {#each hint.cells.filter((i) => !tinted.has(i)) as i (i)}
         {@const p = cellPoint(grid, geo, i)}
         <rect class="hint-wash" x={p.x - S / 2 + 2} y={p.y - S / 2 + 2} width={S - 4} height={S - 4} rx="3" />
       {/each}
@@ -207,6 +229,31 @@
 
   .hint-wash {
     fill: var(--hint-wash);
+  }
+
+  .side-in {
+    fill: var(--side-in);
+  }
+
+  .side-out {
+    fill: var(--side-out);
+  }
+
+  .side-a,
+  .side-b {
+    fill: var(--side-rel);
+  }
+
+  .side-hatch {
+    stroke: var(--side-hatch);
+    stroke-linecap: butt;
+    fill: none;
+  }
+
+  /* The marks a hint's side chains run along: a soft ai band under the mark. */
+  .side-chain {
+    stroke: var(--side-chain);
+    stroke-linecap: round;
   }
 
   .ghost {
