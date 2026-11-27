@@ -1,6 +1,6 @@
 <script lang="ts">
   import { analyzeBoard } from "@loophole/core";
-  import { onDestroy, onMount, tick } from "svelte";
+  import { flushSync, mount, onDestroy, onMount, tick, unmount } from "svelte";
   import type { RankedPlay } from "../daily/view.ts";
   import {
     applyChanges,
@@ -41,6 +41,7 @@
   import BoardView from "./BoardView.svelte";
   import HintCard from "./HintCard.svelte";
   import PauseButton from "./PauseButton.svelte";
+  import PrintSheet from "./PrintSheet.svelte";
   import SolvedSeal from "./SolvedSeal.svelte";
   import ToolBar from "./ToolBar.svelte";
 
@@ -268,6 +269,21 @@
     }
   });
 
+  // The blank puzzle for printing, mounted under <body> the first time it is needed and kept until
+  // the screen goes: a phone's print() may return before the page is captured, and a big board's
+  // sheet is not worth drawing until someone prints.
+  let sheet: ReturnType<typeof mount> | null = null;
+
+  function ensureSheet() {
+    sheet ??= mount(PrintSheet, { target: document.body, props: { entry } });
+    flushSync();
+  }
+
+  function printPuzzle() {
+    ensureSheet();
+    window.print();
+  }
+
   function setPaused(value: boolean) {
     // A ranked attempt's clock never stops, so it has no pause.
     if (!ready || solved || value === paused || ranked) return;
@@ -368,7 +384,11 @@
     };
     document.addEventListener("visibilitychange", onvisibility);
     window.addEventListener("pagehide", saveNow);
+    // Ctrl/Cmd+P and the browser's menu print too.
+    window.addEventListener("beforeprint", ensureSheet);
     return () => {
+      window.removeEventListener("beforeprint", ensureSheet);
+      if (sheet !== null) unmount(sheet);
       clearInterval(tick);
       wideQuery.removeEventListener("change", onwide);
       document.removeEventListener("visibilitychange", onvisibility);
@@ -394,6 +414,11 @@
       <span class="subtitle">{puzzleSubtitle(entry)}</span>
       <span class="subtitle count"><b>{analysis.satisfiedClues}</b> of {analysis.clueCount} clues</span>
     </div>
+    <button type="button" class="print" aria-label="Print puzzle" onclick={printPuzzle}>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+        ><path d="M7 9V3h10v6" /><rect x="3" y="9" width="18" height="8" rx="2" /><path d="M7 14h10v7H7z" /></svg
+      >
+    </button>
     <div class="pill">
       <span class="clock" role="timer">{clock}</span>
       <PauseButton {paused} disabled={solved || ranked !== undefined} ontoggle={() => setPaused(!paused)} />
@@ -556,7 +581,8 @@
     gap: 8px;
   }
 
-  .back {
+  .back,
+  .print {
     width: 44px;
     height: 44px;
     flex: 0 0 auto;
@@ -564,6 +590,14 @@
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .print {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
   }
 
   .titles {
