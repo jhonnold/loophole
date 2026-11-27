@@ -5,6 +5,9 @@ import {
   type EdgeChange,
   EdgeState,
   type Hint,
+  NONE,
+  type SideFact,
+  type SideProof,
   type Step,
   serializePuzzle,
 } from "@loophole/core";
@@ -348,7 +351,7 @@ function toHintDto(hint: Hint) {
 }
 
 function toStepDto(step: Step) {
-  const dto = toDeductionDto(step);
+  const dto = { ...toDeductionDto(step), ...toSidesDto(step.sides) };
   const { probe } = step;
   if (probe === undefined) return dto;
   const x = probe.contradiction;
@@ -374,6 +377,25 @@ function toDeductionDto(step: Deduction) {
     changes: step.changes.map(toChangeDto),
     cells: [...step.cells],
     dots: [...step.dots],
+  };
+}
+
+function toSidesDto(sides: SideProof | undefined) {
+  if (sides === undefined) return {};
+  const node = (v: number) => (v === NONE ? null : v);
+  const fact = (f: SideFact) => ({
+    a: node(f.a),
+    b: node(f.b),
+    same: f.same,
+    clue: node(f.clue),
+  });
+  return {
+    sides: {
+      cells: sides.cells.map(({ cell, group, flip }) => ({ cell, group, flip })),
+      edges: [...sides.edges],
+      known: sides.known.map(fact),
+      forced: sides.forced.map(fact),
+    },
   };
 }
 

@@ -4,13 +4,14 @@ import { analyzeBoard } from "./analyze.ts";
 import { countSolutions } from "./bruteforce.ts";
 import { decodeEdges, parsePuzzle } from "./format.ts";
 import { generate } from "./generate.ts";
-import { EdgeState, type Grid, hEdgeIndex } from "./grid.ts";
+import { EdgeState, type Grid, hEdgeIndex, NONE } from "./grid.ts";
 import { findHint } from "./hint.ts";
 import { LEVEL_SETTINGS, lookaheadBudget } from "./level.ts";
 import { NO_CLUE, type Puzzle } from "./puzzle.ts";
 import type { Deduction, Probe, RuleId, Step } from "./rules.ts";
 import { solve } from "./solver.ts";
 import { arbPuzzleWithSolution } from "./test-support/arbitraries.ts";
+import { insideCells } from "./test-support/inside.ts";
 import { levelRuleIds } from "./test-support/levels.ts";
 
 function puzzle(width: number, height: number, clues: string) {
@@ -607,3 +608,203 @@ function longLookahead(
   }
   return null;
 }
+
+/** The node across side `j` (0 top, 1 right, 2 bottom, 3 left) of cell `i`, NONE off the board. */
+function across(grid: Grid, i: number, j: number): number {
+  const e = grid.cellEdges[i * 4 + j];
+  const a = grid.edgeCells[e * 2];
+  return a === i ? grid.edgeCells[e * 2 + 1] : a;
+}
+
+/** The union-find node on side `k` of edge `e`: a cell, or `outside` (cellCount). */
+function sideOf(grid: Grid, e: number, k: number): number {
+  const c = grid.edgeCells[e * 2 + k];
+  return c === NONE ? grid.cellCount : c;
+}
+
+/**
+ * Checks a step's side proof against `board` (the board just before the step) and the solution,
+ * placing the cells again from the proof's own links (its marks and forced relations), not from
+ * its `group` and `flip`:
+ * - every chain edge is marked; group 0's cells are linked off the board and lie where the
+ *   solution says, and the other groups' cells are not linked off the board;
+ * - the links decide the step's first edge as it was set, and agree with every `known` fact;
+ * - the `known` facts about a clue's cell and neighbours force each of its `forced` relations:
+ *   every set of sides with the clue's number of lines that fits them gives it.
+ */
+function checkSides(p: Puzzle, solution: Uint8Array, board: Uint8Array, step: Deduction): void {
+  const { grid } = p;
+  const proof = step.sides;
+  if (proof === undefined) throw new Error(`${step.rule} step without sides`);
+  const C = grid.cellCount;
+  const node = (v: number) => (v === NONE ? C : v);
+  const parent = Int32Array.from({ length: C + 1 }, (_, x) => x);
+  const flip = new Uint8Array(C + 1);
+  const find = (x: number): [number, number] => {
+    let r = x;
+    let f = 0;
+    while (parent[r] !== r) {
+      f ^= flip[r];
+      r = parent[r];
+    }
+    return [r, f];
+  };
+  const link = (a: number, b: number, x: number) => {
+    const [ra, fa] = find(a);
+    const [rb, fb] = find(b);
+    if (ra === rb) expect(fa ^ fb).toBe(x);
+    else {
+      parent[ra] = rb;
+      flip[ra] = fa ^ fb ^ x;
+    }
+  };
+  const relation = (a: number, b: number): number | null => {
+    const [ra, fa] = find(a);
+    const [rb, fb] = find(b);
+    return ra === rb ? fa ^ fb : null;
+  };
+  for (const e of proof.edges) {
+    expect(board[e]).not.toBe(EdgeState.Unknown);
+    link(sideOf(grid, e, 0), sideOf(grid, e, 1), board[e] === EdgeState.Line ? 1 : 0);
+  }
+  for (const f of proof.forced) link(node(f.a), node(f.b), f.same ? 0 : 1);
+
+  const inside = insideCells(grid, solution);
+  for (const { cell, group, flip: f } of proof.cells) {
+    const out = relation(cell, C);
+    if (group === 0) {
+      expect(out).toBe(f ? 1 : 0);
+      expect(inside[cell]).toBe(f ? 1 : 0);
+    } else {
+      expect(out).toBeNull();
+    }
+  }
+  const [first] = step.changes;
+  expect(relation(sideOf(grid, first.edge, 0), sideOf(grid, first.edge, 1))).toBe(
+    first.state === EdgeState.Line ? 1 : 0,
+  );
+  for (const f of proof.known) expect(relation(node(f.a), node(f.b))).toBe(f.same ? 0 : 1);
+
+  for (const f of proof.forced) {
+    const i = f.clue;
+    const k = p.clues[i];
+    // Node t of the clue: 0 the cell, j + 1 across its side j; every off-board side is one node.
+    const nodes = [i, ...[0, 1, 2, 3].map((j) => across(grid, i, j))];
+    const bitsOf = (v: number, col: number) =>
+      nodes.flatMap((u, t) => (u === v ? [(col >> t) & 1] : []));
+    let fits = 0;
+    for (let m = 0; m < 16; m++) {
+      let lines = 0;
+      for (let j = 0; j < 4; j++) lines += (m >> j) & 1;
+      if (lines !== k) continue;
+      const col = m << 1;
+      // The off-board sides must agree with each other, and the known facts must hold.
+      const out = bitsOf(NONE, col);
+      if (out.some((b) => b !== out[0])) continue;
+      const bit = (v: number) => bitsOf(v, col)[0];
+      const ok = proof.known.every((g) => {
+        if (!nodes.includes(g.a) || !nodes.includes(g.b)) return true;
+        return (bit(g.a) ^ bit(g.b)) === (g.same ? 0 : 1);
+      });
+      if (!ok) continue;
+      fits++;
+      expect(bit(f.a) ^ bit(f.b)).toBe(f.same ? 0 : 1);
+    }
+    expect(fits).toBeGreaterThan(0);
+  }
+}
+
+const SIDED: ReadonlySet<RuleId> = new Set([
+  "parity",
+  "colour-1",
+  "colour-2",
+  "colour-3",
+  "colour-chain",
+]);
+
+describe("inside and outside in hints", () => {
+  // The 10×10 hard puzzle generated with seed "side-188", on the board its hints from an empty one
+  // reach just before a "Sides around a 3".
+  const p10 = puzzle(
+    10,
+    10,
+    "222..223.03.3..2.21..2...13..1.....2.12233..23.3.2..........3..10.......111.2.10..222...3.3......1..",
+  );
+  const p10Board = decodeEdges(
+    p10.grid,
+    "0110112122000012222210101222220000121211000121211200021101220002200021000220002200200000120000000000100000000000200211122100021111220000021112202002122221101012112110200200011100012200020002020002220001000001010000000000",
+  );
+
+  test("a 3's hint says which of its neighbours are in and out, and the chain to the edge", () => {
+    const solution = solve(p10).edges;
+    const hint = findHint(p10, solution, p10Board);
+    if (hint.kind !== "step") throw new Error(hint.kind);
+    expect(hint.before).toEqual([]);
+    const { step } = hint;
+    // The 3 at r2c3 (cell 12): the cell above it is inside (a line to the edge) and the cell to its
+    // right outside (a cross, then a line, then a line to the edge), so one of those two shares
+    // the 3's side, and the cell to its left can't: its left side is a line.
+    expect(step.rule).toBe("colour-3");
+    expect(step.changes).toEqual([{ edge: 123, state: EdgeState.Line }]);
+    expect(step.sides).toEqual({
+      cells: [
+        { cell: 2, group: 0, flip: true },
+        { cell: 4, group: 0, flip: true },
+        { cell: 11, group: 1, flip: false },
+        { cell: 12, group: 1, flip: true },
+        { cell: 13, group: 0, flip: false },
+        { cell: 14, group: 0, flip: false },
+      ],
+      edges: [2, 4, 14, 125],
+      known: [{ a: 2, b: 13, same: false, clue: NONE }],
+      forced: [{ a: 12, b: 11, same: false, clue: 12 }],
+    });
+    checkSides(p10, solution, p10Board, step);
+  });
+
+  test("solve gives side proofs only when asked, and the same steps either way", () => {
+    const plain = solve(p10);
+    const explained = solve(p10, { explain: true });
+    const strip = (steps: readonly Step[]) =>
+      steps.map(({ rule, changes, cells, dots }) => ({ rule, changes, cells, dots }));
+    expect(strip(explained.steps)).toEqual(strip(plain.steps));
+    expect(plain.steps.every((s) => s.sides === undefined)).toBe(true);
+    const sided = explained.steps.filter((s) => SIDED.has(s.rule));
+    expect(sided.length).toBeGreaterThan(0);
+    for (const s of explained.steps) expect(s.sides !== undefined).toBe(SIDED.has(s.rule));
+  });
+
+  /** Checks the side proofs of every hint from an empty board of a generated puzzle. */
+  function checkWalk(seed: string, size: number, level: "hard" | "medium", seen: Set<RuleId>) {
+    const { puzzle: q, solution } = generate({ width: size, height: size, seed, level });
+    for (const { board, steps } of hintBoards(q, solution)) {
+      // Each step's chains are on the board once the steps before it are made.
+      const now = board.slice();
+      for (const step of steps) {
+        if (SIDED.has(step.rule)) {
+          checkSides(q, solution, now, step);
+          seen.add(step.rule);
+        }
+        for (const { edge, state } of step.changes) now[edge] = state;
+      }
+    }
+  }
+
+  test("every parity and colouring hint places its cells soundly, from marks on the board (property)", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 1e6 }),
+        fc.constantFrom(7, 10, 12),
+        fc.constantFrom("hard", "medium") as fc.Arbitrary<"hard" | "medium">,
+        (n, size, level) => checkWalk(`sides-${n}`, size, level, new Set()),
+      ),
+      { numRuns: 12 },
+    );
+  });
+
+  test("on fixed seeds, every rule with side proofs comes up and checks out", () => {
+    const seen = new Set<RuleId>();
+    for (let n = 0; n < 8; n++) checkWalk(`sides-${n}`, 10, "hard", seen);
+    expect([...seen].sort()).toEqual([...SIDED].sort());
+  });
+});
