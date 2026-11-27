@@ -84,6 +84,9 @@ function capital(s: string): string {
 
 const MARKS = "a × keeps the side, a line switches it";
 
+/** The longest page of words that fits the hint card under a 7×7 on a 360×560 phone. */
+export const PAGE_LENGTH = 125;
+
 /**
  * What a step with a side proof says, in concrete words, a page each, or null to use the rule's
  * own text. A parity step has one page. A colouring step resting on one clue has two: what the
@@ -182,8 +185,22 @@ export function sideTexts(grid: Grid, clues: ArrayLike<number>, step: Deduction)
     j >= 0 ? `: its ${SIDE_NAME[j]} side is ${decided}` : `: the marked edge is ${decided}`;
   const conclusion = `${rule}, so ${relation(forced, clue, name)}${end}.`;
   if (told.length === 0) return [conclusion];
-  const from = placedText === "" ? capital(MARKS) : `Off the board is outside; ${MARKS}`;
-  return [`${from}. ${capital(told.join("; "))}.`, capital(conclusion)];
+  const from = placedText === "" ? `${capital(MARKS)}.` : `Off the board is outside; ${MARKS}.`;
+  // Each page fits the card under a 7×7 on the smallest phone; the facts go to pages of their own
+  // when they don't fit beside the marks' rule.
+  const factText = `${capital(told.join("; "))}.`;
+  if (from.length + 1 + factText.length <= PAGE_LENGTH) return [`${from} ${factText}`, conclusion];
+  const pages = [from];
+  let page = "";
+  for (const t of told) {
+    const next = page === "" ? capital(t) : `${page}; ${t}`;
+    if (page !== "" && next.length + 1 > PAGE_LENGTH) {
+      pages.push(`${page}.`);
+      page = capital(t);
+    } else page = next;
+  }
+  pages.push(`${page}.`, conclusion);
+  return pages;
 }
 
 /** The relation a clue forced, in words: relative to the clue when it names the clue. */
