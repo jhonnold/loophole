@@ -216,7 +216,7 @@
       const result = await puzzleSource.hint(entry.id, puzzle, edges);
       // The screen was left, or the board changed, while the hint was on its way.
       if (destroyed || board.edges !== edges) return;
-      const view = hintView(grid, result, edges);
+      const view = hintView(grid, result, edges, puzzle.clues);
       if (view === null) return;
       hint = view;
       hintPage = 0;

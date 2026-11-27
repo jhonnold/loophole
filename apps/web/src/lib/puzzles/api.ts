@@ -5,7 +5,9 @@ import {
   EdgeState,
   encodeEdges,
   type Hint,
+  NONE,
   parsePuzzle,
+  type SideProof,
   type Step,
 } from "@loophole/core";
 import type { PuzzleSource, PuzzleSummary } from "./source.ts";
@@ -38,7 +40,7 @@ function toHint(h: Schemas["Hint"]): Hint {
 }
 
 function toStep(s: Schemas["HintStep"]): Step {
-  const step = toDeduction(s);
+  const step = { ...toDeduction(s), ...(s.sides === undefined ? {} : { sides: toSides(s.sides) }) };
   if (s.probe === undefined) return step;
   const { assumed, steps, contradiction } = s.probe;
   return {
@@ -49,6 +51,17 @@ function toStep(s: Schemas["HintStep"]): Step {
 
 function toDeduction(s: Schemas["HintDeduction"]): Deduction {
   return { rule: s.rule, changes: s.changes.map(toChange), cells: s.cells, dots: s.dots };
+}
+
+function toSides(s: Schemas["HintSides"]): SideProof {
+  const node = (v: number | null) => v ?? NONE;
+  const fact = (f: Schemas["HintSides"]["known"][number]) => ({
+    a: node(f.a),
+    b: node(f.b),
+    same: f.same,
+    clue: node(f.clue),
+  });
+  return { cells: s.cells, edges: s.edges, known: s.known.map(fact), forced: s.forced.map(fact) };
 }
 
 function toChange(c: { edge: number; state: "line" | "cross" }): CoreEdgeChange {
