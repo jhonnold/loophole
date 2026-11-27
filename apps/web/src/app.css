@@ -266,3 +266,20 @@ kbd {
   background: var(--sheet);
   color: var(--ink);
 }
+
+/* Printing (the play screen's Print button): only the blank puzzle sheet, black on white in either
+   theme. The sheet mounts straight under <body>, so everything beside it can go. */
+@media print {
+  :root {
+    color-scheme: light;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+  }
+
+  body > :not(.print-sheet) {
+    display: none !important;
+  }
+}
