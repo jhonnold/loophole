@@ -5,6 +5,7 @@ import {
   decodeEdges,
   EdgeState,
   findHint,
+  generate,
   hEdgeIndex,
   NONE,
   parsePuzzle,
@@ -191,5 +192,37 @@ describe("hatching", () => {
     const light = tintSquare(50, 50, 40, false);
     expect(light.size).toBeLessThan(36);
     expect(light.x + light.size / 2).toBe(50);
+  });
+});
+
+describe("side words fit the card", () => {
+  // Three lines of the card under a 7×7 at 360×560 and 390×664 hold 134 characters (measured);
+  // the longest page found over hint walks of hard 7×7 to 15×15 puzzles is that long.
+  test("every page of every side proof on hint walks of hard puzzles is at most 134 characters", () => {
+    let pages = 0;
+    for (const [size, seed] of [
+      [7, "len-18"],
+      [10, "len-3"],
+      [15, "len-8"],
+    ] as const) {
+      const { puzzle, solution } = generate({ width: size, height: size, seed });
+      const board = new Uint8Array(puzzle.grid.edgeCount);
+      for (let n = 0; n <= puzzle.grid.edgeCount; n++) {
+        const hint = findHint(puzzle, solution, board);
+        if (hint.kind === "reveal") {
+          board[hint.edge] = EdgeState.Line;
+          continue;
+        }
+        if (hint.kind !== "step") break;
+        for (const s of [...hint.before, hint.step]) {
+          for (const t of sideTexts(puzzle.grid, puzzle.clues, s) ?? []) {
+            pages++;
+            expect([t, t.length <= 134]).toEqual([t, true]);
+          }
+          for (const c of s.changes) board[c.edge] = c.state;
+        }
+      }
+    }
+    expect(pages).toBeGreaterThan(20);
   });
 });
