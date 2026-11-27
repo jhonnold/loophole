@@ -320,8 +320,14 @@ test.describe("desktop, zoomable boards (FR-13, NFR-5)", () => {
     await page.goto("/play/giant-100");
     await board(page).focus();
     for (let i = 0; i < 60; i++) await page.keyboard.press("ArrowRight");
-    await expect(page.getByText("Row 1 · between columns 61 and 62 · empty").first()).toBeVisible();
+    const tip = page.getByText("Row 1 · between columns 61 and 62 · empty").first();
+    await expect(tip).toBeVisible();
     const v = await boardView(page);
+    // The label sits under the board and still inside the window.
+    const tipBox = await tip.boundingBox();
+    if (tipBox === null) throw new Error("no label");
+    expect(tipBox.y).toBeGreaterThanOrEqual(v.box.y + v.box.height);
+    expect(tipBox.y + tipBox.height).toBeLessThanOrEqual(page.viewportSize()?.height ?? 0);
     const cursor = await page.locator("rect.cursor").boundingBox();
     if (cursor === null) throw new Error("no cursor");
     expect(v.x).toBeGreaterThan(0);

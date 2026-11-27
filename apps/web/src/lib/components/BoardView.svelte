@@ -99,8 +99,6 @@
       width: horizontal ? len : thick,
       height: horizontal ? thick : len,
       radius: thick / 2,
-      labelX: Math.min(Math.max((s.x1 + s.x2) / 2 - view.x, 130), port.width - 130),
-      labelY: Math.max(s.y1, s.y2) - view.y + (horizontal ? thick / 2 : 6) + 8,
     };
   });
 
@@ -306,10 +304,9 @@
       </svg>
     {/if}
   </div>
+  <!-- Under the board, clear of the frame and its shadow, so it never hides clues or marks. -->
   {#if showCursor}
-    <div class="tip" style:left="{cursorBox.labelX}px" style:top="{cursorBox.labelY}px" aria-hidden="true">
-      {cursorLabel}
-    </div>
+    <div class="tip" aria-hidden="true">{cursorLabel}</div>
   {/if}
   {#if zoom !== null}
     {@const limits = zoom}
@@ -357,6 +354,8 @@
 
   .tip {
     position: absolute;
+    left: 50%;
+    top: calc(100% + 14px);
     transform: translateX(-50%);
     padding: 6px 10px;
     border-radius: 6px;
