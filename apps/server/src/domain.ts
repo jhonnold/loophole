@@ -193,6 +193,8 @@ export interface ProgressRecord {
   readonly puzzleId: string;
   /** Edge states in the wire format's encoding, one character per edge. */
   readonly edges: string;
+  /** The player's cell shades in the wire format's encoding, one character per cell, or null. */
+  readonly shades: string | null;
   /** Play time on this attempt, as the player's clock counted it. */
   readonly elapsedMs: number;
   /** Worked out on the server from `edges`, never taken from the client. */

@@ -9,6 +9,8 @@
   interface Props {
     puzzle: Puzzle;
     edges: Uint8Array;
+    /** The player's cell shades, drawn like a hint's in and out tints; none once solved. */
+    shades?: Uint8Array;
     analysis: BoardAnalysis;
     /** The whole board at the current cell size. */
     layout: Layout;
@@ -18,7 +20,7 @@
     hint: HintMarks | null;
   }
 
-  let { puzzle, edges, analysis, layout, view, port, hint }: Props = $props();
+  let { puzzle, edges, shades, analysis, layout, view, port, hint }: Props = $props();
 
   const grid = $derived(puzzle.grid);
 
@@ -73,6 +75,14 @@
   const whatIf = $derived((hint?.whatIf ?? []).filter(([e]) => edges[e] === EdgeState.Unknown));
   const conflict = $derived(hint?.conflict);
   // A parity or colouring step's cells by side, and the marks its chains run along.
+  const shaded = $derived.by(() => {
+    const out: { cell: number; tone: "in" | "out" }[] = [];
+    if (shades === undefined || analysis.solved) return out;
+    shades.forEach((s, cell) => {
+      if (s !== 0) out.push({ cell, tone: s === 1 ? "in" : "out" });
+    });
+    return out;
+  });
   const sideCells = $derived(hint?.sides?.cells ?? []);
   const sideEdges = $derived(hint?.sides?.edges ?? []);
   const tinted = $derived(new Set(sideCells.map((t) => t.cell)));
@@ -92,6 +102,15 @@
         {/if}
       {/each}
     {/if}
+
+    {#each shaded as t (t.cell)}
+      {@const p = cellPoint(grid, geo, t.cell)}
+      {@const q = tintSquare(p.x, p.y, S, true)}
+      <rect class="shade side-{t.tone}" x={q.x} y={q.y} width={q.size} height={q.size} rx="3" />
+      {#if t.tone === "out"}
+        <path class="side-hatch" d={hatch(q.x, q.y, q.size)} stroke-width={Math.max(1, S / 24)} />
+      {/if}
+    {/each}
 
     {#each sideCells as t (t.cell)}
       {@const p = cellPoint(grid, geo, t.cell)}

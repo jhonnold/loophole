@@ -1,7 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { EdgeState } from "@loophole/core";
+import { CellShade, EdgeState } from "@loophole/core";
 import fc from "fast-check";
-import { applyChanges, clearAll, createBoard, hasMarks, nextState, redo, undo } from "./board.ts";
+import {
+  applyChanges,
+  applyShades,
+  clearAll,
+  createBoard,
+  hasMarks,
+  nextShade,
+  nextState,
+  redo,
+  undo,
+} from "./board.ts";
 
 const { Unknown, Line, Cross } = EdgeState;
 
@@ -22,7 +32,9 @@ describe("applyChanges", () => {
     ]);
     expect(Array.from(b1.edges)).toEqual([0, 1, 2, 0]);
     expect(Array.from(b0.edges)).toEqual([0, 0, 0, 0]);
-    expect(b1.past).toEqual([{ edges: [1, 2], before: [0, 0], after: [1, 2] }]);
+    expect(b1.past).toEqual([
+      { edges: [1, 2], before: [0, 0], after: [1, 2], cells: [], cellsBefore: [], cellsAfter: [] },
+    ]);
   });
 
   test("returns the same board when nothing changes", () => {
@@ -43,7 +55,7 @@ describe("applyChanges", () => {
     b = applyChanges(b, [[1, Line]]);
     b = applyChanges(b, [[0, Line]], true);
     b = applyChanges(b, [[0, Unknown]], true);
-    expect(b.past[1]).toEqual({ edges: [1, 0], before: [0, 2], after: [1, 0] });
+    expect(b.past[1]).toMatchObject({ edges: [1, 0], before: [0, 2], after: [1, 0] });
     expect(Array.from(undo(b).edges)).toEqual([2, 0]);
   });
 
@@ -99,4 +111,41 @@ describe("clearAll", () => {
 
 test("createBoard rejects a wrong-length edge array", () => {
   expect(() => createBoard(3, new Uint8Array(2))).toThrow(RangeError);
+});
+
+describe("cell shades", () => {
+  const { None, Inside, Outside } = CellShade;
+
+  test("a tap cycles none, inside, outside", () => {
+    expect(nextShade(None)).toBe(Inside);
+    expect(nextShade(Inside)).toBe(Outside);
+    expect(nextShade(Outside)).toBe(None);
+  });
+
+  test("shading is one undo step, and a drag joins it; undo and redo restore them", () => {
+    let b = createBoard(4, undefined, 3);
+    b = applyShades(b, [[0, Inside]]);
+    b = applyShades(b, [[1, Inside]], true);
+    expect(Array.from(b.cells)).toEqual([1, 1, 0]);
+    expect(b.past.length).toBe(1);
+    b = applyChanges(b, [[2, Line]]);
+    expect(Array.from(undo(b).cells)).toEqual([1, 1, 0]);
+    expect(Array.from(undo(undo(b)).cells)).toEqual([0, 0, 0]);
+    expect(Array.from(redo(undo(undo(b))).cells)).toEqual([1, 1, 0]);
+  });
+
+  test("count as marks, and clear empties them with the edges in one step", () => {
+    let b = applyShades(createBoard(4, undefined, 3), [[2, Outside]]);
+    expect(hasMarks(b)).toBe(true);
+    b = applyChanges(b, [[0, Cross]]);
+    const cleared = clearAll(b);
+    expect(hasMarks(cleared)).toBe(false);
+    expect(Array.from(undo(cleared).cells)).toEqual([0, 0, 2]);
+    expect(Array.from(undo(cleared).edges)).toEqual([2, 0, 0, 0]);
+  });
+
+  test("createBoard takes saved shades and rejects a wrong length", () => {
+    expect(Array.from(createBoard(4, undefined, 2, new Uint8Array([2, 1])).cells)).toEqual([2, 1]);
+    expect(() => createBoard(4, undefined, 2, new Uint8Array(3))).toThrow(RangeError);
+  });
 });

@@ -1,4 +1,4 @@
-import { decodeEdges, encodeEdges, type Grid } from "@loophole/core";
+import { decodeEdges, decodeShades, encodeEdges, encodeShades, type Grid } from "@loophole/core";
 
 /** The parts of the Web Storage API the progress store uses; `localStorage` fits. */
 export type KeyValueStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -6,6 +6,8 @@ export type KeyValueStorage = Pick<Storage, "getItem" | "setItem" | "removeItem"
 /** A guest's in-progress or finished attempt at one puzzle (FR-21, guest part). */
 export interface Progress {
   readonly edges: Uint8Array;
+  /** The player's cell shades (`CellShade`), when any were saved. */
+  readonly shades?: Uint8Array;
   readonly elapsedMs: number;
   readonly solved: boolean;
   /** A hint was shown during this attempt (PRD FR-12). */
@@ -15,6 +17,8 @@ export interface Progress {
 interface StoredProgressV1 {
   v: 1;
   edges: string;
+  /** Missing when no cell is shaded, as in saves from before shades. */
+  shades?: string;
   elapsedMs: number;
   solved: boolean;
   /** Missing in saves from before hints, which had none. */
@@ -65,6 +69,7 @@ export function createProgressStore(storage: KeyValueStorage | null): ProgressSt
             : 0;
         return {
           edges: decodeEdges(grid, data.edges),
+          ...loadShades(grid, data.shades),
           elapsedMs,
           solved: data.solved === true,
           assisted: data.assisted === true,
@@ -77,6 +82,7 @@ export function createProgressStore(storage: KeyValueStorage | null): ProgressSt
       const data: StoredProgressV1 = {
         v: 1,
         edges: encodeEdges(progress.edges),
+        ...saveShades(progress.shades),
         elapsedMs: Math.round(progress.elapsedMs),
         solved: progress.solved,
         assisted: progress.assisted,
@@ -95,4 +101,19 @@ export function createProgressStore(storage: KeyValueStorage | null): ProgressSt
       }
     },
   };
+}
+
+/** Saved shades as a `Progress` field: none when missing or unreadable (they are only notes). */
+export function loadShades(grid: Grid, text: unknown): { shades?: Uint8Array } {
+  if (typeof text !== "string") return {};
+  try {
+    return { shades: decodeShades(grid, text) };
+  } catch {
+    return {};
+  }
+}
+
+/** Shades as a saved field: left out when no cell is shaded. */
+export function saveShades(shades: Uint8Array | undefined): { shades?: string } {
+  return shades?.some((s) => s !== 0) ? { shades: encodeShades(shades) } : {};
 }

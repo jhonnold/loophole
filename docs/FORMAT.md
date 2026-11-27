@@ -75,6 +75,18 @@ A solution is written with only `1` and `2`. The 2×2 puzzle `"2222"` has one so
 112211121121
 ```
 
+## Cell shades (version 1)
+
+A player may shade cells as inside or outside the loop, to keep track for themselves. The shades travel with a board state as a string with one character per cell, in cell index order:
+
+| Character | Shade |
+|---|---|
+| `0` | none |
+| `1` | inside |
+| `2` | outside |
+
+The string's length must equal the puzzle's cell count. Shades are the player's notes: nothing checks them against the rules or the solution, and hints never read them. A board state without shades has none.
+
 ## Versioning
 
 Any change that an older reader would misread gets a new version number. A puzzle carries its version in `v`. Version 1 edge strings contain only `0`, `1` and `2`; a later edge encoding will start with a character outside those, so it can be told apart from version 1.

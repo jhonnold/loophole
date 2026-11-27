@@ -193,6 +193,7 @@ function toProgressDto(r: ProgressRecord) {
   return {
     puzzleId: r.puzzleId,
     edges: r.edges,
+    shades: r.shades,
     elapsedMs: r.elapsedMs,
     solved: r.solved,
     assisted: r.assisted,

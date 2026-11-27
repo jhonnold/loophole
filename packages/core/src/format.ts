@@ -156,6 +156,44 @@ export function decodeEdges(grid: Grid, text: string): Uint8Array {
   return edges;
 }
 
+/** A player's shade on a cell, an aid they keep for themselves (docs/FORMAT.md, Cell shades). */
+export const CellShade = { None: 0, Inside: 1, Outside: 2 } as const;
+export type CellShade = (typeof CellShade)[keyof typeof CellShade];
+
+/** Encodes cell shades as one character per cell, in cell index order: `0` none, `1` inside, `2` outside. */
+export function encodeShades(cells: Uint8Array): string {
+  let text = "";
+  for (let i = 0; i < cells.length; i++) {
+    const s = cells[i];
+    if (s > CellShade.Outside) throw new RangeError(`cell ${i} has invalid shade ${s}`);
+    text += String(s);
+  }
+  return text;
+}
+
+/** Decodes a cell-shade string for the given grid. Throws `FormatError`. */
+export function decodeShades(grid: Grid, text: string): Uint8Array {
+  if (typeof text !== "string") throw new FormatError("shades", "expected a string");
+  if (text.length !== grid.cellCount) {
+    throw new FormatError(
+      "shades",
+      `expected ${grid.cellCount} characters for a ${grid.width}×${grid.height} grid, got ${text.length}`,
+    );
+  }
+  const cells = new Uint8Array(grid.cellCount);
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "0" || ch === "1" || ch === "2") cells[i] = Number(ch);
+    else {
+      throw new FormatError(
+        "shades",
+        `invalid character ${JSON.stringify(ch)} at index ${i}; use 0, 1 or 2`,
+      );
+    }
+  }
+  return cells;
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

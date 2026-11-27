@@ -160,6 +160,18 @@ describe("paintBoard", () => {
     expect(calls.lineTo).toBeGreaterThan((plain.calls.lineTo ?? 0) + 1);
   });
 
+  test("draws the player's shades, hatching the outside, and none once solved", () => {
+    const plain = recorder();
+    paintBoard(plain.ctx, scene(5, 44, 0, 0));
+    const shades = new Uint8Array(25);
+    shades[0] = 1;
+    shades[1] = 2;
+    const { ctx, calls } = recorder();
+    paintBoard(ctx, { ...scene(5, 44, 0, 0), shades });
+    expect(calls.fillRect).toBe((plain.calls.fillRect ?? 0) + 2);
+    expect(calls.lineTo).toBeGreaterThan(plain.calls.lineTo ?? 0);
+  });
+
   test("draws a try-and-see hint's supposed marks and where they break the rules", () => {
     const grid = createGrid(5, 5);
     const hint: HintMarks = {

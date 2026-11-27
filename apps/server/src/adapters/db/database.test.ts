@@ -43,6 +43,7 @@ describe("openDatabase and migrate", () => {
       { version: 7 },
       { version: 8 },
       { version: 9 },
+      { version: 10 },
     ]);
   });
 

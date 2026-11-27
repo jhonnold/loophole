@@ -1,6 +1,6 @@
 import type { ApiClient, Schemas } from "@loophole/api-client";
 import { decodeEdges, encodeEdges, type Grid } from "@loophole/core";
-import type { KeyValueStorage, Progress } from "../game/progress.ts";
+import { type KeyValueStorage, loadShades, type Progress, saveShades } from "../game/progress.ts";
 
 /** Browser storage that can also list its keys; `localStorage` fits. */
 export type ListableStorage = KeyValueStorage & Pick<Storage, "key" | "length">;
@@ -8,6 +8,8 @@ export type ListableStorage = KeyValueStorage & Pick<Storage, "key" | "length">;
 /** A save as stored on the device and sent to the server: edges in the wire encoding. */
 export interface SavedBoard {
   readonly edges: string;
+  /** The player's cell shades in the wire encoding; missing when none are shaded. */
+  readonly shades?: string;
   readonly elapsedMs: number;
   readonly solved: boolean;
   readonly assisted: boolean;
@@ -47,6 +49,9 @@ export function readSaved(storage: KeyValueStorage | null, key: string): SavedBo
         : 0;
     return {
       edges: data.edges,
+      ...(typeof data.shades === "string" && /^[012]+$/.test(data.shades)
+        ? { shades: data.shades }
+        : {}),
       elapsedMs,
       solved: data.solved === true,
       assisted: data.assisted === true,
@@ -78,7 +83,13 @@ function toProgress(grid: Grid, saved: SavedBoard | null): Progress | null {
   if (saved === null) return null;
   try {
     const { elapsedMs, solved, assisted } = saved;
-    return { edges: decodeEdges(grid, saved.edges), elapsedMs, solved, assisted };
+    return {
+      edges: decodeEdges(grid, saved.edges),
+      ...loadShades(grid, saved.shades),
+      elapsedMs,
+      solved,
+      assisted,
+    };
   } catch {
     return null;
   }
@@ -87,6 +98,7 @@ function toProgress(grid: Grid, saved: SavedBoard | null): Progress | null {
 function fromProgress(p: Progress, version: number | null): SavedBoard {
   return {
     edges: encodeEdges(p.edges),
+    ...saveShades(p.shades),
     elapsedMs: Math.round(p.elapsedMs),
     solved: p.solved,
     assisted: p.assisted,
@@ -95,8 +107,8 @@ function fromProgress(p: Progress, version: number | null): SavedBoard {
 }
 
 function fromServer(p: Schemas["Progress"]): SavedBoard {
-  const { edges, elapsedMs, solved, assisted, version } = p;
-  return { edges, elapsedMs, solved, assisted, version };
+  const { edges, shades, elapsedMs, solved, assisted, version } = p;
+  return { edges, ...(shades ? { shades } : {}), elapsedMs, solved, assisted, version };
 }
 
 function same(a: SavedBoard | null, b: SavedBoard | null): boolean {
@@ -383,10 +395,17 @@ export function createProgressSync(deps: ProgressSyncDeps): ProgressSync {
   }
 
   function putBoard(puzzleId: string, saved: SavedBoard, from: string, init: PushInit) {
-    const { edges, elapsedMs, assisted, version } = saved;
+    const { edges, shades, elapsedMs, assisted, version } = saved;
     return client.PUT("/api/users/{userId}/progress/{puzzleId}", {
       ...path(puzzleId),
-      body: { edges, elapsedMs, assisted, baseVersion: version, device: from },
+      body: {
+        edges,
+        shades: shades ?? null,
+        elapsedMs,
+        assisted,
+        baseVersion: version,
+        device: from,
+      },
       ...withTimeout(init),
     });
   }
@@ -464,7 +483,7 @@ export function createProgressSync(deps: ProgressSyncDeps): ProgressSync {
       if (here?.solved && here.version !== null && here.edges === saved.edges) return;
       // Opening a puzzle and leaving it isn't progress, and an empty record would block a later
       // guest import.
-      if (here === null && !/[12]/.test(saved.edges)) return;
+      if (here === null && !/[12]/.test(saved.edges) && saved.shades === undefined) return;
       writeSaved(storage, boardKey(puzzleId), saved);
       unsynced.add(puzzleId);
       versions.set(puzzleId, (versions.get(puzzleId) ?? 0) + 1);

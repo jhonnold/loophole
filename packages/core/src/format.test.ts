@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
 import {
   decodeEdges,
+  decodeShades,
   encodeEdges,
+  encodeShades,
   FormatError,
   parsePuzzle,
   parsePuzzleJson,
@@ -217,6 +219,39 @@ describe("edge encoding", () => {
           const g = createGrid(w, h);
           const edges = Uint8Array.from(states.take(g.edgeCount));
           expect(decodeEdges(g, encodeEdges(edges))).toEqual(edges);
+        },
+      ),
+    );
+  });
+});
+
+describe("cell shade encoding", () => {
+  test("writes one digit per cell", () => {
+    expect(encodeShades(new Uint8Array([0, 1, 2, 0]))).toBe("0120");
+    expect(Array.from(decodeShades(createGrid(2, 2), "2100"))).toEqual([2, 1, 0, 0]);
+  });
+
+  test("rejects bad input", () => {
+    const g = createGrid(2, 1);
+    expect(formatError(() => decodeShades(g, "1")).message).toBe(
+      "shades: expected 2 characters for a 2×1 grid, got 1",
+    );
+    expect(formatError(() => decodeShades(g, "13")).message).toBe(
+      'shades: invalid character "3" at index 1; use 0, 1 or 2',
+    );
+    expect(() => encodeShades(new Uint8Array([3]))).toThrow(RangeError);
+  });
+
+  test("round-trips any shades", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 10 }),
+        fc.integer({ min: 1, max: 10 }),
+        fc.infiniteStream(fc.constantFrom(0, 1, 2)),
+        (w, h, shades) => {
+          const g = createGrid(w, h);
+          const cells = Uint8Array.from(shades.take(g.cellCount));
+          expect(decodeShades(g, encodeShades(cells))).toEqual(cells);
         },
       ),
     );

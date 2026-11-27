@@ -124,6 +124,7 @@ describe("saved progress routes", () => {
     const progress = {
       puzzleId: "p1",
       edges: ONE_LINE,
+      shades: null,
       elapsedMs: 4200,
       solved: false,
       assisted: true,

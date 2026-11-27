@@ -5,11 +5,11 @@
 </script>
 
 <script lang="ts">
-  import { type BoardAnalysis, EdgeState, NONE, type Puzzle } from "@loophole/core";
+  import { type BoardAnalysis, type CellShade, EdgeState, NONE, type Puzzle } from "@loophole/core";
   import { untrack } from "svelte";
-  import { type EdgeChange, nextState } from "../game/board.ts";
+  import { type CellChange, type EdgeChange, nextShade, nextState } from "../game/board.ts";
   import { edgeSegment, type Layout, type Point } from "../game/geometry.ts";
-  import { PointerGesture } from "../game/gesture.ts";
+  import { PointerGesture, ShadeGesture } from "../game/gesture.ts";
   import { type HintMarks, hintRect } from "../game/hint.ts";
   import { boardCommand, edgeLabel, moveCursor } from "../game/keyboard.ts";
   import { BoardPointers } from "../game/pointers.ts";
@@ -33,6 +33,10 @@
   interface Props {
     puzzle: Puzzle;
     edges: Uint8Array;
+    /** The player's cell shades (`CellShade`), one per cell. */
+    shades: Uint8Array;
+    /** Shade mode: taps and drags shade cells instead of marking edges. */
+    shading: boolean;
     analysis: BoardAnalysis;
     /** The whole board at the current cell size. */
     layout: Layout;
@@ -48,12 +52,28 @@
     hint: HintMarks | null;
     /** Applies edits; `merge` joins them to the previous undo step (drag strokes). */
     onedit: (changes: EdgeChange[], merge: boolean) => void;
+    /** Shades cells; `merge` joins them to the previous undo step (drag strokes). */
+    onshade: (changes: CellChange[], merge: boolean) => void;
     /** Moves or zooms the view of a zoomable board. */
     onview: (view: View) => void;
   }
 
-  let { puzzle, edges, analysis, layout, view, port, zoom, locked, hint, onedit, onview }: Props =
-    $props();
+  let {
+    puzzle,
+    edges,
+    shades,
+    shading,
+    analysis,
+    layout,
+    view,
+    port,
+    zoom,
+    locked,
+    hint,
+    onedit,
+    onshade,
+    onview,
+  }: Props = $props();
 
   const grid = $derived(puzzle.grid);
   const S = $derived(layout.cell);
@@ -85,7 +105,7 @@
   });
 
   const pointers = new BoardPointers();
-  let gesture: PointerGesture | null = null;
+  let gesture: PointerGesture | ShadeGesture | null = null;
 
   function local(e: { clientX: number; clientY: number }): Point {
     const r = (surface as HTMLDivElement).getBoundingClientRect();
@@ -106,7 +126,7 @@
     }
     keyboardMode = false;
     if (locked) return;
-    gesture = new PointerGesture(grid, layout);
+    gesture = shading ? new ShadeGesture(grid, layout) : new PointerGesture(grid, layout);
     gesture.down(p.x + view.x, p.y + view.y);
   }
 
@@ -121,6 +141,11 @@
       }
     }
     if (gesture === null || !pointers.drawing) return;
+    if (gesture instanceof ShadeGesture) {
+      const step = gesture.move(p.x + view.x, p.y + view.y, shades);
+      if (step !== null) onshade(step.changes, step.merge);
+      return;
+    }
     const step = gesture.move(p.x + view.x, p.y + view.y, edges);
     if (step !== null) onedit(step.changes, step.merge);
   }
@@ -128,7 +153,12 @@
   function onpointerup(e: PointerEvent) {
     if (!pointers.up(e.pointerId) || gesture === null) return;
     const tapped = gesture.up();
+    const shaded = gesture instanceof ShadeGesture;
     gesture = null;
+    if (shaded) {
+      if (tapped !== NONE && !locked) onshade([[tapped, nextShade(shades[tapped] as CellShade)]], false);
+      return;
+    }
     if (tapped !== NONE && !locked) {
       cursor = tapped;
       onedit([[tapped, nextState(edges[tapped] as EdgeState)]], false);
@@ -259,9 +289,9 @@
     onblur={() => (focused = false)}
   >
     {#if canvas}
-      <BoardCanvas {puzzle} {edges} {analysis} {layout} {view} {port} {hint} />
+      <BoardCanvas {puzzle} {edges} {shades} {analysis} {layout} {view} {port} {hint} />
     {:else}
-      <BoardSvg {puzzle} {edges} {analysis} {layout} {view} {port} {hint} />
+      <BoardSvg {puzzle} {edges} {shades} {analysis} {layout} {view} {port} {hint} />
     {/if}
     {#if showCursor}
       <svg class="overlay" width={port.width} height={port.height} aria-hidden="true">

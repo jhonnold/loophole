@@ -27,6 +27,29 @@ describe("progress store", () => {
     });
   });
 
+  test("keeps cell shades, leaves them out when there are none, and drops unreadable ones", () => {
+    const storage = memoryStorage();
+    const store = createProgressStore(storage);
+    const edges = new Uint8Array(12);
+    const shades = new Uint8Array([1, 2, 0, 0]);
+    store.save("a", { edges, shades, elapsedMs: 1, solved: false, assisted: false });
+    expect(store.load("a", grid)?.shades).toEqual(shades);
+    expect(JSON.parse(storage.data.get(progressKey("a")) ?? "").shades).toBe("1200");
+    store.save("b", {
+      edges,
+      shades: new Uint8Array(4),
+      elapsedMs: 1,
+      solved: false,
+      assisted: false,
+    });
+    expect(JSON.parse(storage.data.get(progressKey("b")) ?? "")).not.toHaveProperty("shades");
+    storage.setItem(
+      progressKey("c"),
+      JSON.stringify({ v: 1, edges: "000000000000", shades: "12", elapsedMs: 0, solved: false }),
+    );
+    expect(store.load("c", grid)).toEqual({ edges, elapsedMs: 0, solved: false, assisted: false });
+  });
+
   test("clear forgets a puzzle", () => {
     const store = createProgressStore(memoryStorage());
     store.save("a", { edges: new Uint8Array(12), elapsedMs: 0, solved: false, assisted: false });

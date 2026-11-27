@@ -11,6 +11,8 @@
   interface Props {
     puzzle: Puzzle;
     edges: Uint8Array;
+    /** The player's cell shades. */
+    shades?: Uint8Array;
     analysis: BoardAnalysis;
     /** The whole board at the current cell size. */
     layout: Layout;
@@ -19,7 +21,7 @@
     hint: HintMarks | null;
   }
 
-  let { puzzle, edges, analysis, layout, view, port, hint }: Props = $props();
+  let { puzzle, edges, shades, analysis, layout, view, port, hint }: Props = $props();
 
   let canvas: HTMLCanvasElement | undefined = $state();
   let ratio = $state(1);
@@ -51,7 +53,18 @@
     const el = canvas;
     if (el === undefined) return;
     void restyle;
-    const scene = { puzzle, edges, analysis, layout, view, port, ratio, palette: palette(el), hint };
+    const scene = {
+      puzzle,
+      edges,
+      shades,
+      analysis,
+      layout,
+      view,
+      port,
+      ratio,
+      palette: palette(el),
+      hint,
+    };
     const frame = requestAnimationFrame(() => {
       const ctx = el.getContext("2d");
       if (ctx !== null) paintBoard(ctx, scene);

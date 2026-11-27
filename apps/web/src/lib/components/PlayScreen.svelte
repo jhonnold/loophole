@@ -4,7 +4,9 @@
   import type { RankedPlay } from "../daily/view.ts";
   import {
     applyChanges,
+    applyShades,
     type Board,
+    type CellChange,
     clearAll,
     createBoard,
     type EdgeChange,
@@ -58,7 +60,11 @@
 
   // The page re-creates this component for each puzzle, so reading `entry` once here is fine.
   // svelte-ignore state_referenced_locally
-  let board: Board = $state.raw(createBoard(entry.puzzle.grid.edgeCount));
+  let board: Board = $state.raw(
+    createBoard(entry.puzzle.grid.edgeCount, undefined, entry.puzzle.grid.cellCount),
+  );
+  // Shade mode: taps and drags shade cells instead of marking edges.
+  let shading = $state(false);
   let watch: Stopwatch = $state.raw(createStopwatch());
   let now = $state(0);
   let paused = $state(false);
@@ -153,6 +159,7 @@
     if (!ready) return;
     saves?.save({
       edges: board.edges,
+      shades: board.cells,
       elapsedMs: elapsed(watch, performance.now()),
       solved,
       assisted,
@@ -179,11 +186,18 @@
     lastEdit = board.past.at(-1);
   }
 
+  function shade(changes: CellChange[], merge: boolean) {
+    if (locked) return;
+    const join = merge && board.past.at(-1) === lastEdit;
+    update(applyShades(board, changes, join));
+    lastEdit = board.past.at(-1);
+  }
+
   // Another device saved further, or the server kept a solved board: show that board instead.
   // Usually this happens while paused, when the tab comes back into sight.
   function adopt(saved: Progress | null) {
     if (!ready || destroyed) return;
-    board = createBoard(grid.edgeCount, saved?.edges);
+    board = createBoard(grid.edgeCount, saved?.edges, grid.cellCount, saved?.shades);
     lastEdit = undefined;
     hint = null;
     hintOpen = false;
@@ -271,6 +285,7 @@
     else if (cmd.type === "undo") update(undo(board));
     else if (cmd.type === "redo") update(redo(board));
     else if (cmd.type === "hint") askHint();
+    else if (cmd.type === "shade") shading = !shading;
     else if (cmd.type === "close" && hintOpen) closeHint();
   }
 
@@ -292,7 +307,7 @@
   function startOver() {
     saves?.clear();
     remoteNote = false;
-    board = createBoard(grid.edgeCount);
+    board = createBoard(grid.edgeCount, undefined, grid.cellCount);
     now = performance.now();
     watch = start(createStopwatch(), now);
     paused = false;
@@ -325,7 +340,7 @@
     opened.load().then((saved) => {
       if (destroyed) return;
       if (saved !== null) {
-        board = createBoard(grid.edgeCount, saved.edges);
+        board = createBoard(grid.edgeCount, saved.edges, grid.cellCount, saved.shades);
         watch = createStopwatch(saved.elapsedMs);
         assisted = saved.assisted;
       }
@@ -412,6 +427,8 @@
               bind:this={boardView}
               {puzzle}
               edges={board.edges}
+              shades={board.cells}
+              {shading}
               {analysis}
               layout={frame.layout}
               view={frame.view}
@@ -420,6 +437,7 @@
               {locked}
               hint={hintMarks}
               onedit={edit}
+              onshade={shade}
               onview={(v) => (zoomed = v)}
             />
           {/if}
@@ -465,6 +483,10 @@
               <p class="error"><span class="ring" aria-hidden="true"></span><span><b>{m.title}</b> {m.detail}</span></p>
             {/each}
           </div>
+        {:else if shading}
+          <p class="idle">
+            Shading: tap a cell for <b>inside</b>, then <b>outside</b>, then none. Drag to shade a run.
+          </p>
         {:else}
           <p class="idle">
             Tap an edge between two dots: <b>line</b>, then <b>×</b>, then empty. Drag to draw a run of
@@ -481,6 +503,8 @@
           canRedo={!locked && board.future.length > 0}
           canHint={!locked && !hintBusy}
           canClear={!locked && hasMarks(board)}
+          {shading}
+          onshade={() => run({ type: "shade" })}
           onundo={() => run({ type: "undo" })}
           onredo={() => run({ type: "redo" })}
           onhint={() => run({ type: "hint" })}
@@ -497,6 +521,7 @@
           <dt>Backspace</dt><dd>clear the edge</dd>
           <dt>Z / Y</dt><dd>undo / redo</dd>
           <dt>H</dt><dd>hint</dd>
+          <dt>S</dt><dd>shade cells on or off</dd>
           <dt>P</dt><dd>pause</dd>
           {#if zoomable && !solved}<dt>+ / −</dt><dd>zoom in / out</dd>{/if}
           <dt>Mouse</dt><dd>click to cycle, drag to draw a run</dd>

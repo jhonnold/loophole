@@ -3000,6 +3000,8 @@ export interface components {
             puzzleId: string;
             /** @description Edge states (docs/FORMAT.md). */
             edges: string;
+            /** @description The player's cell shades (docs/FORMAT.md), or null for none. */
+            shades: string | null;
             /** @description Play time on this attempt in milliseconds. */
             elapsedMs: number;
             solved: boolean;
@@ -3021,6 +3023,8 @@ export interface components {
         SaveProgressRequest: {
             /** @description The player's board: one character per edge, 0 empty, 1 line, 2 cross (docs/FORMAT.md). */
             edges: string;
+            /** @description The player's cell shades: one character per cell, 0 none, 1 inside, 2 outside (docs/FORMAT.md), or null for none. Left out, the saved shades are kept. */
+            shades?: string | null;
             /** @description Play time on this attempt in milliseconds. */
             elapsedMs: number;
             assisted: boolean;
