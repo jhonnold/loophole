@@ -7,6 +7,7 @@ type ProgressRow = {
   user_id: string;
   puzzle_id: string;
   edges: string;
+  shades: string | null;
   elapsed_ms: number;
   solved: number;
   assisted: number;
@@ -17,7 +18,7 @@ type ProgressRow = {
 };
 
 const COLUMNS =
-  "user_id, puzzle_id, edges, elapsed_ms, solved, assisted, version, device, created_at, updated_at";
+  "user_id, puzzle_id, edges, shades, elapsed_ms, solved, assisted, version, device, created_at, updated_at";
 
 /** Saved progress in SQLite, keyed by user and puzzle. */
 export class SqliteProgressRepository implements ProgressRepository {
@@ -31,7 +32,7 @@ export class SqliteProgressRepository implements ProgressRepository {
       `SELECT ${COLUMNS} FROM progress WHERE user_id = $userId AND puzzle_id = $puzzleId`,
     );
     this.#put = db.query<void, ProgressRow>(
-      `INSERT OR REPLACE INTO progress (${COLUMNS}) VALUES ($user_id, $puzzle_id, $edges, $elapsed_ms, $solved, $assisted, $version, $device, $created_at, $updated_at)`,
+      `INSERT OR REPLACE INTO progress (${COLUMNS}) VALUES ($user_id, $puzzle_id, $edges, $shades, $elapsed_ms, $solved, $assisted, $version, $device, $created_at, $updated_at)`,
     );
     this.#delete = db.query<void, { userId: string; puzzleId: string }>(
       "DELETE FROM progress WHERE user_id = $userId AND puzzle_id = $puzzleId",
@@ -51,6 +52,7 @@ export class SqliteProgressRepository implements ProgressRepository {
       user_id: record.userId,
       puzzle_id: record.puzzleId,
       edges: record.edges,
+      shades: record.shades,
       elapsed_ms: record.elapsedMs,
       solved: record.solved ? 1 : 0,
       assisted: record.assisted ? 1 : 0,
@@ -75,6 +77,7 @@ function fromRow(row: ProgressRow): ProgressRecord {
     userId: row.user_id,
     puzzleId: row.puzzle_id,
     edges: row.edges,
+    shades: row.shades,
     elapsedMs: row.elapsed_ms,
     solved: row.solved === 1,
     assisted: row.assisted === 1,

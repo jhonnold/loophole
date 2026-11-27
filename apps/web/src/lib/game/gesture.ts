@@ -1,6 +1,6 @@
-import { EdgeState, type Grid, NONE } from "@loophole/core";
-import type { EdgeChange } from "./board.ts";
-import { dotAt, dotPath, edgeAt, type Layout } from "./geometry.ts";
+import { type CellShade, EdgeState, type Grid, NONE } from "@loophole/core";
+import { type CellChange, type EdgeChange, nextShade } from "./board.ts";
+import { cellAt, dotAt, dotPath, edgeAt, type Layout } from "./geometry.ts";
 
 /** What a pointer movement did to the board. */
 export interface StrokeStep {
@@ -85,6 +85,92 @@ export class PointerGesture {
       this.active && !this.dragging
         ? edgeAt(this.grid, this.layout, this.startX, this.startY)
         : NONE;
+    this.active = false;
+    this.dragging = false;
+    return tapped;
+  }
+
+  cancel(): void {
+    this.active = false;
+    this.dragging = false;
+  }
+}
+
+/** What a pointer movement did to the shades. */
+export interface ShadeStep {
+  readonly changes: CellChange[];
+  /** False for the first step of a stroke (a new undo step), true for the rest. */
+  readonly merge: boolean;
+}
+
+/**
+ * One pointer's down/move/up in shade mode, in board pixel coordinates.
+ *
+ * - A press that stays put is a tap: on release, the cell under it cycles none → inside → outside
+ *   (the caller applies `nextShade`).
+ * - Moving farther than the slop starts a stroke: the first cell takes its next shade, and every
+ *   cell the pointer passes over takes the same one.
+ */
+export class ShadeGesture {
+  private active = false;
+  private dragging = false;
+  private startX = 0;
+  private startY = 0;
+  private lastX = 0;
+  private lastY = 0;
+  private cell = NONE;
+  private shade: CellShade | null = null;
+
+  constructor(
+    private readonly grid: Grid,
+    private readonly layout: Layout,
+  ) {}
+
+  get slop(): number {
+    return Math.max(8, this.layout.cell * 0.25);
+  }
+
+  down(x: number, y: number): void {
+    this.active = true;
+    this.dragging = false;
+    this.shade = null;
+    this.startX = this.lastX = x;
+    this.startY = this.lastY = y;
+    this.cell = cellAt(this.grid, this.layout, x, y);
+  }
+
+  /** Feeds a pointer position; returns the cells to shade, or null if none. */
+  move(x: number, y: number, cells: Uint8Array): ShadeStep | null {
+    if (!this.active) return null;
+    if (!this.dragging) {
+      if (Math.hypot(x - this.startX, y - this.startY) < this.slop) return null;
+      this.dragging = true;
+    }
+    const changes: CellChange[] = [];
+    const merge = this.shade !== null;
+    if (this.shade === null) {
+      if (this.cell === NONE) return null;
+      this.shade = nextShade(cells[this.cell] as CellShade);
+      changes.push([this.cell, this.shade]);
+    }
+    const dist = Math.hypot(x - this.lastX, y - this.lastY);
+    const steps = Math.max(1, Math.ceil(dist / (this.layout.cell / 4)));
+    for (let i = 1; i <= steps; i++) {
+      const px = this.lastX + ((x - this.lastX) * i) / steps;
+      const py = this.lastY + ((y - this.lastY) * i) / steps;
+      const next = cellAt(this.grid, this.layout, px, py);
+      if (next === NONE || next === this.cell) continue;
+      this.cell = next;
+      changes.push([next, this.shade]);
+    }
+    this.lastX = x;
+    this.lastY = y;
+    return changes.length > 0 ? { changes, merge } : null;
+  }
+
+  /** Ends the gesture. Returns the tapped cell, or `NONE` if it was a drag or missed the board. */
+  up(): number {
+    const tapped = this.active && !this.dragging ? this.cell : NONE;
     this.active = false;
     this.dragging = false;
     return tapped;

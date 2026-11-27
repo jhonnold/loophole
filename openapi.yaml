@@ -917,6 +917,11 @@ components:
         edges:
           type: string
           description: Edge states (docs/FORMAT.md).
+        shades:
+          type:
+            - string
+            - "null"
+          description: The player's cell shades (docs/FORMAT.md), or null for none.
         elapsedMs:
           type: integer
           minimum: 0
@@ -939,6 +944,7 @@ components:
       required:
         - puzzleId
         - edges
+        - shades
         - elapsedMs
         - solved
         - assisted
@@ -966,6 +972,14 @@ components:
           pattern: ^[012]*$
           description: "The player's board: one character per edge, 0 empty, 1 line, 2
             cross (docs/FORMAT.md)."
+        shades:
+          type:
+            - string
+            - "null"
+          pattern: ^[012]+$
+          description: "The player's cell shades: one character per cell, 0 none, 1
+            inside, 2 outside (docs/FORMAT.md), or null for none. Left out, the
+            saved shades are kept."
         elapsedMs:
           type: integer
           minimum: 0

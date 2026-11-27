@@ -28,6 +28,7 @@ const board = (edges: string, elapsedMs: number, assisted = false) => ({
 
 interface Stored {
   edges: string;
+  shades: string | null;
   elapsedMs: number;
   solved: boolean;
   assisted: boolean;
@@ -38,6 +39,7 @@ interface Stored {
 /** A record saved by another device. */
 const record = (edges: string, elapsedMs: number, version = 1): Stored => ({
   edges,
+  shades: null,
   elapsedMs,
   solved: edges === SOLVED,
   assisted: false,
@@ -97,6 +99,7 @@ function fakeServer() {
     }
     const sent = body as {
       edges: string;
+      shades?: string | null;
       elapsedMs: number;
       assisted: boolean;
       baseVersion: number | null;
@@ -104,7 +107,8 @@ function fakeServer() {
     };
     const solved = sent.edges === SOLVED;
     const assisted = sent.assisted || (stored?.assisted ?? false);
-    if (stored && !stored.solved && sent.edges === stored.edges) {
+    const shades = sent.shades === undefined ? (stored?.shades ?? null) : sent.shades;
+    if (stored && !stored.solved && sent.edges === stored.edges && shades === stored.shades) {
       const touched = {
         ...stored,
         elapsedMs: Math.max(stored.elapsedMs, sent.elapsedMs),
@@ -120,6 +124,7 @@ function fakeServer() {
     const next: Stored = accepted
       ? {
           edges: sent.edges,
+          shades,
           elapsedMs: sent.elapsedMs,
           solved,
           assisted,
@@ -259,6 +264,33 @@ describe("progress sync: opening a puzzle", () => {
   });
 });
 
+describe("progress sync: shades", () => {
+  test("go to the server with the board and come back on another device", async () => {
+    const { server, sync, timers } = setup();
+    const shades = new Uint8Array([1, 2, 0, 0]);
+    sync.save("p1", { ...board(ONE_LINE, 1000), shades });
+    await timers.runAll();
+    expect(server.records.get("p1")).toMatchObject({ edges: ONE_LINE, shades: "1200" });
+    // A change of shades alone is saved too.
+    sync.save("p1", { ...board(ONE_LINE, 2000), shades: new Uint8Array([1, 1, 0, 0]) });
+    await timers.runAll();
+    expect(server.records.get("p1")).toMatchObject({ shades: "1100", version: 2 });
+    const other = setup();
+    other.server.records.set("p1", { ...record(ONE_LINE, 3000), shades: "0012" });
+    expect((await other.sync.load("p1", grid))?.shades).toEqual(new Uint8Array([0, 0, 1, 2]));
+  });
+
+  test("a board with shades but no marks is still worth saving; none are left out", async () => {
+    const { server, sync, timers } = setup();
+    sync.save("p1", { ...board("000000000000", 500), shades: new Uint8Array([2, 0, 0, 0]) });
+    await timers.runAll();
+    expect(server.records.get("p1")?.shades).toBe("2000");
+    sync.save("p2", { ...board(ONE_LINE, 500), shades: new Uint8Array(4) });
+    await timers.runAll();
+    expect(server.records.get("p2")?.shades).toBeNull();
+  });
+});
+
 describe("progress sync: saving", () => {
   test("lands on the device at once and on the server after a pause", async () => {
     const { server, storage, sync, timers, key, unsynced } = setup();
@@ -272,7 +304,14 @@ describe("progress sync: saving", () => {
     expect(server.requests.map((r) => [r.method, r.body])).toEqual([
       [
         "PUT",
-        { edges: TWO_LINES, elapsedMs: 2000, assisted: false, baseVersion: null, device: "this" },
+        {
+          edges: TWO_LINES,
+          shades: null,
+          elapsedMs: 2000,
+          assisted: false,
+          baseVersion: null,
+          device: "this",
+        },
       ],
     ]);
     expect(unsynced()).toEqual([]);

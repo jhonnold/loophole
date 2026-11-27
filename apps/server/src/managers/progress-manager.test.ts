@@ -46,9 +46,10 @@ const input = (
   edges: string,
   baseVersion: number | null,
   device = "a",
-  options: { elapsedMs?: number; assisted?: boolean } = {},
+  options: { elapsedMs?: number; assisted?: boolean; shades?: string | null } = {},
 ) => ({
   edges,
+  ...(options.shades === undefined ? {} : { shades: options.shades }),
   elapsedMs: options.elapsedMs ?? 1000,
   assisted: options.assisted ?? false,
   baseVersion,
@@ -66,6 +67,7 @@ describe("ProgressManager", () => {
         userId: "u1",
         puzzleId: "p1",
         edges: ONE_LINE,
+        shades: null,
         elapsedMs: 1000,
         solved: false,
         assisted: true,
@@ -198,8 +200,33 @@ describe("ProgressManager", () => {
     });
   });
 
+  test("shades are saved with the board; a change of shades alone is a move; left out, they stay", () => {
+    const { manager } = setup();
+    manager.save("u1", "p1", input(ONE_LINE, null, "a", { shades: "1200" }));
+    expect(manager.get("u1", "p1")?.shades).toBe("1200");
+    const shaded = manager.save("u1", "p1", input(ONE_LINE, FIRST, "a", { shades: "1220" }));
+    expect(shaded).toMatchObject({
+      accepted: true,
+      record: { shades: "1220", version: FIRST + 1 },
+    });
+    // A client from before shades sends none: the stored ones stay, and it is the same board.
+    const old = manager.save("u1", "p1", input(ONE_LINE, FIRST + 1, "b"));
+    expect(old).toMatchObject({ record: { shades: "1220", version: FIRST + 1, device: "a" } });
+    // Null clears them.
+    expect(
+      manager.save("u1", "p1", input(ONE_LINE, FIRST + 1, "a", { shades: null })).record.shades,
+    ).toBeNull();
+    // A stale device's shades don't overwrite newer ones.
+    expect(manager.save("u1", "p1", input(ONE_LINE, FIRST, "b", { shades: "2222" })).accepted).toBe(
+      false,
+    );
+  });
+
   test("a board that does not fit the puzzle is refused", () => {
     const { manager } = setup();
+    expect(() => manager.save("u1", "p1", input(EMPTY, null, "a", { shades: "12" }))).toThrow(
+      InvalidBoardError,
+    );
     expect(() => manager.save("u1", "p1", input("000", null))).toThrow(InvalidBoardError);
     expect(() => manager.save("u1", "p1", input("00000000000x", null))).toThrow(InvalidBoardError);
   });

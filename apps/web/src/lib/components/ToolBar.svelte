@@ -4,13 +4,17 @@
     canRedo: boolean;
     canHint: boolean;
     canClear: boolean;
+    /** Shade mode is on: taps shade cells. */
+    shading: boolean;
+    onshade: () => void;
     onundo: () => void;
     onredo: () => void;
     onhint: () => void;
     onclear: () => void;
   }
 
-  let { canUndo, canRedo, canHint, canClear, onundo, onredo, onhint, onclear }: Props = $props();
+  let { canUndo, canRedo, canHint, canClear, shading, onshade, onundo, onredo, onhint, onclear }: Props =
+    $props();
 </script>
 
 <!-- Phones: the tray under the board from the Play artboard. Wide screens: the button grid from the
@@ -31,6 +35,11 @@
       ><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z" /></svg
     >Hint <kbd>H</kbd>
   </button>
+  <button type="button" class="shade" aria-pressed={shading} onclick={onshade}>
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+      ><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 14l10-10M4 20L20 4M10 20l10-10" /></svg
+    >Shade <kbd>S</kbd>
+  </button>
   <button type="button" disabled={!canClear} onclick={onclear}>
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
       ><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg
@@ -45,7 +54,7 @@
     border: 2px solid var(--ink);
     border-radius: 12px;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     padding: 4px;
   }
 
@@ -74,6 +83,12 @@
     cursor: default;
   }
 
+  /* Shade mode on: the button stays lit, in ai, until it is turned off. */
+  .shade[aria-pressed="true"] {
+    background: var(--ai-wash);
+    color: var(--ai);
+  }
+
   kbd {
     display: none;
   }
@@ -97,7 +112,8 @@
       font-size: 15px;
     }
 
-    .hint {
+    .hint,
+    .shade[aria-pressed="true"] {
       border-color: var(--ai);
     }
 

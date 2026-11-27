@@ -1,4 +1,4 @@
-import { analyzeBoard, decodeEdges, FormatError } from "@loophole/core";
+import { analyzeBoard, decodeEdges, decodeShades, FormatError } from "@loophole/core";
 import type { ProgressRecord, PuzzleRecord } from "../domain.ts";
 import type { Clock, ProgressRepository } from "../ports.ts";
 import { InvalidBoardError, PuzzleNotFoundError } from "./errors.ts";
@@ -14,6 +14,11 @@ export interface ProgressManagerDeps {
 export interface ProgressInput {
   /** Edge states in the wire format's encoding. */
   readonly edges: string;
+  /**
+   * The player's cell shades in the wire format's encoding, or null for none. Left out (by clients
+   * from before shades), the stored shades are kept.
+   */
+  readonly shades?: string | null;
   readonly elapsedMs: number;
   readonly assisted: boolean;
   /** The version of the record this board continues from, or null if the client had none. */
@@ -60,7 +65,7 @@ export class ProgressManager {
 
   /**
    * Saves a board unless the stored record wins over it (see the class comment). Throws
-   * `PuzzleNotFoundError`, or `InvalidBoardError` when `edges` does not fit the puzzle.
+   * `PuzzleNotFoundError`, or `InvalidBoardError` when `edges` or `shades` does not fit the puzzle.
    */
   save(userId: string, puzzleId: string, input: ProgressInput): SaveOutcome {
     const { progress, clock } = this.#deps;
@@ -68,6 +73,7 @@ export class ProgressManager {
     let board: Uint8Array;
     try {
       board = decodeEdges(puzzle.puzzle.grid, input.edges);
+      if (typeof input.shades === "string") decodeShades(puzzle.puzzle.grid, input.shades);
     } catch (err) {
       if (err instanceof FormatError) throw new InvalidBoardError(err.message);
       throw err;
@@ -80,6 +86,7 @@ export class ProgressManager {
         userId,
         puzzleId,
         edges: input.edges,
+        shades: input.shades ?? null,
         elapsedMs: input.elapsedMs,
         solved,
         assisted: input.assisted,
@@ -94,7 +101,8 @@ export class ProgressManager {
       return { record, accepted: true };
     }
     const assisted = stored.assisted || input.assisted;
-    if (!stored.solved && input.edges === stored.edges) {
+    const shades = input.shades === undefined ? stored.shades : input.shades;
+    if (!stored.solved && input.edges === stored.edges && shades === stored.shades) {
       // The same board (a tab hidden or left without a move): keep its version and device, so
       // the device that is playing doesn't find its next save stale. Play time never goes back.
       const record: ProgressRecord = {
@@ -118,6 +126,7 @@ export class ProgressManager {
     const record: ProgressRecord = {
       ...stored,
       edges: input.edges,
+      shades,
       elapsedMs: input.elapsedMs,
       solved,
       assisted,

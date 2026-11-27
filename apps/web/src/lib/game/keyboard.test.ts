@@ -101,6 +101,12 @@ describe("screenCommand", () => {
     expect(screenCommand(key("y", { ctrlKey: true }))).toEqual({ type: "redo" });
   });
 
+  test("maps S to shade mode", () => {
+    expect(screenCommand(key("s"))).toEqual({ type: "shade" });
+    expect(screenCommand(key("S", { shiftKey: true }))).toEqual({ type: "shade" });
+    expect(screenCommand(key("s", { ctrlKey: true }))).toBeNull();
+  });
+
   test("maps H to a hint and Escape to closing it", () => {
     expect(screenCommand(key("h"))).toEqual({ type: "hint" });
     expect(screenCommand(key("H", { shiftKey: true }))).toEqual({ type: "hint" });

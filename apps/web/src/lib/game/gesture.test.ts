@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createGrid, EdgeState, hEdgeIndex, NONE, vEdgeIndex } from "@loophole/core";
+import { CellShade, createGrid, EdgeState, hEdgeIndex, NONE, vEdgeIndex } from "@loophole/core";
 import { applyChanges, createBoard } from "./board.ts";
 import type { Layout } from "./geometry.ts";
-import { PointerGesture } from "./gesture.ts";
+import { PointerGesture, ShadeGesture } from "./gesture.ts";
 
 const grid = createGrid(4, 4);
 // Dot (r, c) is at (10 + 40c, 10 + 40r).
@@ -82,6 +82,44 @@ describe("PointerGesture", () => {
     g.down(...at(0, 0));
     g.cancel();
     expect(g.move(...at(0, 3), new Uint8Array(grid.edgeCount))).toBeNull();
+    expect(g.up()).toBe(NONE);
+  });
+});
+
+describe("ShadeGesture", () => {
+  // Cell centres: column c at x = 10 + 40c + 20.
+  const centre = (r: number, c: number) => [30 + 40 * c, 30 + 40 * r] as const;
+
+  test("a tap returns the cell under it, for the caller to cycle", () => {
+    const g = new ShadeGesture(grid, layout);
+    g.down(...centre(1, 2));
+    expect(g.move(centre(1, 2)[0] + 3, centre(1, 2)[1], new Uint8Array(16))).toBeNull();
+    expect(g.up()).toBe(6);
+  });
+
+  test("a drag gives the first cell its next shade and paints it on every cell it crosses", () => {
+    const cells = new Uint8Array(16);
+    cells[0] = CellShade.Inside;
+    const g = new ShadeGesture(grid, layout);
+    g.down(...centre(0, 0));
+    const first = g.move(...centre(0, 2), cells);
+    expect(first).toEqual({
+      changes: [
+        [0, CellShade.Outside],
+        [1, CellShade.Outside],
+        [2, CellShade.Outside],
+      ],
+      merge: false,
+    });
+    const next = g.move(...centre(1, 2), cells);
+    expect(next).toEqual({ changes: [[6, CellShade.Outside]], merge: true });
+    expect(g.up()).toBe(NONE);
+  });
+
+  test("a press off the board shades nothing", () => {
+    const g = new ShadeGesture(grid, layout);
+    g.down(2, 2);
+    expect(g.move(60, 60, new Uint8Array(16))).toBeNull();
     expect(g.up()).toBe(NONE);
   });
 });

@@ -43,6 +43,7 @@ function record(changes: Partial<ProgressRecord> = {}): ProgressRecord {
     userId: "u1",
     puzzleId: "p1",
     edges: "100000000000",
+    shades: null,
     elapsedMs: 4200,
     solved: false,
     assisted: true,
@@ -65,6 +66,8 @@ describe("SqliteProgressRepository", () => {
       record({ edges: "112211121121", solved: true, updatedAt: 30 }),
     );
     expect(repo.get("u2", "p1")).toBeNull();
+    repo.put(record({ shades: "1200" }));
+    expect(repo.get("u1", "p1")?.shades).toBe("1200");
     repo.delete("u1", "p1");
     expect(repo.get("u1", "p1")).toBeNull();
   });

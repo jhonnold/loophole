@@ -67,6 +67,8 @@ export type Painter = Pick<
 export interface Scene {
   readonly puzzle: Puzzle;
   readonly edges: Uint8Array;
+  /** The player's cell shades (`CellShade`), drawn like a hint's in and out tints; none once solved. */
+  readonly shades?: Uint8Array;
   readonly analysis: BoardAnalysis;
   /** The whole board at the current cell size. */
   readonly layout: Layout;
@@ -128,6 +130,31 @@ export function paintBoard(ctx: Painter, scene: Scene): void {
         ctx.fillRect(p.x - S / 2, p.y - S / 2, S, S);
       }
     }
+  }
+
+  const shades = scene.shades;
+  if (shades !== undefined && !analysis.solved) {
+    // The player's own shades: inside plain, outside hatched, as a hint tints them.
+    ctx.beginPath();
+    for (let r = r0; r <= r1; r++) {
+      for (let c = c0; c <= c1; c++) {
+        const i = cellIndex(grid, r, c);
+        if (shades[i] === 0) continue;
+        const p = cellPoint(grid, layout, i);
+        const q = tintSquare(p.x, p.y, S, true);
+        ctx.fillStyle = shades[i] === 1 ? palette.sideIn : palette.sideOut;
+        ctx.fillRect(q.x, q.y, q.size, q.size);
+        if (shades[i] !== 2) continue;
+        for (const [x1, y1, x2, y2] of hatchSegments(q.x, q.y, q.size, S / 5)) {
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+        }
+      }
+    }
+    ctx.lineWidth = Math.max(1, S / 24);
+    ctx.lineCap = "butt";
+    ctx.strokeStyle = palette.sideHatch;
+    ctx.stroke();
   }
 
   const hinted = new Uint8Array(hint === null ? 0 : grid.cellCount);

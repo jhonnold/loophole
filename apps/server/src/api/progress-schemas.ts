@@ -35,6 +35,10 @@ export const ProgressSchema = z
   .object({
     puzzleId: Id,
     edges: z.string().openapi({ description: "Edge states (docs/FORMAT.md)." }),
+    shades: z
+      .string()
+      .nullable()
+      .openapi({ description: "The player's cell shades (docs/FORMAT.md), or null for none." }),
     elapsedMs: ElapsedMs,
     solved: z.boolean(),
     assisted: z.boolean().openapi({ description: "A hint was shown during this attempt." }),
@@ -53,6 +57,15 @@ export const ProgressResultSchema = z
 export const SaveProgressRequestSchema = z
   .strictObject({
     edges: EdgesSchema,
+    shades: z
+      .string()
+      .regex(/^[012]+$/)
+      .nullable()
+      .optional()
+      .openapi({
+        description:
+          "The player's cell shades: one character per cell, 0 none, 1 inside, 2 outside (docs/FORMAT.md), or null for none. Left out, the saved shades are kept.",
+      }),
     elapsedMs: ElapsedMs,
     assisted: z.boolean(),
     baseVersion: z.union([z.int().min(1), z.null()]).openapi({

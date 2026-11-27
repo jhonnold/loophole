@@ -1,6 +1,6 @@
 import { createGrid, hEdgeIndex } from "@loophole/core";
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
-import { board, edgePoint, lines, savedLines } from "./board.ts";
+import { board, dotAt, edgePoint, lines, savedLines } from "./board.ts";
 
 const PASSWORD = "hunter22-e2e";
 /** Turnstile's test secret (set in the config) accepts this token. */
@@ -119,6 +119,19 @@ test("progress follows the account to another browser (FR-21)", async ({
   await page.getByRole("button", { name: "Resume" }).first().click();
   await expect(lines(page)).toHaveCount(2);
   await expect(page.getByText("Picked up your progress from another device.")).toBeVisible();
+
+  // A shaded cell goes with the board too, and a change of shades alone is a move.
+  await page.getByRole("button", { name: "Shade" }).click();
+  const a = await dotAt(page, 2, 2);
+  const b = await dotAt(page, 3, 3);
+  const shaded = page.waitForResponse(
+    (r) => r.request().method() === "PUT" && r.url().includes("/progress/") && r.ok(),
+  );
+  await page.mouse.click((a.x + b.x) / 2, (a.y + b.y) / 2);
+  expect((await (await shaded).json()).progress.shades).toMatch(/^0+10+$/);
+  await hideAndShow(other);
+  await other.getByRole("button", { name: "Resume" }).first().click();
+  await expect(other.locator("[role=application] .shade.side-in")).toHaveCount(1);
   await other.context().close();
 });
 

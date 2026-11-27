@@ -5,7 +5,16 @@ export type Direction = "up" | "down" | "left" | "right";
 export type Command =
   | { readonly type: "move"; readonly direction: Direction }
   | {
-      readonly type: "cycle" | "cross" | "erase" | "undo" | "redo" | "pause" | "hint" | "close";
+      readonly type:
+        | "cycle"
+        | "cross"
+        | "erase"
+        | "undo"
+        | "redo"
+        | "pause"
+        | "hint"
+        | "close"
+        | "shade";
     };
 
 /**
@@ -68,8 +77,8 @@ export interface KeyInput {
 }
 
 /**
- * Shortcuts that work anywhere on the play screen: Z undo, Y redo, P pause, H hint, Escape to close
- * the hint card, plus Ctrl/⌘ forms of undo and redo.
+ * Shortcuts that work anywhere on the play screen: Z undo, Y redo, P pause, H hint, S shade mode
+ * on or off, Escape to close the hint card, plus Ctrl/⌘ forms of undo and redo.
  */
 export function screenCommand(e: KeyInput): Command | null {
   if (e.altKey) return null;
@@ -83,6 +92,7 @@ export function screenCommand(e: KeyInput): Command | null {
   if (key === "y") return { type: "redo" };
   if (key === "p") return { type: "pause" };
   if (key === "h") return { type: "hint" };
+  if (key === "s") return { type: "shade" };
   if (key === "escape") return { type: "close" };
   return null;
 }
