@@ -55,6 +55,10 @@ describe("side proofs on the board", () => {
     expect(sideTexts(p10.grid, p10.clues, step)).toBeNull();
   });
 
+  test("without the clues, a colouring step falls back to its rule's words", () => {
+    expect(sideTexts(p10.grid, [], p10Step())).toBeNull();
+  });
+
   test("a hint's pages carry them: what the marks show, then what the 3 makes of it", () => {
     const step = p10Step();
     const view = hintView(p10.grid, { kind: "step", step, before: [] }, p10Board, p10.clues);
@@ -174,6 +178,12 @@ describe("hatching", () => {
       }
     }
     expect(hatchSegments(0, 0, 30, 6).length).toBe(9);
+  });
+
+  test("mirrored, it runs the other way in the same square", () => {
+    const [[x1, y1, x2, y2]] = hatchSegments(0, 0, 30, 6);
+    const [[m1, n1, m2, n2]] = hatchSegments(0, 0, 30, 6, true);
+    expect([m1, n1, m2, n2]).toEqual([30 - x1, y1, 30 - x2, y2]);
   });
 
   test("a light tint is a smaller square in the cell", () => {
