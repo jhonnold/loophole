@@ -109,8 +109,10 @@ function apply(
   cellChanges: readonly CellChange[],
   merge: boolean,
 ): Board {
-  const edges = board.edges.slice();
-  const cells = board.cells.slice();
+  // An array nothing changes stays the same object, so a hint asked for on these edges still
+  // applies after a cell is shaded.
+  const edges = edgeChanges.length > 0 ? board.edges.slice() : board.edges;
+  const cells = cellChanges.length > 0 ? board.cells.slice() : board.cells;
   const e = record(edges, edgeChanges);
   const c = record(cells, cellChanges);
   if (e.touched.length === 0 && c.touched.length === 0) return board;

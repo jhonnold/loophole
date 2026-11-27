@@ -144,6 +144,12 @@ describe("cell shades", () => {
     expect(Array.from(undo(cleared).edges)).toEqual([2, 0, 0, 0]);
   });
 
+  test("shading keeps the same edge array, so a hint asked for on it still applies", () => {
+    const b = createBoard(4, undefined, 3);
+    expect(applyShades(b, [[0, Inside]]).edges).toBe(b.edges);
+    expect(applyChanges(b, [[0, Line]]).cells).toBe(b.cells);
+  });
+
   test("createBoard takes saved shades and rejects a wrong length", () => {
     expect(Array.from(createBoard(4, undefined, 2, new Uint8Array([2, 1])).cells)).toEqual([2, 1]);
     expect(() => createBoard(4, undefined, 2, new Uint8Array(3))).toThrow(RangeError);
