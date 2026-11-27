@@ -18,7 +18,7 @@ import {
 } from "./geometry.ts";
 import type { HintMarks } from "./hint.ts";
 import { insideCells } from "./inside.ts";
-import { hatched, hatchSegments, tintSquare } from "./sides.ts";
+import { hatched, hatchSegments, mirrored, tintSquare } from "./sides.ts";
 import { type Size, type View, visibleCells } from "./viewport.ts";
 
 /** Theme colours for the canvas, read from the app stylesheet's custom properties. */
@@ -148,7 +148,7 @@ export function paintBoard(ctx: Painter, scene: Scene): void {
       ctx.fillStyle = tone[t.tone];
       ctx.fillRect(q.x, q.y, q.size, q.size);
       if (!hatched(t.tone)) continue;
-      for (const [x1, y1, x2, y2] of hatchSegments(q.x, q.y, q.size, S / 5)) {
+      for (const [x1, y1, x2, y2] of hatchSegments(q.x, q.y, q.size, S / 5, mirrored(t.tone))) {
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
       }

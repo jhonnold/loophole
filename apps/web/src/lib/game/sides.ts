@@ -26,6 +26,14 @@ export function hatched(tone: SideTone): boolean {
   return tone === "out" || tone === "b";
 }
 
+/**
+ * Whether a hatched tone runs the other way: `b` slants down to the right, `out` up to the right,
+ * so the two differ by more than colour when both show.
+ */
+export function mirrored(tone: SideTone): boolean {
+  return tone === "b";
+}
+
 /** The tints and chain marks for a step with a side proof, or undefined. */
 export function sideMarks(grid: Grid, step: Deduction): SideMarks | undefined {
   const proof = step.sides;
@@ -114,6 +122,7 @@ export function sideTexts(grid: Grid, clues: ArrayLike<number>, step: Deduction)
   const forced = proof.forced[0];
   const clue = forced.clue;
   const k = clues[clue];
+  if (k !== 1 && k !== 2 && k !== 3) return null;
   const around = [0, 1, 2, 3].map((j) => across(grid, clue, j));
   const name = (v: number): string | null => {
     if (v === clue) return `this ${k}`;
@@ -194,13 +203,21 @@ function relation(f: SideFact, clue: number, name: (v: number) => string | null)
  * The hatching of a square cell tint: segments of lines running up to the right, `gap` apart, cut
  * to the square at (`x`, `y`) with side `s`. Both renderers draw these, so they match.
  */
-export function hatchSegments(x: number, y: number, s: number, gap: number): number[][] {
+export function hatchSegments(
+  x: number,
+  y: number,
+  s: number,
+  gap: number,
+  mirror = false,
+): number[][] {
   const out: number[][] = [];
   for (let t = gap; t < 2 * s; t += gap) {
-    // The line x' + y' = t inside the square, measured from its top-left corner.
+    // The line x' + y' = t inside the square, measured from its top-left corner; mirrored, x' runs
+    // from the right.
     const x1 = Math.max(0, t - s);
     const x2 = Math.min(s, t);
-    out.push([x + x1, y + t - x1, x + x2, y + t - x2]);
+    const at = (dx: number) => (mirror ? x + s - dx : x + dx);
+    out.push([at(x1), y + t - x1, at(x2), y + t - x2]);
   }
   return out;
 }
