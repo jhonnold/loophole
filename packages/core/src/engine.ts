@@ -116,6 +116,236 @@ for (let m = 0; m < 16; m++)
 /** Line sets at a dot (bit j = `dotEdges` slot j: up, right, down, left): no line or two. */
 const DOT_CONFIGS = [0b0000, 0b0011, 0b0101, 0b0110, 0b1001, 0b1010, 0b1100];
 
+/**
+ * What `cellRule` and `dotRule` found, in fixed slots so the hot path allocates nothing: the sides
+ * (or dot edges) that are a line in any fitting set and in all of them, the bits each of the four
+ * corners keeps, the corners whose masks ruled a set out (bit q), and how many sets fit.
+ */
+const RULE_OUT = new Int32Array(8);
+const R_ANY = 0;
+const R_ALL = 1;
+const R_N0 = 2;
+const R_USED = 6;
+const R_COUNT = 7;
+
+/**
+ * Corner rule at a clue cell with clue `k`, `lines` and `crosses` its known sides (bit 0 top,
+ * 1 right, 2 bottom, 3 left) and `c0`..`c3` its corner masks: of the side sets with exactly `k`
+ * lines, keeps those that fit, into `RULE_OUT`.
+ */
+function cellRule(
+  k: number,
+  lines: number,
+  crosses: number,
+  c0: number,
+  c1: number,
+  c2: number,
+  c3: number,
+): void {
+  let any = 0;
+  let all = 0b1111;
+  let n0 = 0;
+  let n1 = 0;
+  let n2 = 0;
+  let n3 = 0;
+  let used = 0;
+  let count = 0;
+  for (const m of CELL_CONFIGS[k]) {
+    if ((m & lines) !== lines || (m & crosses) !== 0) continue;
+    const t = m & 1;
+    const r = (m >> 1) & 1;
+    const b = (m >> 2) & 1;
+    const l = m >> 3;
+    const b0 = 1 << (t * 2 + l);
+    const b1 = 1 << (t * 2 + r);
+    const b2 = 1 << (b * 2 + r);
+    const b3 = 1 << (b * 2 + l);
+    // `used` notes the first mask that rules a set out, for the hint.
+    if (!(c0 & b0)) used |= 1;
+    else if (!(c1 & b1)) used |= 2;
+    else if (!(c2 & b2)) used |= 4;
+    else if (!(c3 & b3)) used |= 8;
+    else {
+      count++;
+      any |= m;
+      all &= m;
+      n0 |= b0;
+      n1 |= b1;
+      n2 |= b2;
+      n3 |= b3;
+    }
+  }
+  RULE_OUT[R_ANY] = any;
+  RULE_OUT[R_ALL] = all;
+  RULE_OUT[R_N0] = n0;
+  RULE_OUT[R_N0 + 1] = n1;
+  RULE_OUT[R_N0 + 2] = n2;
+  RULE_OUT[R_N0 + 3] = n3;
+  RULE_OUT[R_USED] = used;
+  RULE_OUT[R_COUNT] = count;
+}
+
+/**
+ * Corner rule at a dot, `present`, `lines` and `crosses` its edges (bit j = `dotEdges` slot j) and
+ * `m0`..`m3` the corner masks in its quadrants (`ANY_PAIR` where there is none): of the line sets a
+ * dot can have, keeps those that fit, into `RULE_OUT`.
+ */
+function dotRule(
+  present: number,
+  lines: number,
+  crosses: number,
+  m0: number,
+  m1: number,
+  m2: number,
+  m3: number,
+): void {
+  let any = 0;
+  let all = 0b1111;
+  let n0 = 0;
+  let n1 = 0;
+  let n2 = 0;
+  let n3 = 0;
+  let used = 0;
+  let count = 0;
+  for (const m of DOT_CONFIGS) {
+    if ((m & present) !== m || (m & lines) !== lines || (m & crosses) !== 0) continue;
+    const up = m & 1;
+    const right = (m >> 1) & 1;
+    const down = (m >> 2) & 1;
+    const left = m >> 3;
+    // Quadrant q's corner as (h, v): 0 (left, up), 1 (right, up), 2 (right, down),
+    // 3 (left, down).
+    const b0 = 1 << (left * 2 + up);
+    const b1 = 1 << (right * 2 + up);
+    const b2 = 1 << (right * 2 + down);
+    const b3 = 1 << (left * 2 + down);
+    if (!(m0 & b0)) used |= 1;
+    else if (!(m1 & b1)) used |= 2;
+    else if (!(m2 & b2)) used |= 4;
+    else if (!(m3 & b3)) used |= 8;
+    else {
+      count++;
+      any |= m;
+      all &= m;
+      n0 |= b0;
+      n1 |= b1;
+      n2 |= b2;
+      n3 |= b3;
+    }
+  }
+  RULE_OUT[R_ANY] = any;
+  RULE_OUT[R_ALL] = all;
+  RULE_OUT[R_N0] = n0;
+  RULE_OUT[R_N0 + 1] = n1;
+  RULE_OUT[R_N0 + 2] = n2;
+  RULE_OUT[R_N0 + 3] = n3;
+  RULE_OUT[R_USED] = used;
+  RULE_OUT[R_COUNT] = count;
+}
+
+/** Corner masks by corner index (cell * 4 + j); a corner not in the map is unconstrained. */
+export type CornerMasks = ReadonlyMap<number, number>;
+
+/**
+ * The corner rules run only at the clue cells `cells` (each a 1, 2 or 3) and the dots `dots`, from
+ * those clues' starting masks and the board's `edges`: corners of other cells count as
+ * unconstrained. Masks narrow to a fixpoint; no edge is set. Returns the masks and the edges some
+ * site decides (edge → state), or null when a site has no set that fits.
+ */
+export function deriveCorners(
+  grid: Grid,
+  clues: Int8Array,
+  edges: Uint8Array,
+  cells: readonly number[],
+  dots: readonly number[],
+): { masks: CornerMasks; forced: Map<number, EdgeState> } | null {
+  const masks = new Map<number, number>();
+  for (const i of cells) {
+    const k = clues[i];
+    const start = k === 1 ? ONE_PAIRS : k === 3 ? THREE_PAIRS : ANY_PAIR;
+    for (let j = 0; j < 4; j++) masks.set(i * 4 + j, start);
+  }
+  const W = grid.width;
+  const H = grid.height;
+  /** The corner in quadrant `q` of dot `d` if its cell is among `cells`, else -1. */
+  const quad = (d: number, q: number): number => {
+    const r = Math.floor(d / (W + 1)) - (q < 2 ? 1 : 0);
+    const c = (d % (W + 1)) - (q === 0 || q === 3 ? 1 : 0);
+    if (r < 0 || r >= H || c < 0 || c >= W) return -1;
+    const corner = (r * W + c) * 4 + ((q + 2) & 3);
+    return masks.has(corner) ? corner : -1;
+  };
+  const forced = new Map<number, EdgeState>();
+  const { cellEdges, dotEdges } = grid;
+  const cs = [0, 0, 0, 0];
+  const qs = [0, 0, 0, 0];
+  const ms = [0, 0, 0, 0];
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const i of cells) {
+      let lines = 0;
+      let crosses = 0;
+      for (let s = 0; s < 4; s++) {
+        const st = edges[cellEdges[i * 4 + s]];
+        if (st === Line) lines |= 1 << s;
+        else if (st === Cross) crosses |= 1 << s;
+      }
+      if ((lines | crosses) === 0b1111) continue;
+      const base = i * 4;
+      for (let j = 0; j < 4; j++) cs[j] = masks.get(base + j) as number;
+      cellRule(clues[i], lines, crosses, cs[0], cs[1], cs[2], cs[3]);
+      const any = RULE_OUT[R_ANY];
+      if (any === 0) return null;
+      const all = RULE_OUT[R_ALL];
+      for (let s = 0; s < 4; s++) {
+        const e = cellEdges[base + s];
+        if (all & ~lines & (1 << s)) forced.set(e, Line);
+        else if (~any & ~crosses & (1 << s)) forced.set(e, Cross);
+      }
+      for (let j = 0; j < 4; j++) {
+        const nm = cs[j] & RULE_OUT[R_N0 + j];
+        if (nm === cs[j]) continue;
+        masks.set(base + j, nm);
+        changed = true;
+      }
+    }
+    for (const d of dots) {
+      let present = 0;
+      let lines = 0;
+      let crosses = 0;
+      for (let s = 0; s < 4; s++) {
+        const e = dotEdges[d * 4 + s];
+        if (e === NONE) continue;
+        present |= 1 << s;
+        if (edges[e] === Line) lines |= 1 << s;
+        else if (edges[e] === Cross) crosses |= 1 << s;
+      }
+      if ((lines | crosses) === present) continue;
+      for (let q = 0; q < 4; q++) {
+        qs[q] = quad(d, q);
+        ms[q] = qs[q] < 0 ? ANY_PAIR : (masks.get(qs[q]) as number);
+      }
+      dotRule(present, lines, crosses, ms[0], ms[1], ms[2], ms[3]);
+      if (RULE_OUT[R_COUNT] === 0) return null;
+      const any = RULE_OUT[R_ANY];
+      const all = RULE_OUT[R_ALL];
+      for (let s = 0; s < 4; s++) {
+        const e = dotEdges[d * 4 + s];
+        if (all & ~lines & (1 << s)) forced.set(e, Line);
+        else if (present & ~any & ~crosses & (1 << s)) forced.set(e, Cross);
+      }
+      for (let q = 0; q < 4; q++) {
+        if (qs[q] < 0) continue;
+        const nm = ms[q] & RULE_OUT[R_N0 + q];
+        if (nm === ms[q]) continue;
+        masks.set(qs[q], nm);
+        changed = true;
+      }
+    }
+  }
+  return { masks, forced };
+}
+
 interface Pattern {
   readonly rule: RuleId;
   readonly cells: readonly number[];
@@ -832,38 +1062,15 @@ export class Engine {
     const c1 = corners[base + 1];
     const c2 = corners[base + 2];
     const c3 = corners[base + 3];
-    let any = 0;
-    let all = 0b1111;
-    let n0 = 0;
-    let n1 = 0;
-    let n2 = 0;
-    let n3 = 0;
-    let used = 0;
-    for (const m of CELL_CONFIGS[k]) {
-      if ((m & lines) !== lines || (m & crosses) !== 0) continue;
-      const t = m & 1;
-      const r = (m >> 1) & 1;
-      const b = (m >> 2) & 1;
-      const l = m >> 3;
-      const b0 = 1 << (t * 2 + l);
-      const b1 = 1 << (t * 2 + r);
-      const b2 = 1 << (b * 2 + r);
-      const b3 = 1 << (b * 2 + l);
-      // `used` notes the first mask that rules a set out, for the hint.
-      if (!(c0 & b0)) used |= 1;
-      else if (!(c1 & b1)) used |= 2;
-      else if (!(c2 & b2)) used |= 4;
-      else if (!(c3 & b3)) used |= 8;
-      else {
-        any |= m;
-        all &= m;
-        n0 |= b0;
-        n1 |= b1;
-        n2 |= b2;
-        n3 |= b3;
-      }
-    }
+    cellRule(k, lines, crosses, c0, c1, c2, c3);
+    const any = RULE_OUT[R_ANY];
     if (any === 0) return -1;
+    const all = RULE_OUT[R_ALL];
+    const n0 = RULE_OUT[R_N0];
+    const n1 = RULE_OUT[R_N0 + 1];
+    const n2 = RULE_OUT[R_N0 + 2];
+    const n3 = RULE_OUT[R_N0 + 3];
+    const used = RULE_OUT[R_USED];
     const setLines = all & ~lines;
     const setCrosses = 0b1111 & ~any & ~crosses;
     const narrow = (c0 & n0) !== c0 || (c1 & n1) !== c1 || (c2 & n2) !== c2 || (c3 & n3) !== c3;
@@ -882,7 +1089,7 @@ export class Engine {
       if (setLines & (1 << s)) changes.push({ edge: e, state: Line });
       else if (setCrosses & (1 << s)) changes.push({ edge: e, state: Cross });
     }
-    return this.cornerStep(changes, why);
+    return this.cornerStep(changes, why, i);
   }
 
   /**
@@ -912,41 +1119,15 @@ export class Engine {
     const m1 = q1 < 0 ? ANY_PAIR : corners[q1];
     const m2 = q2 < 0 ? ANY_PAIR : corners[q2];
     const m3 = q3 < 0 ? ANY_PAIR : corners[q3];
-    let any = 0;
-    let all = 0b1111;
-    let n0 = 0;
-    let n1 = 0;
-    let n2 = 0;
-    let n3 = 0;
-    let used = 0;
-    let count = 0;
-    for (const m of DOT_CONFIGS) {
-      if ((m & present) !== m || (m & lines) !== lines || (m & crosses) !== 0) continue;
-      const up = m & 1;
-      const right = (m >> 1) & 1;
-      const down = (m >> 2) & 1;
-      const left = m >> 3;
-      // Quadrant q's corner as (h, v): 0 (left, up), 1 (right, up), 2 (right, down),
-      // 3 (left, down).
-      const b0 = 1 << (left * 2 + up);
-      const b1 = 1 << (right * 2 + up);
-      const b2 = 1 << (right * 2 + down);
-      const b3 = 1 << (left * 2 + down);
-      if (!(m0 & b0)) used |= 1;
-      else if (!(m1 & b1)) used |= 2;
-      else if (!(m2 & b2)) used |= 4;
-      else if (!(m3 & b3)) used |= 8;
-      else {
-        count++;
-        any |= m;
-        all &= m;
-        n0 |= b0;
-        n1 |= b1;
-        n2 |= b2;
-        n3 |= b3;
-      }
-    }
-    if (count === 0) return -1;
+    dotRule(present, lines, crosses, m0, m1, m2, m3);
+    if (RULE_OUT[R_COUNT] === 0) return -1;
+    const any = RULE_OUT[R_ANY];
+    const all = RULE_OUT[R_ALL];
+    const n0 = RULE_OUT[R_N0];
+    const n1 = RULE_OUT[R_N0 + 1];
+    const n2 = RULE_OUT[R_N0 + 2];
+    const n3 = RULE_OUT[R_N0 + 3];
+    const used = RULE_OUT[R_USED];
     const setLines = all & ~lines;
     const setCrosses = present & ~any & ~crosses;
     const qs = [q0, q1, q2, q3];
@@ -967,25 +1148,92 @@ export class Engine {
       if (setLines & (1 << s)) changes.push({ edge: e, state: Line });
       else if (setCrosses & (1 << s)) changes.push({ edge: e, state: Cross });
     }
-    return this.cornerStep(changes, why);
+    return this.cornerStep(changes, why, grid.cellCount + d);
   }
 
-  /** Sets `changes` as one step named by `classifyCorners`. 0 when there are none. */
-  private cornerStep(changes: EdgeChange[], why: readonly number[] | undefined): number {
+  /**
+   * Sets `changes` as one step named by `classifyCorners`, its reason `why` cut down by
+   * `trimReason`. 0 when there are none.
+   */
+  private cornerStep(
+    changes: EdgeChange[],
+    why: readonly number[] | undefined,
+    own: number,
+  ): number {
     if (changes.length === 0) return 0;
     if (why !== undefined) {
-      const C = this.grid.cellCount;
-      const cells = why.filter((x) => x < C);
-      const dots = why.filter((x) => x >= C).map((x) => x - C);
-      this.begin(
-        classifyCorners(this.grid, this.clues, this.corners, cells, dots, changes),
-        cells,
-        dots,
-      );
+      const { cells, dots, masks } = this.trimReason(own, why, changes);
+      this.begin(classifyCorners(this.grid, this.clues, masks, cells, dots, changes), cells, dots);
     } else this.pending = null;
     for (const { edge, state } of changes) if (!this.assign(edge, state)) return -1;
     this.commit();
     return 1;
+  }
+
+  /**
+   * Cuts a corner step's reason `why` (clue cells, and dots as cellCount + dot) down to the sites
+   * it cannot do without. `why` holds every site whose rules narrowed a mask the step used, which
+   * can take in clues the step does not need (#14). One by one, clue cells first and the farthest
+   * from the step's edges first, a site goes when the corner rules at the others still decide every
+   * change from the board's edges (`deriveCorners`); `own`, the site whose rule fired, stays.
+   * Fewer sites decide no more, so one pass leaves no site that could go. Returns the kept cells,
+   * dots and the masks they give, which `classifyCorners` reads; `why` whole if even it does not
+   * decide the changes (it always does: the masks it narrowed only had fewer edges to go on).
+   */
+  private trimReason(
+    own: number,
+    why: readonly number[],
+    changes: readonly EdgeChange[],
+  ): { cells: number[]; dots: number[]; masks: CornerMasks } {
+    const { grid, clues, edges } = this;
+    const C = grid.cellCount;
+    const W = grid.width;
+    const split = (sites: readonly number[]) => ({
+      cells: sites.filter((x) => x < C),
+      dots: sites.filter((x) => x >= C).map((x) => x - C),
+    });
+    // A single site is the rule that fired, which stays; classifying one cell reads no masks.
+    if (why.length === 1) return { ...split(why), masks: new Map() };
+    const derives = (sites: readonly number[]) => {
+      const { cells, dots } = split(sites);
+      const r = deriveCorners(grid, clues, edges, cells, dots);
+      return r !== null && changes.every((c) => r.forced.get(c.edge) === c.state) ? r : null;
+    };
+    let best = derives(why);
+    if (best === null) {
+      const masks = new Map<number, number>();
+      for (const i of split(why).cells)
+        for (let j = 0; j < 4; j++) masks.set(i * 4 + j, this.corners[i * 4 + j]);
+      return { ...split(why), masks };
+    }
+    // Positions in dot units: dot d at (row, col), a cell's centre, an edge's midpoint.
+    const dotAt = (d: number): [number, number] => [Math.floor(d / (W + 1)), d % (W + 1)];
+    const at = (x: number): [number, number] => {
+      if (x >= C) return dotAt(x - C);
+      return [Math.floor(x / W) + 0.5, (x % W) + 0.5];
+    };
+    const mids = changes.map(({ edge }) => {
+      const [r0, c0] = dotAt(grid.edgeDots[edge * 2]);
+      const [r1, c1] = dotAt(grid.edgeDots[edge * 2 + 1]);
+      return [(r0 + r1) / 2, (c0 + c1) / 2];
+    });
+    const far = (x: number) => {
+      const [r, c] = at(x);
+      return Math.min(...mids.map(([mr, mc]) => (r - mr) ** 2 + (c - mc) ** 2));
+    };
+    const order = why
+      .filter((x) => x !== own)
+      .map((x) => ({ x, dot: x >= C ? 1 : 0, far: far(x) }))
+      .sort((a, b) => a.dot - b.dot || b.far - a.far || a.x - b.x);
+    let kept = why;
+    for (const { x } of order) {
+      const trial = kept.filter((y) => y !== x);
+      const r = derives(trial);
+      if (r === null) continue;
+      kept = trial;
+      best = r;
+    }
+    return { ...split(kept), masks: best.masks };
   }
 
   /**
@@ -2684,8 +2932,8 @@ function cornerDotOf(grid: Grid, i: number, j: number): number {
 }
 
 /**
- * Names a corner step for its hint from the clue cells and dots it rests on (its reason) and the
- * edges it sets, checked in this order:
+ * Names a corner step for its hint from the clue cells and dots it rests on (its reason, after
+ * `trimReason`), the corner masks those give (`masks`) and the edges it sets, checked in this order:
  * - a 2 among the clues: "two-in-corner" when the 2 is the only clue, sits in a corner cell of the
  *   board, and the reason holds that corner's dot and only dots on the board's edge; otherwise
  *   "two-passes-on"
@@ -2697,7 +2945,7 @@ function cornerDotOf(grid: Grid, i: number, j: number): number {
 function classifyCorners(
   grid: Grid,
   clues: Int8Array,
-  corners: Uint8Array,
+  masks: CornerMasks,
   cells: readonly number[],
   dots: readonly number[],
   changes: readonly EdgeChange[],
@@ -2739,7 +2987,7 @@ function classifyCorners(
     if (Math.abs(dr) === 1 && Math.abs(dc) === 1) {
       // The 3's corner towards the 1.
       const j = dr < 0 ? (dc < 0 ? 0 : 1) : dc < 0 ? 3 : 2;
-      if ((corners[three * 4 + j] & ~ODD) === 0) return "three-diagonal-one";
+      if (((masks.get(three * 4 + j) ?? ANY_PAIR) & ~ODD) === 0) return "three-diagonal-one";
     }
   }
   return "corner-chain";
