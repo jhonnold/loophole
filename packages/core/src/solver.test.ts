@@ -2,16 +2,18 @@ import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
 import { analyzeBoard } from "./analyze.ts";
 import { bruteForceSolutions } from "./bruteforce.ts";
+import { deriveCorners } from "./engine.ts";
 import { decodeEdges, encodeEdges, parsePuzzle } from "./format.ts";
-import { createGrid, EdgeState } from "./grid.ts";
+import { createGrid, EdgeState, type Grid } from "./grid.ts";
 import { generateLoop } from "./loop.ts";
-import { createPuzzle, deriveClues, NO_CLUE } from "./puzzle.ts";
+import { createPuzzle, deriveClues, NO_CLUE, type Puzzle } from "./puzzle.ts";
 import { createRng } from "./rng.ts";
 import { GROUP_RULES, RULE_GROUPS, RULE_IDS, type RuleId, type Step } from "./rules.ts";
 import { solve } from "./solver.ts";
 import { arbPuzzleWithSolution } from "./test-support/arbitraries.ts";
 import { clueGapCorpus } from "./test-support/clue-gaps.ts";
 import { FIXTURES } from "./test-support/fixtures.ts";
+import { puzzleFromLoop, randomLoop } from "./test-support/loops.ts";
 
 function puzzle(width: number, height: number, clues: string) {
   return parsePuzzle({ v: 1, width, height, clues });
@@ -187,6 +189,133 @@ describe("solve: each rule", () => {
     expect(result.status).toBe("solved");
     expect(encodeEdges(result.edges)).toBe(encodeEdges(bruteForceSolutions(p)[0]));
     expect(result.edges[5]).toBe(EdgeState.Cross);
+  });
+});
+
+describe("solve: a corner step's reason holds only what it needs (#14)", () => {
+  test("a 2 passing a 3's corner on leaves out the 1 diagonal to the 2", () => {
+    // 1 top-left, 2 in the middle, 3 bottom-left: the 3's corner by the 2 uses a side, so the 2
+    // passes the loop through its corner on the right border, and the line goes up. The 1 (and the
+    // dot between it and the 2) narrowed the 2's masks too, but the step does not need them.
+    const result = solve(puzzle(2, 3, "1..23."));
+    expect(result.status).toBe("solved");
+    expect(brief(result.steps[2])).toEqual({
+      rule: "two-passes-on",
+      changes: "10:1",
+      cells: [3, 4],
+      dots: [5, 7],
+    });
+  });
+
+  /** Puzzles from random loops on boards up to 6×6 with a random share of the clues kept. */
+  const arbPuzzle = fc
+    .record({
+      width: fc.integer({ min: 1, max: 6 }),
+      height: fc.integer({ min: 1, max: 6 }),
+      seed: fc.integer(),
+      keep: fc.double({ min: 0.4, max: 1, noNaN: true }),
+    })
+    .map(({ width, height, seed, keep }) => {
+      const grid = createGrid(width, height);
+      const rng = createRng(String(seed));
+      return puzzleFromLoop(grid, randomLoop(grid, rng), rng, keep);
+    });
+  const corner = new Set<RuleId>(GROUP_RULES.corners);
+
+  /** Each corner step with the board as it stood before it. */
+  function cornerSteps(p: Puzzle): { step: Step; edges: Uint8Array }[] {
+    const out: { step: Step; edges: Uint8Array }[] = [];
+    const edges = new Uint8Array(p.grid.edgeCount);
+    for (const step of solve(p).steps) {
+      if (corner.has(step.rule)) out.push({ step, edges: edges.slice() });
+      for (const { edge, state } of step.changes) edges[edge] = state;
+    }
+    return out;
+  }
+
+  /** The edges around `cells` and `dots`. */
+  function around(grid: Grid, cells: readonly number[], dots: readonly number[]): number[] {
+    const es = new Set<number>();
+    for (const c of cells) for (let j = 0; j < 4; j++) es.add(grid.cellEdges[c * 4 + j]);
+    for (const d of dots) {
+      for (let j = 0; j < 4; j++)
+        if (grid.dotEdges[d * 4 + j] >= 0) es.add(grid.dotEdges[d * 4 + j]);
+    }
+    return [...es];
+  }
+
+  test("the kept clues and dots alone force the step: every way to fill their open edges agrees", () => {
+    // Independent of the corner code: each kept cell has its clue's number of lines, each kept dot
+    // none or two, and every assignment of the open edges around them that fits sets the step's
+    // edges as it does.
+    let checked = 0;
+    fc.assert(
+      fc.property(arbPuzzle, (p) => {
+        const { grid, clues } = p;
+        for (const { step, edges } of cornerSteps(p)) {
+          const open = around(grid, step.cells, step.dots).filter((e) => edges[e] === 0);
+          if (open.length > 16) continue;
+          const lineAt = (e: number, a: number) =>
+            edges[e] === EdgeState.Line || (edges[e] === 0 && (a >> open.indexOf(e)) & 1) === 1;
+          let fits = 0;
+          for (let a = 0; a < 1 << open.length; a++) {
+            const cellsHold = step.cells.every((c) => {
+              let n = 0;
+              for (let j = 0; j < 4; j++) if (lineAt(grid.cellEdges[c * 4 + j], a)) n++;
+              return n === clues[c];
+            });
+            const dotsHold = step.dots.every((d) => {
+              let n = 0;
+              for (let j = 0; j < 4; j++) {
+                const e = grid.dotEdges[d * 4 + j];
+                if (e >= 0 && lineAt(e, a)) n++;
+              }
+              return n === 0 || n === 2;
+            });
+            if (!cellsHold || !dotsHold) continue;
+            fits++;
+            for (const { edge, state } of step.changes) {
+              expect(lineAt(edge, a)).toBe(state === EdgeState.Line);
+            }
+          }
+          expect(fits).toBeGreaterThan(0);
+          checked++;
+        }
+      }),
+      { numRuns: 300 },
+    );
+    expect(checked).toBeGreaterThan(100);
+  });
+
+  test("the corner rules at the kept sites force the step, and at any fewer they do not", () => {
+    let dropped = 0;
+    fc.assert(
+      fc.property(arbPuzzle, (p) => {
+        const { grid, clues } = p;
+        const C = grid.cellCount;
+        for (const { step, edges } of cornerSteps(p)) {
+          const forces = (cells: readonly number[], dots: readonly number[]) => {
+            const r = deriveCorners(grid, clues, edges, cells, dots);
+            return r !== null && step.changes.every((c) => r.forced.get(c.edge) === c.state);
+          };
+          expect(forces(step.cells, step.dots)).toBe(true);
+          // The site whose rule fired has every edge the step sets around it, and always stays.
+          const changed = step.changes.map((c) => c.edge);
+          const sites = [...step.cells, ...step.dots.map((d) => C + d)];
+          for (const x of sites) {
+            const own = x < C ? around(grid, [x], []) : around(grid, [], [x - C]);
+            if (changed.every((e) => own.includes(e))) continue;
+            const rest = sites.filter((y) => y !== x);
+            const cells = rest.filter((y) => y < C);
+            const dots = rest.filter((y) => y >= C).map((y) => y - C);
+            expect(forces(cells, dots)).toBe(false);
+            dropped++;
+          }
+        }
+      }),
+      { numRuns: 300 },
+    );
+    expect(dropped).toBeGreaterThan(100);
   });
 });
 
